@@ -67,7 +67,11 @@ RedGuard/
 ├── backend/
 │   ├── agents/                 # ⭐ Plug-in agent folder
 │   │   ├── __init__.py
-│   │   ├── default_agent.py    # Built-in LangGraph ReAct agent (Groq)
+│   │   ├── default_agent.py          # 🛡️ Built-in LangGraph ReAct agent (Groq)
+│   │   ├── openai_gpt4o_agent.py     # OpenAI GPT-4o with memory tools
+│   │   ├── ollama_local_agent.py     # 100% offline Ollama agent (no API key)
+│   │   ├── rag_knowledge_agent.py    # RAG pipeline with TF-IDF doc retrieval
+│   │   ├── code_auditor_agent.py     # Code security scanner (AST + secret detection)
 │   │   └── example_custom_agent.py  # Template — copy this to add your own
 │   │
 │   ├── agent_loader.py         # Auto-discovers agents in agents/ folder
@@ -138,17 +142,27 @@ This starts:
 
 ---
 
-## 🤖 Adding Your Own Agent
+## 🤖 Agent Catalogue
 
-This is the main feature. Drop any Python file into `backend/agents/` and it appears in the **Live Scan** page's agent selector automatically.
+RedGuard ships with **6 agents** out of the box — each demonstrating a different architecture and attack surface.
 
-### Step 1 — Copy the template
+| File | Name | Unique Abilities |
+|------|------|-----------------|
+| `default_agent.py` | **Default RedGuard Agent** 🛡️ | LangGraph ReAct, web search, file-read, calculator via Groq |
+| `openai_gpt4o_agent.py` | **OpenAI GPT-4o Agent** | OpenAI provider, persistent in-conversation memory (`remember`/`recall` tools) |
+| `ollama_local_agent.py` | **Ollama Local Agent** | 100% offline, no API key, custom JSON tool dispatch, runs local Llama 3.2 |
+| `rag_knowledge_agent.py` | **RAG Knowledge-Base Agent** | TF-IDF retrieval over an in-memory document store — targets context-poisoning attacks |
+| `code_auditor_agent.py` | **Code Security Auditor** | AST-based vulnerability scan, secret detection, dependency audit, complexity metrics |
+| `example_custom_agent.py` | **Example Custom Agent** | Minimal stub template — copy this to bring your own |
+
+### Adding Your Own Agent
+
+1. Copy the template:
 ```bash
 cp backend/agents/example_custom_agent.py backend/agents/my_agent.py
 ```
 
-### Step 2 — Fill in three things
-
+2. Fill in three things:
 ```python
 # backend/agents/my_agent.py
 
@@ -163,19 +177,19 @@ async def invoke(prompt: str) -> str:
     return response.text
 ```
 
-### Step 3 — Restart the server
+3. Restart the server — your agent appears in the UI selector instantly:
 ```bash
 npm run dev:all
 ```
 
-Your agent now appears in the **Live Scan** page. Select it and click **▶ Start Scan** — RedGuard will fire all 24 adversarial probes at your agent, inspect every prompt, and generate a full audit report.
-
 ### CLI mode (optional)
-You can also chat with any agent interactively from the terminal:
 ```bash
 cd backend
-python3 target_agent.py               # uses default_agent
-python3 target_agent.py my_agent      # uses agents/my_agent.py
+python3 target_agent.py                   # default agent
+python3 target_agent.py ollama_local_agent
+python3 target_agent.py rag_knowledge_agent
+python3 target_agent.py code_auditor_agent
+python3 target_agent.py my_agent          # your custom agent
 ```
 
 ---
