@@ -105,9 +105,9 @@ RedGuard/
 
 ---
 
-## 🚀 Quickstart (Docker - Recommended)
+## 🚀 Quickstart (Local Setup)
 
-The easiest way to run RedGuard is using Docker. It automatically sets up PostgreSQL, the FastAPI backend, and the Next.js frontend.
+RedGuard runs locally with Next.js and FastAPI.
 
 ### 1. Clone the repository
 ```bash
@@ -123,40 +123,30 @@ Edit `.env` and add your API keys:
 ```env
 GROQ_API_KEY="your-groq-api-key"
 WEBHOOK_URL="optional-slack-discord-webhook"
+DATABASE_URL="your-postgres-url"
 ```
 
-### 3. Run with Docker Compose
-```bash
-docker-compose up
-```
-This will automatically:
-- Spin up PostgreSQL
-- Push the database schema
-- Start the Next.js frontend at `http://localhost:3000`
-- Start the FastAPI backend at `http://localhost:8000`
-
----
-
-## 🛠️ Manual Setup (Without Docker)
-
-If you prefer to run it manually without Docker:
-
-### 1. Install dependencies
+### 3. Install dependencies
 ```bash
 # Frontend
 npm install
 
 # Backend
-cd backend && pip install -r requirements.txt && cd ..
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+prisma generate
+cd ..
 ```
 
-### 2. Configure Database
-Set your `DATABASE_URL` in `.env` to point to a running PostgreSQL instance, then push the schema:
+### 4. Configure Database
+Make sure your `DATABASE_URL` in `.env` points to a running PostgreSQL instance, then push the schema:
 ```bash
 cd backend && npx prisma db push && cd ..
 ```
 
-### 3. Run the application
+### 5. Run the application
 ```bash
 npm run dev:all
 ```
