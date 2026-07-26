@@ -21,6 +21,7 @@
     "concurrently": "^10.0.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "prisma": "^5.17.0",
     "typescript": "^5"
   }
 }
