@@ -1,8 +1,8 @@
 "use client"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-export default function Reports() {
+function ReportsContent() {
   const searchParams = useSearchParams()
   const initialSession = searchParams.get('session')
   
@@ -157,5 +157,13 @@ export default function Reports() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function Reports() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ReportsContent />
+    </Suspense>
   )
 }
