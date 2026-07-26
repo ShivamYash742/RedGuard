@@ -68,7 +68,7 @@ RedGuard/
 │   ├── agents/                 # ⭐ Plug-in agent folder
 │   │   ├── __init__.py
 │   │   ├── default_agent.py          # 🛡️ Built-in LangGraph ReAct agent (Groq)
-│   │   ├── openai_gpt4o_agent.py     # OpenAI GPT-4o with memory tools
+│   │   ├── gemini_flash_agent.py     # Google Gemini Flash with session memory (free API)
 │   │   ├── ollama_local_agent.py     # 100% offline Ollama agent (no API key)
 │   │   ├── rag_knowledge_agent.py    # RAG pipeline with TF-IDF doc retrieval
 │   │   ├── code_auditor_agent.py     # Code security scanner (AST + secret detection)
@@ -148,11 +148,11 @@ RedGuard ships with **6 agents** out of the box — each demonstrating a differe
 
 | File | Name | Unique Abilities |
 |------|------|-----------------|
-| `default_agent.py` | **Default RedGuard Agent** 🛡️ | LangGraph ReAct, web search, file-read, calculator via Groq |
-| `openai_gpt4o_agent.py` | **OpenAI GPT-4o Agent** | OpenAI provider, persistent in-conversation memory (`remember`/`recall` tools) |
-| `ollama_local_agent.py` | **Ollama Local Agent** | 100% offline, no API key, custom JSON tool dispatch, runs local Llama 3.2 |
-| `rag_knowledge_agent.py` | **RAG Knowledge-Base Agent** | TF-IDF retrieval over an in-memory document store — targets context-poisoning attacks |
-| `code_auditor_agent.py` | **Code Security Auditor** | AST-based vulnerability scan, secret detection, dependency audit, complexity metrics |
+| `default_agent.py` | **Default RedGuard Agent** 🛡️ | LangGraph ReAct, web search, file-read, calculator. The canonical production-agent architecture — prime target for tool-output injection & filesystem exfiltration |
+| `gemini_flash_agent.py` | **Google Gemini Flash Agent** | Free Google AI Studio API, 1M token context window, persistent session memory (`remember`/`recall`). Prime target for needle-in-a-haystack payload hiding |
+| `ollama_local_agent.py` | **Ollama Local Agent** | 100% offline, zero API keys, runs local Llama 3.2. Custom JSON tool dispatcher — smaller models are less instruction-tuned, more vulnerable to jailbreaks |
+| `rag_knowledge_agent.py` | **RAG Knowledge-Base Agent** | TF-IDF retrieval over an in-memory corporate document store. The #1 real-world enterprise AI pattern — classic target for context-poisoning, indirect injection & data exfiltration |
+| `code_auditor_agent.py` | **Code Security Auditor** | AST vulnerability scan, secret/credential detection, dependency typosquat checker, complexity metrics. Target for obfuscated payloads & authority-spoofing attacks |
 | `example_custom_agent.py` | **Example Custom Agent** | Minimal stub template — copy this to bring your own |
 
 ### Adding Your Own Agent
@@ -185,11 +185,12 @@ npm run dev:all
 ### CLI mode (optional)
 ```bash
 cd backend
-python3 target_agent.py                   # default agent
+python3 target_agent.py                    # default agent
+python3 target_agent.py gemini_flash_agent
 python3 target_agent.py ollama_local_agent
 python3 target_agent.py rag_knowledge_agent
 python3 target_agent.py code_auditor_agent
-python3 target_agent.py my_agent          # your custom agent
+python3 target_agent.py my_agent           # your custom agent
 ```
 
 ---
