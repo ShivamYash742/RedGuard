@@ -25,8 +25,8 @@ It provides an interactive UI to run security scans, inspect adversarial probes,
 
 ```bash
 1. Clone the repository
-   git clone https://github.com/yourusername/agenttrap
-   cd agenttrap/redguard
+   git clone https://github.com/ShivamYash742/RedGuard.git
+   cd RedGuard
 
 2. Install dependencies
    npm install
@@ -53,4 +53,3 @@ It provides an interactive UI to run security scans, inspect adversarial probes,
 - **Live Stream**: Watch probes execute and receive real-time classification verdicts.
 - **Audit Trails**: Generate and view detailed Markdown and JSON reports for regulatory compliance.
 - **Coverage Gap Analysis**: Easily identify attacks that bypassed basic regex policies but were caught by the ML classifier.
-# RedGuard
