@@ -1,0 +1,14 @@
+.env
+audit.jsonl
+report.md
+report.json
+logs/
+__pycache__/
+*.pyc
+.env.local
+lobstertrap/
+lt
+opencodeignore
+opencodeignore
+node_modules/
+.next/

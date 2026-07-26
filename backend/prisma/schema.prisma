@@ -1,0 +1,83 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+model Session {
+  id          String       @id @default(cuid())
+  sessionId   String       @unique @map("session_id")
+  startedAt   DateTime     @default(now()) @map("started_at")
+  finishedAt  DateTime?    @map("finished_at")
+  totalProbes Int          @default(0) @map("total_probes")
+  blocked     Int          @default(0)
+  allowed     Int          @default(0)
+  mismatches  Int          @default(0)
+  blockRate   Float        @default(0) @map("block_rate")
+  status      String       @default("RUNNING")
+  events      ProbeEvent[]
+  report      Report?
+  policy      PolicySnapshot?
+
+  @@map("sessions")
+}
+
+model ProbeEvent {
+  id                   String   @id @default(cuid())
+  session              Session  @relation(fields: [sessionId], references: [id])
+  sessionId            String   @map("session_id")
+  timestamp            DateTime @default(now())
+  category             String                          
+  probeIndex           Int      @map("probe_index")    
+  promptText           String   @map("prompt_text")
+  promptHash           String   @map("prompt_hash")
+
+  regexVerdict         String   @map("regex_verdict")  
+  regexRiskScore       Float    @map("regex_risk_score")
+  regexMetadata        Json     @map("regex_metadata") 
+  matchedRule          String?  @map("matched_rule")   
+
+  classifierAvailable  Boolean  @default(true) @map("classifier_available")
+  classifierVerdict    String?  @map("classifier_verdict")  
+  classifierScore      Float?   @map("classifier_score")
+  classifierResult     Json?    @map("classifier_result")
+
+  status               String   
+  mismatch             Boolean  @default(false)
+  declaredIntent       String   @map("declared_intent")
+  detectedIntent       String   @map("detected_intent")
+
+  responseExcerpt      String?  @map("response_excerpt")
+  eventHash            String   @map("event_hash")
+
+  @@map("probe_events")
+}
+
+model Report {
+  id              String   @id @default(cuid())
+  session         Session  @relation(fields: [sessionId], references: [id])
+  sessionId       String   @unique @map("session_id")
+  generatedAt     DateTime @default(now()) @map("generated_at")
+  reportJson      Json     @map("report_json")
+  reportMarkdown  String   @map("report_markdown")
+  manifestSha256  String   @map("manifest_sha256")
+
+  @@map("reports")
+}
+
+model PolicySnapshot {
+  id          String   @id @default(cuid())
+  session     Session  @relation(fields: [sessionId], references: [id])
+  sessionId   String   @unique @map("session_id")
+  snapshotAt  DateTime @default(now()) @map("snapshot_at")
+  policyYaml  String   @map("policy_yaml")
+  policyName  String   @map("policy_name")
+  version     String
+
+  @@map("policy_snapshots")
+}
