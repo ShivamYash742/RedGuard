@@ -11,6 +11,7 @@ from database import get_db, init_db, close_db
 from inspector import Inspector
 from scanner import run_scan
 from report_generator import generate_report_for_session
+from agent_loader import list_agents, DEFAULT_AGENT_ID
 
 app = FastAPI(title="RedGuard API")
 
@@ -153,12 +154,25 @@ async def update_policy(request: Request):
         f.write(yaml_content)
     return {"status": "success"}
 
+# ── Agent discovery ──────────────────────────────────────────────────────────
+@app.get("/api/agents")
+async def get_agents():
+    """List all agents discovered in the backend/agents/ folder."""
+    return list_agents()
+
 # Globals to keep track of running scans for SSE
 running_scans = {}
 
 @app.post("/api/scan/start")
-async def start_scan():
+async def start_scan(request: Request):
     prisma = await get_db()
+    # agentId is optional; falls back to default_agent
+    try:
+        body = await request.json()
+        agent_id = body.get("agentId", DEFAULT_AGENT_ID)
+    except Exception:
+        agent_id = DEFAULT_AGENT_ID
+
     session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     # Create DB entry immediately
@@ -169,11 +183,11 @@ async def start_scan():
         }
     )
     
-    # Create async generator and store it
-    gen = run_scan(session.id)
+    # Create async generator and store it (with selected agent)
+    gen = run_scan(session.id, agent_id=agent_id)
     running_scans[session.id] = gen
     
-    return {"sessionId": session.id, "displayId": session_str}
+    return {"sessionId": session.id, "displayId": session_str, "agentId": agent_id}
 
 @app.get("/api/scan/stream")
 async def stream_scan(sessionId: str):

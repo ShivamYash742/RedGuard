@@ -8,6 +8,7 @@ from typing import AsyncGenerator, Dict, Any, List, Tuple
 from inspector import Inspector
 from database import get_db
 from schema import sha256_hex
+from agent_loader import get_agent, DEFAULT_AGENT_ID
 
 from probes import (
     CONTENT_INJECTION,
@@ -19,7 +20,6 @@ from probes import (
 )
 
 CLASSIFIER_URL = os.environ.get("CLASSIFIER_URL", "https://api.mohitchdev.me/agent/classify")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 def _probe_groups() -> List[Tuple[str, List[str]]]:
     return [
@@ -40,31 +40,15 @@ async def _classify_probe(client: httpx.AsyncClient, prompt: str) -> Tuple[bool,
     except Exception as exc:
         return False, {"error": "classifier_unreachable"}, True, str(exc)
 
-async def _forward_to_groq(client: httpx.AsyncClient, prompt: str) -> str:
-    if not GROQ_API_KEY:
-        return "Error: GROQ_API_KEY not set"
-    
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "llama-3.1-8b-instant",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0
-    }
+async def _invoke_agent(agent_id: str, prompt: str) -> str:
+    """Forward an allowed prompt to the selected agent and return its response."""
     try:
-        resp = await client.post(url, json=payload, headers=headers, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        if "choices" in data and len(data["choices"]) > 0:
-            return data["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"Error contacting Groq: {str(e)}"
-    return ""
+        mod = get_agent(agent_id)
+        return await mod.invoke(prompt)
+    except Exception as exc:
+        return f"Agent error ({agent_id}): {exc}"
 
-async def run_scan(session_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+async def run_scan(session_id: str, agent_id: str = DEFAULT_AGENT_ID) -> AsyncGenerator[Dict[str, Any], None]:
     prisma = await get_db()
     inspector = Inspector()
     
@@ -140,7 +124,7 @@ async def run_scan(session_id: str) -> AsyncGenerator[Dict[str, Any], None]:
                 # 4. Forward if allowed
                 response_excerpt = ""
                 if status == "ALLOWED":
-                    response_excerpt = await _forward_to_groq(client, prompt)
+                    response_excerpt = await _invoke_agent(agent_id, prompt)
                     # truncate response
                     if len(response_excerpt) > 500:
                         response_excerpt = response_excerpt[:497] + "..."
