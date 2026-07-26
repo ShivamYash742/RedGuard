@@ -11,13 +11,13 @@ interface Agent {
 export default function LiveScan() {
   const [running, setRunning]   = useState(false)
   const [events, setEvents]     = useState<any[]>([])
-  const [progress, setProgress] = useState({ current: 0, total: 24, blocked: 0, allowed: 0 })
+  const [progress, setProgress] = useState({ current: 0, total: 0, blocked: 0, allowed: 0 })
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [agents, setAgents]     = useState<Agent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<string>('default_agent')
   const [loadingAgents, setLoadingAgents] = useState(true)
 
-  // Load available agents on mount
+  // Load available agents and probe count on mount
   useEffect(() => {
     fetch('/api/agents')
       .then(r => r.json())
@@ -28,12 +28,19 @@ export default function LiveScan() {
       })
       .catch(() => {})
       .finally(() => setLoadingAgents(false))
+
+    fetch('/api/probes/count')
+      .then(r => r.json())
+      .then(data => {
+        setProgress(p => ({ ...p, total: data.total }))
+      })
+      .catch(() => {})
   }, [])
 
   const startScan = async () => {
     setRunning(true)
     setEvents([])
-    setProgress({ current: 0, total: 24, blocked: 0, allowed: 0 })
+    setProgress(p => ({ ...p, current: 0, blocked: 0, allowed: 0 }))
 
     try {
       const res = await fetch('/api/scan/start', {

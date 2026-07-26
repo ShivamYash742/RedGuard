@@ -168,6 +168,17 @@ async def get_probes():
         res.append(d)
     return res
 
+
+@app.get("/api/probes/count")
+async def get_probe_count():
+    """Return total count of built-in + active custom probes."""
+    from probes import PROBE_LIBRARY
+    
+    prisma = await get_db()
+    builtin_count = sum(len(p) for p in PROBE_LIBRARY.values())
+    custom_count = await prisma.customprobe.count(where={"active": True})
+    return {"builtin": builtin_count, "custom": custom_count, "total": builtin_count + custom_count}
+
 @app.post("/api/probes")
 async def create_probe(request: Request):
     prisma = await get_db()

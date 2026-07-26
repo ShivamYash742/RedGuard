@@ -10,11 +10,11 @@ It runs **adversarial probes** against any LLM agent of your choice, inspects ev
 
 | Feature | Description |
 |---|---|
-| **One-Click Scans** | Trigger a full 24-probe red-team scan against any agent directly from the UI |
+| **One-Click Scans** | Trigger a full **built-in + custom** probe red-team scan against any agent directly from the UI |
 | **Plug-in Agents** | Drop a Python file in `backend/agents/` — it appears in the UI selector instantly |
 | **True Proxy Mode** | Intercept and forward traffic seamlessly to OpenAI/Groq with Deep Packet Inspection |
 | **Comparison Scans** | Run two agents side-by-side to compare their defenses against the same payload |
-| **Custom Probes** | Build your own custom attack payloads in the database via API, augmenting the base 24 probes |
+| **Custom Probes** | Build your own custom attack payloads in the database via API, augmenting the base probes |
 | **Vector RAG Agent** | RAG agent powered by `sentence-transformers` vector similarity, for testing context poisoning |
 | **Webhook Alerts** | Automatically alert a Slack/Discord channel if an agent fails a security check during a scan |
 | **Live Stream** | Watch probes execute and receive real-time verdicts as they happen |
@@ -84,7 +84,7 @@ RedGuard/
 │   ├── scanner.py              # Probe orchestration + SSE streaming
 │   ├── inspector.py            # DPI regex engine
 │   ├── policy.yaml             # Block/allow rules (editable from UI)
-│   ├── probes.py               # 24 adversarial probe definitions (6 categories)
+│   ├── probes.py               # Adversarial probe definitions (6 Franklin categories)
 │   ├── report_generator.py     # Markdown + JSON report generation
 │   ├── audit_report.py         # Audit log helpers
 │   ├── dashboard.py            # Dashboard stats aggregation
