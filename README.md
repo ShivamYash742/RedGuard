@@ -12,6 +12,11 @@ It runs **adversarial probes** against any LLM agent of your choice, inspects ev
 |---|---|
 | **One-Click Scans** | Trigger a full 24-probe red-team scan against any agent directly from the UI |
 | **Plug-in Agents** | Drop a Python file in `backend/agents/` — it appears in the UI selector instantly |
+| **True Proxy Mode** | Intercept and forward traffic seamlessly to OpenAI/Groq with Deep Packet Inspection |
+| **Comparison Scans** | Run two agents side-by-side to compare their defenses against the same payload |
+| **Custom Probes** | Build your own custom attack payloads in the database via API, augmenting the base 24 probes |
+| **Vector RAG Agent** | RAG agent powered by `sentence-transformers` vector similarity, for testing context poisoning |
+| **Webhook Alerts** | Automatically alert a Slack/Discord channel if an agent fails a security check during a scan |
 | **Live Stream** | Watch probes execute and receive real-time verdicts as they happen |
 | **DPI Inspector** | Regex + YAML policy engine catches adversarial prompts before they hit the LLM |
 | **ML Classifier** | Fine-tuned MiniLM (F1 0.970) for intent detection and adversarial classification |
@@ -100,7 +105,9 @@ RedGuard/
 
 ---
 
-## 🚀 Quickstart
+## 🚀 Quickstart (Docker - Recommended)
+
+The easiest way to run RedGuard is using Docker. It automatically sets up PostgreSQL, the FastAPI backend, and the Next.js frontend.
 
 ### 1. Clone the repository
 ```bash
@@ -108,7 +115,33 @@ git clone https://github.com/ShivamYash742/RedGuard.git
 cd RedGuard
 ```
 
-### 2. Install dependencies
+### 2. Set environment variables
+```bash
+cp .env.example .env
+```
+Edit `.env` and add your API keys:
+```env
+GROQ_API_KEY="your-groq-api-key"
+WEBHOOK_URL="optional-slack-discord-webhook"
+```
+
+### 3. Run with Docker Compose
+```bash
+docker-compose up
+```
+This will automatically:
+- Spin up PostgreSQL
+- Push the database schema
+- Start the Next.js frontend at `http://localhost:3000`
+- Start the FastAPI backend at `http://localhost:8000`
+
+---
+
+## 🛠️ Manual Setup (Without Docker)
+
+If you prefer to run it manually without Docker:
+
+### 1. Install dependencies
 ```bash
 # Frontend
 npm install
@@ -117,28 +150,17 @@ npm install
 cd backend && pip install -r requirements.txt && cd ..
 ```
 
-### 3. Set environment variables
-```bash
-cp .env.example .env
-```
-Edit `.env` and fill in:
-```env
-GROQ_API_KEY="your-groq-api-key"
-DATABASE_URL="postgresql://user:pass@host:5432/redguard"
-```
-
-### 4. Push the database schema
+### 2. Configure Database
+Set your `DATABASE_URL` in `.env` to point to a running PostgreSQL instance, then push the schema:
 ```bash
 cd backend && npx prisma db push && cd ..
 ```
 
-### 5. Run the application
+### 3. Run the application
 ```bash
 npm run dev:all
 ```
-This starts:
-- **Next.js** frontend at `http://localhost:3000`
-- **FastAPI** backend at `http://localhost:8000`
+This starts Next.js on `:3000` and FastAPI on `:8000`.
 
 ---
 
@@ -215,8 +237,13 @@ python3 target_agent.py my_agent           # your custom agent
 | `GET` | `/api/health` | Server + DB health check |
 | `GET` | `/api/stats` | Aggregate scan statistics |
 | `GET` | `/api/agents` | List all available agents |
+| `POST` | `/api/proxy` | True reverse proxy (forward traffic to `x-target-url` after inspection) |
 | `POST` | `/api/scan/start` | Start a scan (`{ agentId }` in body) |
+| `POST` | `/api/scan/compare` | Run a concurrent scan against two agents |
+| `POST` | `/api/scan/replay` | Test a single probe instantly |
 | `GET` | `/api/scan/stream?sessionId=` | SSE stream of live probe results |
+| `GET` | `/api/probes` | List custom probes |
+| `POST/PUT/DEL`| `/api/probes` | CRUD for custom probes |
 | `GET` | `/api/sessions` | List all scan sessions |
 | `GET` | `/api/sessions/:id` | Session detail + events |
 | `GET` | `/api/reports/:id` | Get generated report for a session |
@@ -233,6 +260,7 @@ Session        — one row per scan run
 ProbeEvent     — one row per adversarial probe (linked to Session)
 Report         — generated Markdown + JSON report (linked to Session)
 PolicySnapshot — YAML policy captured at scan start (linked to Session)
+CustomProbe    — user-defined adversarial payloads stored in the database
 ```
 
 Managed via **Prisma** — run `npx prisma studio --schema backend/prisma/schema.prisma` to browse the database visually.
