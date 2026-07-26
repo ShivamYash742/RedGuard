@@ -46,6 +46,11 @@ export default function LiveScan() {
 
       const evtSource = new EventSource(`/api/scan/stream?sessionId=${data.sessionId}`)
 
+      evtSource.addEventListener('scan_start', (e) => {
+        const payload = JSON.parse(e.data)
+        setProgress(p => ({ ...p, total: payload.total_probes }))
+      })
+
       evtSource.addEventListener('probe_result', (e) => {
         const payload = JSON.parse(e.data)
         setEvents(prev => [payload, ...prev])

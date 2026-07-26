@@ -73,7 +73,7 @@ ingress_rules:
     conditions:
       - field: risk_score
         match_type: threshold
-        value: 0.5
+        value: 0.2
 
   - name: block_credential_access
     priority: 60

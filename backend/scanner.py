@@ -89,6 +89,13 @@ async def run_scan(session_id: str, agent_id: str = DEFAULT_AGENT_ID) -> AsyncGe
     allowed = 0
     mismatches = 0
     fired = 0
+    
+    yield {
+        "event": "scan_start",
+        "data": {
+            "total_probes": total_probes
+        }
+    }
 
     async with httpx.AsyncClient() as client:
         for category, probes in groups:
