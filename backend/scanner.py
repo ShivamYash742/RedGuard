@@ -21,15 +21,28 @@ from probes import (
 
 CLASSIFIER_URL = os.environ.get("CLASSIFIER_URL", "https://api.mohitchdev.me/agent/classify")
 
-def _probe_groups() -> List[Tuple[str, List[str]]]:
-    return [
-        ("CONTENT_INJECTION", CONTENT_INJECTION),
-        ("SEMANTIC_MANIPULATION", SEMANTIC_MANIPULATION),
-        ("COGNITIVE_STATE", COGNITIVE_STATE),
-        ("BEHAVIOURAL_CONTROL", BEHAVIOURAL_CONTROL),
-        ("SYSTEMIC", SYSTEMIC),
-        ("HUMAN_IN_THE_LOOP", HUMAN_IN_THE_LOOP),
-    ]
+async def _probe_groups() -> List[Tuple[str, List[str]]]:
+    base_groups = {
+        "CONTENT_INJECTION": list(CONTENT_INJECTION),
+        "SEMANTIC_MANIPULATION": list(SEMANTIC_MANIPULATION),
+        "COGNITIVE_STATE": list(COGNITIVE_STATE),
+        "BEHAVIOURAL_CONTROL": list(BEHAVIOURAL_CONTROL),
+        "SYSTEMIC": list(SYSTEMIC),
+        "HUMAN_IN_THE_LOOP": list(HUMAN_IN_THE_LOOP),
+    }
+
+    try:
+        prisma = await get_db()
+        custom_probes = await prisma.customprobe.find_many(where={"active": True})
+        for cp in custom_probes:
+            cat = cp.category.upper()
+            if cat not in base_groups:
+                base_groups[cat] = []
+            base_groups[cat].append(cp.promptText)
+    except Exception as e:
+        print(f"Error loading custom probes: {e}")
+
+    return [(cat, probes) for cat, probes in base_groups.items()]
 
 async def _classify_probe(client: httpx.AsyncClient, prompt: str) -> Tuple[bool, Dict[str, Any], bool, str]:
     payload = {"prompt": prompt}
@@ -69,7 +82,7 @@ async def run_scan(session_id: str, agent_id: str = DEFAULT_AGENT_ID) -> AsyncGe
         }
     )
 
-    groups = _probe_groups()
+    groups = await _probe_groups()
     total_probes = sum(len(probes) for _, probes in groups)
     
     blocked = 0

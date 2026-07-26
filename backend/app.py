@@ -9,9 +9,10 @@ from sse_starlette.sse import EventSourceResponse
 
 from database import get_db, init_db, close_db
 from inspector import Inspector
-from scanner import run_scan
+from scanner import run_scan, _invoke_agent, _classify_probe
 from report_generator import generate_report_for_session
 from agent_loader import list_agents, DEFAULT_AGENT_ID
+import httpx
 
 app = FastAPI(title="RedGuard API")
 
@@ -154,6 +155,57 @@ async def update_policy(request: Request):
         f.write(yaml_content)
     return {"status": "success"}
 
+# ── Custom Probes ────────────────────────────────────────────────────────────
+@app.get("/api/probes")
+async def get_probes():
+    prisma = await get_db()
+    probes = await prisma.customprobe.find_many(order={"createdAt": "desc"})
+    res = []
+    for p in probes:
+        d = p.model_dump()
+        d['createdAt'] = d['createdAt'].isoformat() if d['createdAt'] else None
+        d['updatedAt'] = d['updatedAt'].isoformat() if d['updatedAt'] else None
+        res.append(d)
+    return res
+
+@app.post("/api/probes")
+async def create_probe(request: Request):
+    prisma = await get_db()
+    data = await request.json()
+    if "category" not in data or "promptText" not in data:
+        raise HTTPException(status_code=400, detail="Missing category or promptText")
+        
+    probe = await prisma.customprobe.create(
+        data={
+            "category": data["category"],
+            "promptText": data["promptText"],
+            "active": data.get("active", True)
+        }
+    )
+    return probe.model_dump()
+
+@app.delete("/api/probes/{probe_id}")
+async def delete_probe(probe_id: str):
+    prisma = await get_db()
+    try:
+        await prisma.customprobe.delete(where={"id": probe_id})
+        return {"status": "deleted"}
+    except Exception:
+        raise HTTPException(status_code=404, detail="Probe not found")
+
+@app.put("/api/probes/{probe_id}/toggle")
+async def toggle_probe(probe_id: str):
+    prisma = await get_db()
+    probe = await prisma.customprobe.find_unique(where={"id": probe_id})
+    if not probe:
+        raise HTTPException(status_code=404, detail="Probe not found")
+        
+    updated = await prisma.customprobe.update(
+        where={"id": probe_id},
+        data={"active": not probe.active}
+    )
+    return updated.model_dump()
+
 # ── Agent discovery ──────────────────────────────────────────────────────────
 @app.get("/api/agents")
 async def get_agents():
@@ -189,6 +241,60 @@ async def start_scan(request: Request):
     
     return {"sessionId": session.id, "displayId": session_str, "agentId": agent_id}
 
+@app.post("/api/scan/compare")
+async def compare_scan(request: Request):
+    prisma = await get_db()
+    try:
+        body = await request.json()
+        agent_id_1 = body.get("agentId1", DEFAULT_AGENT_ID)
+        agent_id_2 = body.get("agentId2", DEFAULT_AGENT_ID)
+    except Exception:
+        agent_id_1 = DEFAULT_AGENT_ID
+        agent_id_2 = DEFAULT_AGENT_ID
+
+    session_str_1 = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_1"
+    session_str_2 = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_2"
+    
+    session_1 = await prisma.session.create(data={"sessionId": session_str_1, "status": "RUNNING"})
+    session_2 = await prisma.session.create(data={"sessionId": session_str_2, "status": "RUNNING"})
+    
+    running_scans[session_1.id] = run_scan(session_1.id, agent_id=agent_id_1)
+    running_scans[session_2.id] = run_scan(session_2.id, agent_id=agent_id_2)
+    
+    return {
+        "scan1": {"sessionId": session_1.id, "displayId": session_str_1, "agentId": agent_id_1},
+        "scan2": {"sessionId": session_2.id, "displayId": session_str_2, "agentId": agent_id_2}
+    }
+
+@app.post("/api/scan/replay")
+async def replay_probe(request: Request):
+    body = await request.json()
+    prompt = body.get("prompt")
+    agent_id = body.get("agentId", DEFAULT_AGENT_ID)
+    
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt is required")
+        
+    inspector = Inspector()
+    insp_result = inspector.process(prompt)
+    regex_verdict = insp_result["policy_result"]["verdict"]
+    
+    async with httpx.AsyncClient() as client:
+        clf_ok, clf_res, clf_err, clf_err_msg = await _classify_probe(client, prompt)
+        
+    status = "BLOCKED" if regex_verdict == "DENY" else "ALLOWED"
+    
+    response_excerpt = ""
+    if status == "ALLOWED":
+        response_excerpt = await _invoke_agent(agent_id, prompt)
+        
+    return {
+        "status": status,
+        "regex_risk": insp_result["metadata"]["risk_score"],
+        "classifier_verdict": clf_res.get("verdict", "BENIGN") if clf_ok else "UNKNOWN",
+        "response": response_excerpt
+    }
+
 @app.get("/api/scan/stream")
 async def stream_scan(sessionId: str):
     if sessionId not in running_scans:
@@ -212,23 +318,53 @@ async def stream_scan(sessionId: str):
     return EventSourceResponse(sse_generator())
 
 # Proxy route
-@app.post("/api/proxy")
+@app.api_route("/api/proxy", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_request(request: Request):
-    data = await request.json()
+    target_url = request.headers.get("x-target-url")
+    if not target_url:
+        return JSONResponse(status_code=400, content={"error": "Missing x-target-url header"})
+
+    # Extract prompt if it's a POST request with JSON
     prompt = ""
-    messages = data.get("messages", [])
-    if messages and len(messages) > 0:
-        prompt = messages[0].get("content", "")
+    data = None
+    if request.method in ["POST", "PUT"]:
+        try:
+            data = await request.json()
+            messages = data.get("messages", [])
+            if messages and len(messages) > 0:
+                prompt = messages[0].get("content", "")
+            elif "prompt" in data:
+                prompt = data["prompt"]
+        except Exception:
+            pass
+
+    # Inspect the prompt if we found one
+    if prompt:
+        inspector = Inspector()
+        insp_result = inspector.process(prompt)
+        verdict = insp_result["policy_result"]["verdict"]
         
-    inspector = Inspector()
-    insp_result = inspector.process(prompt)
-    verdict = insp_result["policy_result"]["verdict"]
-    
-    if verdict == "DENY":
-        return JSONResponse(
-            status_code=403, 
-            content={"error": insp_result["policy_result"]["deny_message"]}
+        if verdict == "DENY":
+            return JSONResponse(
+                status_code=403, 
+                content={"error": "Blocked by RedGuard Policy", "details": insp_result["policy_result"]["deny_message"]}
+            )
+
+    # Forward the request
+    async with httpx.AsyncClient() as client:
+        # Prepare headers (exclude host and target url)
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        headers.pop("x-target-url", None)
+        
+        req = client.build_request(
+            method=request.method,
+            url=target_url,
+            headers=headers,
+            content=await request.body()
         )
-        
-    # we don't actually forward to Groq here as this is intended for tests or direct calls
-    return {"status": "ALLOWED", "metadata": insp_result["metadata"]}
+        try:
+            resp = await client.send(req, stream=False)
+            return JSONResponse(status_code=resp.status_code, content=resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text)
+        except Exception as e:
+            return JSONResponse(status_code=502, content={"error": "Bad Gateway", "details": str(e)})

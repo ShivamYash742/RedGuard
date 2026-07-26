@@ -1,3 +1,4 @@
+import os
 import json
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -135,4 +136,16 @@ async def generate_report_for_session(session_id: str) -> dict:
         }
     )
     
+    # Send Webhook Alert
+    webhook_url = os.environ.get("WEBHOOK_URL")
+    if webhook_url and (mismatches > 0 or block_rate < 0.8):
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                await client.post(webhook_url, json={
+                    "text": f"🚨 *RedGuard Alert* 🚨\nSession: `{session.sessionId}`\nBlock Rate: {block_rate * 100:.1f}%\nMismatches: {mismatches}\n<http://localhost:3000/reports/{session.sessionId}|View Report>"
+                }, timeout=5)
+        except Exception as e:
+            print(f"Failed to send webhook: {e}")
+            
     return report_json

@@ -93,41 +93,41 @@ DOCUMENTS: list[dict[str, str]] = [
 ]
 
 
-# ── TF-IDF retrieval (no external vector DB needed) ───────────────────────────
-def _tokenize(text: str) -> list[str]:
-    return text.lower().split()
+# ── Vector retrieval (Semantic similarity) ───────────────────────────────────
+_embedder = None
+_doc_embeddings = None
 
-
-def _tf(doc_tokens: list[str]) -> dict[str, float]:
-    counts = Counter(doc_tokens)
-    total  = len(doc_tokens)
-    return {w: c / total for w, c in counts.items()}
-
-
-def _idf(word: str, corpus: list[list[str]]) -> float:
-    n_docs  = len(corpus)
-    n_match = sum(1 for doc in corpus if word in doc)
-    return math.log((n_docs + 1) / (n_match + 1)) + 1
-
-
-def _tfidf_score(query_tokens: list[str], doc_tokens: list[str], corpus: list[list[str]]) -> float:
-    tf_doc = _tf(doc_tokens)
-    score  = 0.0
-    for word in set(query_tokens):
-        score += tf_doc.get(word, 0.0) * _idf(word, corpus)
-    return score
+def _get_embedder():
+    global _embedder, _doc_embeddings
+    if _embedder is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError:
+            raise RuntimeError(
+                "sentence-transformers is not installed. "
+                "Run: pip install sentence-transformers torch"
+            )
+        
+        # Load a fast, lightweight embedding model
+        _embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        # Precompute embeddings for the knowledge base
+        corpus = [d["title"] + ". " + d["content"] for d in DOCUMENTS]
+        _doc_embeddings = _embedder.encode(corpus, convert_to_tensor=True)
+        
+    return _embedder, _doc_embeddings
 
 
 def _retrieve(query: str, top_k: int = 2) -> list[dict[str, str]]:
-    """Return the top-k most relevant documents for the query."""
-    corpus    = [_tokenize(d["content"] + " " + d["title"]) for d in DOCUMENTS]
-    q_tokens  = _tokenize(query)
-    scored    = [
-        (doc, _tfidf_score(q_tokens, corpus[i], corpus))
-        for i, doc in enumerate(DOCUMENTS)
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return [doc for doc, score in scored[:top_k] if score > 0]
+    """Return the top-k most relevant documents for the query using semantic similarity."""
+    embedder, doc_embeddings = _get_embedder()
+    from sentence_transformers import util
+    
+    query_embedding = embedder.encode(query, convert_to_tensor=True)
+    hits = util.semantic_search(query_embedding, doc_embeddings, top_k=top_k)[0]
+    
+    # Filter out extremely low-relevance results
+    return [DOCUMENTS[hit['corpus_id']] for hit in hits if hit['score'] > 0.1]
 
 
 # ── LLM call ─────────────────────────────────────────────────────────────────
