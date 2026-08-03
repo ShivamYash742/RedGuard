@@ -3,7 +3,6 @@ import json
 from collections import defaultdict
 from datetime import datetime, timezone
 from database import get_db
-from prisma import Json
 from schema import sha256_hex
 
 async def generate_report_for_session(session_id: str) -> dict:
@@ -130,7 +129,7 @@ async def generate_report_for_session(session_id: str) -> dict:
         data={
             "session": {"connect": {"id": session.id}},
             "generatedAt": datetime.now(timezone.utc),
-            "reportJson": Json(report_json),
+            "reportJson": json.dumps(report_json),
             "reportMarkdown": md_text,
             "manifestSha256": manifest_sha
         }

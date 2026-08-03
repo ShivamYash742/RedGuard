@@ -95,6 +95,12 @@ async def get_session(session_id: str):
     d['finishedAt'] = d['finishedAt'].isoformat() if d['finishedAt'] else None
     for ev in d.get('events', []):
         ev['timestamp'] = ev['timestamp'].isoformat() if ev['timestamp'] else None
+        if isinstance(ev.get('regexMetadata'), str):
+            try: ev['regexMetadata'] = json.loads(ev['regexMetadata'])
+            except: pass
+        if isinstance(ev.get('classifierResult'), str):
+            try: ev['classifierResult'] = json.loads(ev['classifierResult'])
+            except: pass
     return d
 
 @app.get("/api/events")
@@ -116,6 +122,12 @@ async def get_events(category: str = None, status: str = None, sessionId: str = 
     for ev in events:
         d = ev.model_dump()
         d['timestamp'] = d['timestamp'].isoformat() if d['timestamp'] else None
+        if isinstance(d.get('regexMetadata'), str):
+            try: d['regexMetadata'] = json.loads(d['regexMetadata'])
+            except: pass
+        if isinstance(d.get('classifierResult'), str):
+            try: d['classifierResult'] = json.loads(d['classifierResult'])
+            except: pass
         res.append(d)
     return res
 
@@ -136,6 +148,9 @@ async def get_report(session_id: str):
         
     d = report.model_dump()
     d['generatedAt'] = d['generatedAt'].isoformat() if d['generatedAt'] else None
+    if isinstance(d.get('reportJson'), str):
+        try: d['reportJson'] = json.loads(d['reportJson'])
+        except: pass
     return d
 
 @app.get("/api/policy")
@@ -172,10 +187,16 @@ async def get_probes():
 @app.get("/api/probes/count")
 async def get_probe_count():
     """Return total count of built-in + active custom probes."""
-    from probes import PROBE_LIBRARY
-    
+    import sys
+    import os
+    if os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) not in sys.path:
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    from redguard.datasets.loader import load_all_datasets
+
     prisma = await get_db()
-    builtin_count = sum(len(p) for p in PROBE_LIBRARY.values())
+    
+    # We load with validate=False for speed just to count
+    builtin_count = len(load_all_datasets(validate=False))
     custom_count = await prisma.customprobe.count(where={"active": True})
     return {"builtin": builtin_count, "custom": custom_count, "total": builtin_count + custom_count}
 

@@ -6,17 +6,17 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   const navItems = [
-    { name: 'Dashboard', path: '/' },
-    { name: 'Live Scan', path: '/scan' },
-    { name: 'Audit Log', path: '/audit' },
-    { name: 'Reports', path: '/reports' },
-    { name: 'Policy', path: '/policy' },
+    { name: 'Overview', path: '/' },
+    { name: 'Run Evaluation', path: '/scan' },
+    { name: 'Evaluation Traces', path: '/audit' },
+    { name: 'Benchmark Results', path: '/reports' },
+    { name: 'Methodology', path: '/policy' },
   ]
 
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        🛡️ RedGuard
+        📊 RedGuard Benchmark
       </div>
       <nav>
         {navItems.map((item) => {

@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -7,6 +7,7 @@ generator client {
   provider             = "prisma-client-py"
   interface            = "asyncio"
   recursive_type_depth = 5
+  output               = "../venv/lib64/python3.14/site-packages/prisma"
 }
 
 model Session {
@@ -39,13 +40,13 @@ model ProbeEvent {
 
   regexVerdict         String   @map("regex_verdict")  
   regexRiskScore       Float    @map("regex_risk_score")
-  regexMetadata        Json     @map("regex_metadata") 
+  regexMetadata        String   @map("regex_metadata") 
   matchedRule          String?  @map("matched_rule")   
 
   classifierAvailable  Boolean  @default(true) @map("classifier_available")
   classifierVerdict    String?  @map("classifier_verdict")  
   classifierScore      Float?   @map("classifier_score")
-  classifierResult     Json?    @map("classifier_result")
+  classifierResult     String?  @map("classifier_result")
 
   status               String   
   mismatch             Boolean  @default(false)
@@ -63,7 +64,7 @@ model Report {
   session         Session  @relation(fields: [sessionId], references: [id])
   sessionId       String   @unique @map("session_id")
   generatedAt     DateTime @default(now()) @map("generated_at")
-  reportJson      Json     @map("report_json")
+  reportJson      String   @map("report_json")
   reportMarkdown  String   @map("report_markdown")
   manifestSha256  String   @map("manifest_sha256")
 

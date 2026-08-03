@@ -1,7 +1,7 @@
 import asyncio
 import os
 import httpx
-from prisma import Json
+import json
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Dict, Any, List, Tuple
 
@@ -10,26 +10,24 @@ from database import get_db
 from schema import sha256_hex
 from agent_loader import get_agent, DEFAULT_AGENT_ID
 
-from probes import (
-    CONTENT_INJECTION,
-    SEMANTIC_MANIPULATION,
-    COGNITIVE_STATE,
-    BEHAVIOURAL_CONTROL,
-    SYSTEMIC,
-    HUMAN_IN_THE_LOOP,
-)
+import sys
+import os
+
+# Add parent directory to sys.path to access redguard module
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from redguard.datasets.loader import FAMILY_FILES, load_family_dataset
 
 CLASSIFIER_URL = os.environ.get("CLASSIFIER_URL", "https://api.mohitchdev.me/agent/classify")
 
 async def _probe_groups() -> List[Tuple[str, List[str]]]:
-    base_groups = {
-        "CONTENT_INJECTION": list(CONTENT_INJECTION),
-        "SEMANTIC_MANIPULATION": list(SEMANTIC_MANIPULATION),
-        "COGNITIVE_STATE": list(COGNITIVE_STATE),
-        "BEHAVIOURAL_CONTROL": list(BEHAVIOURAL_CONTROL),
-        "SYSTEMIC": list(SYSTEMIC),
-        "HUMAN_IN_THE_LOOP": list(HUMAN_IN_THE_LOOP),
-    }
+    base_groups = {}
+    for family in FAMILY_FILES:
+        cat = family.upper()
+        try:
+            entries = load_family_dataset(family, validate=False)
+            base_groups[cat] = [entry["prompt"] for entry in entries if "prompt" in entry]
+        except Exception as e:
+            print(f"Error loading family {family}: {e}")
 
     try:
         prisma = await get_db()
@@ -90,10 +88,13 @@ async def run_scan(session_id: str, agent_id: str = DEFAULT_AGENT_ID) -> AsyncGe
     mismatches = 0
     fired = 0
     
+    family_counts = {cat: len(probes) for cat, probes in groups}
+    
     yield {
         "event": "scan_start",
         "data": {
-            "total_probes": total_probes
+            "total_probes": total_probes,
+            "families": family_counts
         }
     }
 
@@ -166,12 +167,12 @@ async def run_scan(session_id: str, agent_id: str = DEFAULT_AGENT_ID) -> AsyncGe
                         "promptHash": prompt_hash,
                         "regexVerdict": regex_verdict,
                         "regexRiskScore": float(regex_risk),
-                        "regexMetadata": Json(insp_result["metadata"]),
+                        "regexMetadata": json.dumps(insp_result["metadata"]),
                         "matchedRule": matched_rule,
                         "classifierAvailable": not clf_err,
                         "classifierVerdict": clf_verdict,
                         "classifierScore": float(clf_score) if clf_score is not None else None,
-                        "classifierResult": Json(clf_res) if clf_res else None,
+                        "classifierResult": json.dumps(clf_res) if clf_res else None,
                         "status": status,
                         "mismatch": mismatch,
                         "declaredIntent": declared_intent,

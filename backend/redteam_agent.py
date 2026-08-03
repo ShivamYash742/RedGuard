@@ -11,16 +11,12 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 import requests
 
-from probes import (
-    BEHAVIOURAL_CONTROL,
-    COGNITIVE_STATE,
-    CONTENT_INJECTION,
-    HUMAN_IN_THE_LOOP,
-    SEMANTIC_MANIPULATION,
-    SYSTEMIC,
-)
-from schema import ProbeEvent, generate_session_id, sha256_hex
+import os
 
+# Add parent directory to sys.path to access redguard module
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from redguard.datasets.loader import FAMILY_FILES, load_family_dataset
+from schema import ProbeEvent, generate_session_id, sha256_hex
 
 TARGET_URL = "http://localhost:8080/v1/chat/completions"
 CLASSIFIER_URL = "https://api.mohitchdev.me/agent/classify"
@@ -34,14 +30,16 @@ RESET = "\033[0m"
 
 
 def _probe_groups() -> List[Tuple[str, List[str]]]:
-    return [
-        ("CONTENT_INJECTION", CONTENT_INJECTION),
-        ("SEMANTIC_MANIPULATION", SEMANTIC_MANIPULATION),
-        ("COGNITIVE_STATE", COGNITIVE_STATE),
-        ("BEHAVIOURAL_CONTROL", BEHAVIOURAL_CONTROL),
-        ("SYSTEMIC", SYSTEMIC),
-        ("HUMAN_IN_THE_LOOP", HUMAN_IN_THE_LOOP),
-    ]
+    base_groups = []
+    for family in FAMILY_FILES:
+        cat = family.upper()
+        try:
+            entries = load_family_dataset(family, validate=False)
+            prompts = [entry["prompt"] for entry in entries if "prompt" in entry]
+            base_groups.append((cat, prompts))
+        except Exception as e:
+            print(f"Error loading family {family}: {e}")
+    return base_groups
 
 
 def _extract_verdict(resp: requests.Response, body: Dict[str, Any]) -> str:

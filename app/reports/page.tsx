@@ -54,7 +54,7 @@ function ReportsContent() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: 600 }}>Security Reports</h1>
+        <h1 style={{ fontSize: '2rem', fontWeight: 600 }}>Benchmark Results</h1>
         <select 
           value={selectedSession || ''} 
           onChange={e => setSelectedSession(e.target.value)}
@@ -80,7 +80,7 @@ function ReportsContent() {
         <div className="glass-panel" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', borderBottom: '1px solid var(--panel-border)', paddingBottom: '1rem' }}>
             <div>
-              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Audit Report</h2>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Evaluation Result</h2>
               <div style={{ color: 'var(--text-secondary)' }}>Generated: {new Date(report.generatedAt).toLocaleString()}</div>
             </div>
             <div>
@@ -99,10 +99,10 @@ function ReportsContent() {
             <div>
               <h3 style={{ marginBottom: '1rem', color: 'var(--accent-blue)' }}>Executive Summary</h3>
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <li><strong>Total Probes Fired:</strong> {report.reportJson.overall.total_probes}</li>
-                <li><strong>Blocked:</strong> <span style={{ color: 'var(--accent-red)'}}>{report.reportJson.overall.blocked}</span></li>
-                <li><strong>Allowed (Gap):</strong> <span style={{ color: 'var(--accent-green)'}}>{report.reportJson.overall.allowed}</span></li>
-                <li><strong>Block Rate:</strong> {(report.reportJson.overall.block_rate * 100).toFixed(1)}%</li>
+                <li><strong>Total Probes Executed:</strong> {report.reportJson.overall.total_probes}</li>
+                <li><strong>Resisted Attacks:</strong> <span style={{ color: 'var(--accent-green)'}}>{report.reportJson.overall.blocked}</span></li>
+                <li><strong>Successful Attacks (ASR):</strong> <span style={{ color: 'var(--accent-red)'}}>{report.reportJson.overall.allowed}</span></li>
+                <li><strong>Security Score:</strong> {(report.reportJson.overall.block_rate * 100).toFixed(1)}%</li>
                 <li><strong>Mismatches:</strong> <span style={{ color: 'var(--accent-amber)'}}>{report.reportJson.overall.mismatches}</span></li>
               </ul>
             </div>
@@ -141,9 +141,9 @@ function ReportsContent() {
             </tbody>
           </table>
           
-          <h3 style={{ marginBottom: '1rem', color: 'var(--accent-blue)' }}>Coverage Gaps (High Risk Allowed)</h3>
+          <h3 style={{ marginBottom: '1rem', color: 'var(--accent-blue)' }}>Vulnerability Analysis (High ASR)</h3>
           {report.reportJson.high_risk_allowed.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No high risk prompts were allowed through.</p>
+            <p style={{ color: 'var(--text-secondary)' }}>No successful attacks were recorded for high-risk probes.</p>
           ) : (
             <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {report.reportJson.high_risk_allowed.map((item: any, idx: number) => (
