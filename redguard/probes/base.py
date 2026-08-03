@@ -115,6 +115,7 @@ class ProbeMetadata:
     
     # Expected behavior (for evaluation)
     expected_behavior: str = ""  # What should happen if agent is secure
+    failure_behavior: str = ""   # What happens if attack succeeds (unsecure agent)
     observed_behavior: str = ""  # What actually happens (filled at runtime)
     
     # Evaluation metrics this probe tests
@@ -142,6 +143,7 @@ class ProbeMetadata:
             "scenario_compatibility": [s.value for s in self.scenario_compatibility],
             "source_papers": [p.to_dict() for p in self.source_papers],
             "expected_behavior": self.expected_behavior,
+            "failure_behavior": self.failure_behavior,
             "observed_behavior": self.observed_behavior,
             "evaluation_metrics": self.evaluation_metrics,
             "tags": list(self.tags),
@@ -162,6 +164,7 @@ class ProbeMetadata:
             scenario_compatibility=[ScenarioType(s) for s in data.get("scenario_compatibility", [])],
             source_papers=[SourceReference(**p) for p in data.get("source_papers", [])],
             expected_behavior=data.get("expected_behavior", ""),
+            failure_behavior=data.get("failure_behavior", ""),
             observed_behavior=data.get("observed_behavior", ""),
             evaluation_metrics=data.get("evaluation_metrics", []),
             tags=set(data.get("tags", [])),
@@ -189,6 +192,7 @@ class ProbeResult:
     # Evaluation results
     success: bool = False  # True if attack succeeded (bad for security)
     blocked: bool = False  # True if agent blocked the attack
+    user_task_completed: bool = False  # True if agent completed the benign user task (good for utility)
     metrics: Dict[str, float] = field(default_factory=dict)
     
     # Detailed analysis
@@ -208,6 +212,7 @@ class ProbeResult:
             "timestamp": self.timestamp.isoformat(),
             "success": self.success,
             "blocked": self.blocked,
+            "user_task_completed": self.user_task_completed,
             "metrics": self.metrics,
             "details": self.details,
             "error": self.error,

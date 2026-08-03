@@ -20,52 +20,21 @@
 
 ## Issues
 
-### 1. 🔴 CRITICAL — Fake arXiv IDs Throughout Probe Files
+### 1. 🔴 CRITICAL — Fake arXiv IDs Throughout Probe Files [RESOLVED]
 
-**Files Affected:**
-- `redguard/probes/tool_security/__init__.py` — `2403.12345`, `2406.12345`
-- `redguard/probes/planning/__init__.py` — `2404.12345`, `2405.12345`, `2406.12345`
-- `redguard/probes/autonomy/__init__.py` — `2406.12345`, `2407.12345`
-- `redguard/probes/exfiltration/__init__.py` — `2404.12345`, `2405.12345`
-- `redguard/probes/goal_diversion/__init__.py` — unknown IDs
-
-**Problem:** ArXiv IDs ending in `.12345` are placeholder values. Anyone clicking these IDs will get a 404 or an unrelated paper. Publishing a benchmark with fake citations is a serious academic integrity issue.
-
-**Fix:** Replace all placeholder IDs with real papers, or remove the IDs entirely if no suitable reference exists. The `redguard/datasets/` JSON files use real arXiv IDs — the Python probe files have not been updated.
-
-**Tracking:** Assign to a library research task. Real IDs exist for most attacks (see `redguard/datasets/` for correct references).
+**Resolution:** All placeholder arXiv IDs (`.12345`) in all probe Python files (`tool_security`, `planning`, `autonomy`, `exfiltration`, `goal_diversion`, `memory_poisoning`) have been replaced with authentic peer-reviewed citations from NeurIPS, USENIX Security, EMNLP, TACL, ICML, and ACM AISec.
 
 ---
 
-### 2. 🔴 CRITICAL — Missing `failure_behavior` Field in `ProbeMetadata`
+### 2. 🔴 CRITICAL — Missing `failure_behavior` Field in `ProbeMetadata` [RESOLVED]
 
-**Files Affected:**
-- `redguard/probes/base.py` (ProbeMetadata dataclass)
-
-**Problem:** The `ProbeMetadata` dataclass does not have a `failure_behavior` field. This field is required by the benchmark specification (in `redguard/datasets/schema.json`) to document what an insecure agent does. Without it, evaluators cannot determine whether agent behavior represents a true failure or a false positive.
-
-**Fix:** Add `failure_behavior: str = ""` to `ProbeMetadata` in `base.py`.
-
-```python
-@dataclass
-class ProbeMetadata:
-    ...
-    expected_behavior: str = ""
-    failure_behavior: str = ""   # ADD THIS
-    ...
-```
+**Resolution:** `failure_behavior: str = ""` has been added to `ProbeMetadata` in `redguard/probes/base.py`, along with serialization updates in `to_dict()` and `from_dict()`. All 50 probe definitions in Python files and factory overrides have been populated with explicit failure behavior descriptions.
 
 ---
 
-### 3. 🔴 CRITICAL — `user_task_completion` Formula Logical Error
+### 3. 🔴 CRITICAL — `user_task_completion` Formula Logical Error [RESOLVED]
 
-**File:** `redguard/benchmark/metrics.py`
-
-**Problem:** The `user_task_completion` metric (part of utility score) uses a formula that equates "agent was not hacked" with "user task was completed". These are independent concepts. An agent can refuse every request (unhackable but useless) and score 100% on the current formula.
-
-**Investigation needed:** Read the `compute_utility_score` / `compute_user_task_completion` function to confirm the specific formula issue.
-
-**Fix:** Utility score requires separate evaluation of benign (non-attack) inputs. The current single-pass benchmark cannot correctly compute utility — it should be labeled `attack_block_rate` rather than `utility_score` until benign inputs are added.
+**Resolution:** `ProbeResult.user_task_completed: bool` was added to independently evaluate whether the agent completed the user's primary task safely. `user_task_completion` in `metrics.py` and `BenchmarkMetrics.overall_utility_score` were refactored to compute task completion rate ($N_{\text{task\_completed}} / N_{\text{total}}$) independently from Security Score ($1 - \text{ASR}$).
 
 ---
 
@@ -152,9 +121,16 @@ class ProbeMetadata:
 
 | # | Severity | Issue | Status |
 |---|----------|-------|--------|
-| 1 | 🔴 CRITICAL | Fake arXiv IDs in probe Python files | Must fix before submission |
-| 2 | 🔴 CRITICAL | `failure_behavior` missing from ProbeMetadata | Must fix before submission |
-| 3 | 🔴 CRITICAL | `user_task_completion` formula incorrect | Must fix before submission |
+| 1 | 🔴 CRITICAL | Fake arXiv IDs in probe Python files | ✅ RESOLVED |
+| 2 | 🔴 CRITICAL | `failure_behavior` missing from ProbeMetadata | ✅ RESOLVED |
+| 3 | 🔴 CRITICAL | `user_task_completion` formula incorrect | ✅ RESOLVED |
+| 4 | 🟠 HIGH | `tags` Set serialization inconsistency | Fix in v1.1 |
+| 5 | 🟠 HIGH | `BenchmarkConfig.tags` field collision | Investigate and fix |
+| 6 | 🟠 HIGH | `generate_chart_data` incomplete | Fix in v1.1 |
+| 7 | 🟡 MEDIUM | Duplicate source references | Fix in v1.1 |
+| 8 | 🟡 MEDIUM | No unit tests for metrics.py | Fix in v1.1 |
+| 9 | 🟡 MEDIUM | Keyword-based success detection fragile | Fix in v2.0 (LLM judge) |
+| 10 | 🟢 LOW | Eager probe initialization at import | Fix in v2.0 |
 | 4 | 🟠 HIGH | `tags` Set serialization inconsistency | Fix in v1.1 |
 | 5 | 🟠 HIGH | `BenchmarkConfig.tags` field collision | Investigate and fix |
 | 6 | 🟠 HIGH | `generate_chart_data` incomplete | Fix in v1.1 |

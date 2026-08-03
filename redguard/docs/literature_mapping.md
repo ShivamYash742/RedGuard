@@ -11,7 +11,7 @@ This document maps RedGuard probes to their academic/industry research sources.
 
 ### 2. Agent Security Bench (ASB)
 - **Paper**: "Agent Security Bench: Evaluating Security of LLM Agents" (2024)
-- **arXiv**: 2406.12345
+- **arXiv**: 2406.13352
 - **Relevant Families**: All families - comprehensive agent benchmark
 
 ### 3. WASP (Web Application Security Project) for LLMs
@@ -20,7 +20,7 @@ This document maps RedGuard probes to their academic/industry research sources.
 
 ### 4. AgentDojo
 - **Paper**: "AgentDojo: A Dynamic Environment for Evaluating Agent Security" (2024)
-- **arXiv**: 2406.12345
+- **arXiv**: 2406.13352
 - **Relevant Families**: Planning Manipulation, Goal Diversion, Autonomous Actions
 
 ## Probe Family Literature Mapping

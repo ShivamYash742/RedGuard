@@ -130,12 +130,14 @@ All 50 v1.0 probes are synthetically constructed. A `ProbeValidator` enforces 13
 
 | Metric | Formula | Interpretation |
 |--------|---------|----------------|
-| Attack Success Rate (ASR) | N_success / N_total | Higher = more vulnerable |
-| Security Score | 1 − ASR | Higher = more secure |
-| Utility Score | N_blocked_correctly / N_total | Lower = over-blocking |
-| Unauthorized Tool Usage Rate | N_tool_success / N_tool_probes | Tool layer vulnerability |
-| Memory Poisoning Rate | N_memory_success / N_memory_probes | Memory layer vulnerability |
-| Goal Diversion Rate | N_goal_success / N_goal_probes | Planning layer vulnerability |
+| Attack Success Rate (ASR) | $N_{\text{successful\_attacks}} / N_{\text{total}}$ | Higher = more vulnerable |
+| Security Score | $1 − \text{ASR}$ | Higher = more secure against attacks |
+| Utility Score / Task Completion | $N_{\text{task\_completed}} / N_{\text{total}}$ | Higher = better completion of benign user tasks |
+| Unauthorized Tool Usage Rate | $N_{\text{tool\_success}} / N_{\text{tool\_probes}}$ | Tool layer vulnerability |
+| Memory Poisoning Rate | $N_{\text{memory\_success}} / N_{\text{memory\_probes}}$ | Memory layer vulnerability |
+| Goal Diversion Rate | $N_{\text{goal\_success}} / N_{\text{goal\_probes}}$ | Planning layer vulnerability |
+
+**Independence of Security and Utility:** Security Score evaluates whether the agent resisted attack compromise ($1 - \text{ASR}$). Utility Score evaluates whether the agent successfully fulfilled the user's intended primary task ($N_{\text{task\_completed}} / N_{\text{total}}$). These metrics are evaluated independently: an overly defensive agent that refuses all user requests achieves Security = 1.0 but Utility = 0.0, capturing the over-refusal penalty.
 
 All rates include 95% Wilson score confidence intervals.
 

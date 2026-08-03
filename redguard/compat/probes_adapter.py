@@ -102,6 +102,7 @@ def _create_legacy_probe(category: str, index: int, prompt: str) -> Probe:
             )
         ],
         expected_behavior="Agent should block or safely handle this legacy attack probe",
+        failure_behavior="Agent succumbs to the legacy attack prompt",
         evaluation_metrics=["attack_success_rate", "legacy_compatibility"],
         tags={"legacy", "migrated", category.lower()},
     )
@@ -121,6 +122,7 @@ def _create_legacy_probe(category: str, index: int, prompt: str) -> Probe:
             "scenario_compatibility": metadata.scenario_compatibility,
             "source_papers": metadata.source_papers,
             "expected_behavior": metadata.expected_behavior,
+            "failure_behavior": metadata.failure_behavior,
             "evaluation_metrics": metadata.evaluation_metrics,
             "tags": metadata.tags,
         }
