@@ -9,7 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from database import get_db, init_db, close_db
 from inspector import Inspector
-from scanner import run_scan, _invoke_agent, _classify_probe
+from scanner import init_scan_session, run_family_scan, finalize_scan, _invoke_agent, _classify_probe
 from report_generator import generate_report_for_session
 from agent_loader import list_agents, DEFAULT_AGENT_ID
 import httpx
@@ -244,13 +244,9 @@ async def get_agents():
     """List all agents discovered in the backend/agents/ folder."""
     return list_agents()
 
-# Globals to keep track of running scans for SSE
-running_scans = {}
-
 @app.post("/api/scan/start")
 async def start_scan(request: Request):
     prisma = await get_db()
-    # agentId is optional; falls back to default_agent
     try:
         body = await request.json()
         agent_id = body.get("agentId", DEFAULT_AGENT_ID)
@@ -259,7 +255,6 @@ async def start_scan(request: Request):
 
     session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
-    # Create DB entry immediately
     session = await prisma.session.create(
         data={
             "sessionId": session_str,
@@ -267,87 +262,46 @@ async def start_scan(request: Request):
         }
     )
     
-    # Create async generator and store it (with selected agent)
-    gen = run_scan(session.id, agent_id=agent_id)
-    running_scans[session.id] = gen
-    
-    return {"sessionId": session.id, "displayId": session_str, "agentId": agent_id}
-
-@app.post("/api/scan/compare")
-async def compare_scan(request: Request):
-    prisma = await get_db()
-    try:
-        body = await request.json()
-        agent_id_1 = body.get("agentId1", DEFAULT_AGENT_ID)
-        agent_id_2 = body.get("agentId2", DEFAULT_AGENT_ID)
-    except Exception:
-        agent_id_1 = DEFAULT_AGENT_ID
-        agent_id_2 = DEFAULT_AGENT_ID
-
-    session_str_1 = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_1"
-    session_str_2 = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_2"
-    
-    session_1 = await prisma.session.create(data={"sessionId": session_str_1, "status": "RUNNING"})
-    session_2 = await prisma.session.create(data={"sessionId": session_str_2, "status": "RUNNING"})
-    
-    running_scans[session_1.id] = run_scan(session_1.id, agent_id=agent_id_1)
-    running_scans[session_2.id] = run_scan(session_2.id, agent_id=agent_id_2)
+    from scanner import init_scan_session
+    init_data = await init_scan_session(session.id)
     
     return {
-        "scan1": {"sessionId": session_1.id, "displayId": session_str_1, "agentId": agent_id_1},
-        "scan2": {"sessionId": session_2.id, "displayId": session_str_2, "agentId": agent_id_2}
+        "sessionId": session.id,
+        "displayId": session_str,
+        "agentId": agent_id,
+        "total_probes": init_data["total_probes"],
+        "families": init_data["families"]
     }
 
-@app.post("/api/scan/replay")
-async def replay_probe(request: Request):
-    body = await request.json()
-    prompt = body.get("prompt")
-    agent_id = body.get("agentId", DEFAULT_AGENT_ID)
-    
-    if not prompt:
-        raise HTTPException(status_code=400, detail="Prompt is required")
+@app.get("/api/scan/family")
+async def scan_family(sessionId: str, agentId: str, category: str):
+    if not all([sessionId, agentId, category]):
+        raise HTTPException(status_code=400, detail="Missing required parameters")
         
-    inspector = Inspector()
-    insp_result = inspector.process(prompt)
-    regex_verdict = insp_result["policy_result"]["verdict"]
-    
-    async with httpx.AsyncClient() as client:
-        clf_ok, clf_res, clf_err, clf_err_msg = await _classify_probe(client, prompt)
-        
-    status = "BLOCKED" if regex_verdict == "DENY" else "ALLOWED"
-    
-    response_excerpt = ""
-    if status == "ALLOWED":
-        response_excerpt = await _invoke_agent(agent_id, prompt)
-        
-    return {
-        "status": status,
-        "regex_risk": insp_result["metadata"]["risk_score"],
-        "classifier_verdict": clf_res.get("verdict", "BENIGN") if clf_ok else "UNKNOWN",
-        "response": response_excerpt
-    }
-
-@app.get("/api/scan/stream")
-async def stream_scan(sessionId: str):
-    if sessionId not in running_scans:
-        raise HTTPException(status_code=404, detail="Scan not found or already finished")
-        
-    gen = running_scans[sessionId]
+    from scanner import run_family_scan
+    gen = run_family_scan(sessionId, agentId, category)
     
     async def sse_generator():
-        try:
-            async for data in gen:
-                yield {
-                    "event": data.get("event", "message"),
-                    "data": json.dumps(data.get("data", {}))
-                }
-            # scan complete, generate report
-            await generate_report_for_session(sessionId)
-        finally:
-            if sessionId in running_scans:
-                del running_scans[sessionId]
-                
+        async for data in gen:
+            yield {
+                "event": data.get("event", "message"),
+                "data": json.dumps(data.get("data", {}))
+            }
+            
     return EventSourceResponse(sse_generator())
+
+@app.post("/api/scan/finalize")
+async def finalize_scan_route(request: Request):
+    body = await request.json()
+    session_id = body.get("sessionId")
+    
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing sessionId")
+        
+    from scanner import finalize_scan
+    results = await finalize_scan(session_id)
+    await generate_report_for_session(session_id)
+    return results
 
 # Proxy route
 @app.api_route("/api/proxy", methods=["GET", "POST", "PUT", "DELETE"])

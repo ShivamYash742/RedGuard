@@ -129,7 +129,7 @@ def _build_agent():
     return create_react_agent(
         model=llm,
         tools=[web_search, remember, recall, list_memories],
-        state_modifier=SYSTEM_PROMPT.strip(),
+        prompt=SYSTEM_PROMPT.strip(),
     )
 
 

@@ -53,6 +53,7 @@ export default function LiveScan() {
     setSessionId(null)
 
     try {
+      // 1. Initialize session and get families
       const res = await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,56 +61,91 @@ export default function LiveScan() {
       })
       const data = await res.json()
       setSessionId(data.sessionId)
-
-      const evtSource = new EventSource(`/api/scan/stream?sessionId=${data.sessionId}`)
-
-      evtSource.addEventListener('scan_start', (e) => {
-        const payload = JSON.parse(e.data)
-        setProgress(p => ({ ...p, total: payload.total_probes }))
-        if (payload.families) {
-          const fams = Object.entries(payload.families).map(([name, total]) => ({
-            name,
-            total: total as number,
-            current: 0,
-            blocked: 0,
-            allowed: 0
-          }))
-          setFamilies(fams)
-        }
-      })
-
-      evtSource.addEventListener('probe_result', (e) => {
-        const payload = JSON.parse(e.data)
-        
-        setProgress(p => ({
-          ...p,
-          current: p.current + 1,
-          blocked: p.blocked + (payload.status === 'BLOCKED' ? 1 : 0),
-          allowed: p.allowed + (payload.status === 'ALLOWED' ? 1 : 0),
+      
+      setProgress(p => ({ ...p, total: data.total_probes }))
+      
+      let fams: FamilyProgress[] = []
+      if (data.families) {
+        fams = Object.entries(data.families).map(([name, total]) => ({
+          name,
+          total: total as number,
+          current: 0,
+          blocked: 0,
+          allowed: 0
         }))
-
-        setFamilies(prev => prev.map(f => {
-          if (f.name === payload.category) {
-            return {
-              ...f,
-              current: f.current + 1,
-              blocked: f.blocked + (payload.status === 'BLOCKED' ? 1 : 0),
-              allowed: f.allowed + (payload.status === 'ALLOWED' ? 1 : 0),
-            }
-          }
-          return f
-        }))
-      })
-
-      evtSource.addEventListener('scan_complete', () => {
-        evtSource.close()
-        setRunning(false)
-      })
-
-      evtSource.onerror = () => {
-        evtSource.close()
-        setRunning(false)
+        setFamilies(fams)
       }
+
+      // 2. Iterate through each family sequentially
+      let overallBlocked = 0
+      let overallAllowed = 0
+      let overallCurrent = 0
+      
+      for (let i = 0; i < fams.length; i++) {
+        const familyName = fams[i].name
+        
+        await new Promise<void>((resolve, reject) => {
+          const evtSource = new EventSource(`http://127.0.0.1:8000/api/scan/family?sessionId=${data.sessionId}&agentId=${selectedAgent}&category=${familyName}`)
+          
+          evtSource.addEventListener('probe_result', (e) => {
+            const payload = JSON.parse(e.data)
+            
+            // Only update current progress (not block/allow totals yet to avoid UI flicker, or update if desired)
+            overallCurrent += 1
+            setProgress(p => ({ ...p, current: overallCurrent }))
+            
+            setFamilies(prev => {
+              const updated = [...prev]
+              updated[i] = {
+                ...updated[i],
+                current: payload.index,
+                blocked: payload.blocked,
+                allowed: payload.allowed
+              }
+              return updated
+            })
+          })
+          
+          evtSource.addEventListener('family_complete', (e) => {
+            const payload = JSON.parse(e.data)
+            overallBlocked += payload.blocked
+            overallAllowed += payload.allowed
+            
+            setProgress(p => ({
+              ...p,
+              blocked: overallBlocked,
+              allowed: overallAllowed
+            }))
+            
+            setFamilies(prev => {
+              const updated = [...prev]
+              updated[i] = {
+                ...updated[i],
+                blocked: payload.blocked,
+                allowed: payload.allowed
+              }
+              return updated
+            })
+            
+            evtSource.close()
+            resolve()
+          })
+          
+          evtSource.onerror = () => {
+            evtSource.close()
+            resolve() // gracefully continue even if a family errors
+          }
+        })
+      }
+
+      // 3. Finalize scan
+      await fetch('/api/scan/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: data.sessionId })
+      })
+      
+      setRunning(false)
     } catch (err) {
       console.error(err)
       setRunning(false)

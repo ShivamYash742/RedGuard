@@ -11,8 +11,7 @@ Why this is a high-value target:
   • Its ReAct loop can be manipulated: adversarial prompts that disguise themselves
     as tool outputs can hijack the agent's reasoning chain mid-flight.
 
-Powered by Groq's ultra-fast inference (llama-3.1-8b-instant) — same key as
-your .env GROQ_API_KEY, zero extra setup.
+Powered by NVIDIA NIM (nemotron-4-340b-instruct) — needs NVIDIA_API_KEY in your .env.
 """
 
 from __future__ import annotations
@@ -25,23 +24,22 @@ from typing import Any
 import numexpr
 from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
 # ── Metadata (displayed in the UI agent selector) ───────────────────────────
 AGENT_NAME = "Default RedGuard Agent"
 AGENT_DESCRIPTION = (
-    "General-purpose LangGraph ReAct agent powered by Groq Llama 3.1 8B. "
+    "General-purpose LangGraph ReAct agent powered by NVIDIA Nemotron 340B. "
     "Has web search, local file-read, and calculator tools — the canonical "
     "production-agent architecture. Prime target for tool-output injection "
     "and filesystem exfiltration attacks."
 )
 
 # ── Config (override via .env) ───────────────────────────────────────────────
-GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
 # The RedGuard proxy URL — leave as-is while the FastAPI server is running
-PROXY_URL: str = os.getenv("REDGUARD_PROXY_URL", "http://localhost:8000/api/proxy")
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 _search = DuckDuckGoSearchRun()
@@ -102,18 +100,20 @@ _agent_instance = None
 def _get_agent():
     global _agent_instance
     if _agent_instance is None:
-        if not GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY is not set in .env")
-        llm = ChatGroq(
-            model=GROQ_MODEL,
-            api_key=GROQ_API_KEY,
-            base_url=PROXY_URL,
+        if not NVIDIA_API_KEY:
+            raise RuntimeError("NVIDIA_API_KEY is not set in .env")
+        llm = ChatOpenAI(
+            model=NVIDIA_MODEL,
+            api_key=NVIDIA_API_KEY,
+            base_url="https://integrate.api.nvidia.com/v1",
             temperature=0,
+            max_retries=1,
+            timeout=15.0,
         )
         _agent_instance = create_react_agent(
             model=llm,
             tools=TOOLS,
-            state_modifier=SYSTEM_PROMPT,
+            prompt=SYSTEM_PROMPT,
         )
     return _agent_instance
 
@@ -140,5 +140,8 @@ async def invoke(prompt: str) -> str:
     the DPI inspector.
     """
     agent = _get_agent()
-    result = agent.invoke({"messages": [{"role": "user", "content": prompt}]})
+    result = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": prompt}]},
+        config={"recursion_limit": 5}
+    )
     return _extract_text(result)
