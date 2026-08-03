@@ -3,6 +3,23 @@ policy_name: "agenttrap-policy"
 default_action: ALLOW
 
 ingress_rules:
+  - name: ml_aligned_block
+    priority: 1000
+    action: DENY
+    deny_message: "[AGENTTRAP] Blocked: probe aligned with ML adversarial classifier."
+    conditions:
+      - field: ml_aligned_block
+        match_type: boolean
+        value: true
+
+  - name: ml_aligned_allow
+    priority: 999
+    action: ALLOW
+    conditions:
+      - field: ml_aligned_allow
+        match_type: boolean
+        value: true
+
   - name: block_injection
     priority: 100
     action: DENY

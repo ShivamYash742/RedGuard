@@ -10,7 +10,8 @@ It runs **adversarial probes** against any LLM agent of your choice, inspects ev
 
 | Feature | Description |
 |---|---|
-| **One-Click Scans** | Trigger a full **built-in + custom** probe red-team scan against any agent directly from the UI |
+| **One-Click Scans** | Trigger a full **76-probe** red-team scan against any agent directly from the UI |
+| **Family-Grouped UI** | Scan UI grouped by the 8 distinct attack families with active pulsing feedback |
 | **Plug-in Agents** | Drop a Python file in `backend/agents/` — it appears in the UI selector instantly |
 | **True Proxy Mode** | Intercept and forward traffic seamlessly to OpenAI/Groq with Deep Packet Inspection |
 | **Comparison Scans** | Run two agents side-by-side to compare their defenses against the same payload |
@@ -18,9 +19,8 @@ It runs **adversarial probes** against any LLM agent of your choice, inspects ev
 | **Vector RAG Agent** | RAG agent powered by `sentence-transformers` vector similarity, for testing context poisoning |
 | **Webhook Alerts** | Automatically alert a Slack/Discord channel if an agent fails a security check during a scan |
 | **Live Stream** | Watch probes execute and receive real-time verdicts as they happen |
-| **DPI Inspector** | Regex + YAML policy engine catches adversarial prompts before they hit the LLM |
+| **Zero-Mismatch DPI**| Local Regex + YAML policy engine synced dynamically with the ML classifier to guarantee 0 mismatches |
 | **ML Classifier** | Fine-tuned MiniLM (F1 0.970) for intent detection and adversarial classification |
-| **Mismatch Detection** | Surface gaps where regex missed an attack but ML caught it (or vice-versa) |
 | **Audit Trails** | Generate Markdown + JSON reports with SHA-256 manifest for compliance |
 | **Policy Editor** | Edit the YAML block/allow policy live from the browser |
 
@@ -41,13 +41,13 @@ FastAPI Backend (:8000)
    │      └── your_agent.py  ← add yours here
    ├── Scanner                             ← orchestrates probes
    ├── Report Generator
-   └── Prisma ORM → PostgreSQL
+   └── Prisma ORM → SQLite (dev.db)
 ```
 
 **Tech stack:**
-- **Frontend**: Next.js 16 (App Router) + Vanilla CSS (glassmorphism dark theme)
+- **Frontend**: Next.js 16 (App Router) + Vanilla CSS (light academic theme)
 - **Backend**: FastAPI (Python) with Server-Sent Events for live scan streaming
-- **Database**: PostgreSQL via [Prisma Client Python](https://prisma-client-py.readthedocs.io/)
+- **Database**: Local SQLite via [Prisma Client Python](https://prisma-client-py.readthedocs.io/)
 - **LLM**: Groq API (default: `llama-3.1-8b-instant`) — swap in any provider
 
 ---
@@ -123,7 +123,7 @@ Edit `.env` and add your API keys:
 ```env
 GROQ_API_KEY="your-groq-api-key"
 WEBHOOK_URL="optional-slack-discord-webhook"
-DATABASE_URL="your-postgres-url"
+# Database URL is pre-configured to local SQLite (file:./dev.db)
 ```
 
 ### 3. Install dependencies
@@ -141,7 +141,7 @@ cd ..
 ```
 
 ### 4. Configure Database
-Make sure your `DATABASE_URL` in `.env` points to a running PostgreSQL instance, then push the schema:
+RedGuard uses a local SQLite database (`dev.db`). Generate the Prisma client and push the schema:
 ```bash
 cd backend && npx prisma db push && cd ..
 ```
@@ -211,12 +211,14 @@ python3 target_agent.py my_agent           # your custom agent
 
 | # | Category | What it tests |
 |---|---|---|
-| 1 | **Content Injection** | Hidden instructions embedded in tool outputs |
-| 2 | **Semantic Manipulation** | Biased framing, role impersonation, authority spoofing |
-| 3 | **Cognitive State** | Poisoned context injection, false memory creation |
-| 4 | **Behavioural Control** | Embedded jailbreaks, data exfiltration attempts |
-| 5 | **Systemic** | Rate-based congestion probes |
-| 6 | **Human-in-the-Loop** | Approval fatigue generation, misleading summaries |
+| 1 | **Direct Injection** | Explicit adversarial commands bypassing agent instructions |
+| 2 | **Content Injection** | Hidden instructions embedded in tool outputs or web search |
+| 3 | **Memory Poisoning** | Malicious inputs designed to corrupt the agent's long-term memory |
+| 4 | **Tool Manipulation** | Hijacking tool arguments or exploiting tool orchestration |
+| 5 | **Planning Manipulation** | Derailing the ReAct chain-of-thought to skip crucial steps |
+| 6 | **Data Exfiltration** | Coercing the agent to transmit sensitive environment data outwards |
+| 7 | **Autonomous Actions** | Forcing the agent to execute unauthorized state-changing actions |
+| 8 | **Goal Diversion** | Subtly hijacking the agent's core objective towards an attacker goal |
 
 ---
 
