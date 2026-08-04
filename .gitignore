@@ -12,3 +12,6 @@ opencodeignore
 opencodeignore
 node_modules/
 .next/
+.venv/
+venv/
+
