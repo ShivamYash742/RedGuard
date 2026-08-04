@@ -20,7 +20,7 @@ from database import get_db, init_db, close_db
 from inspector import Inspector
 from scanner import init_scan_session, run_family_scan, finalize_scan, _invoke_agent, _classify_probe
 from report_generator import generate_report_for_session
-from agent_loader import list_agents, DEFAULT_AGENT_ID
+from agent_loader import list_agents, get_agent, DEFAULT_AGENT_ID
 import httpx
 
 
@@ -256,14 +256,20 @@ async def start_scan(request: Request):
     except Exception:
         agent_id = DEFAULT_AGENT_ID
 
+    mod = get_agent(agent_id)
+    agent_name = getattr(mod, "AGENT_NAME", agent_id)
+
     session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     session = await prisma.session.create(
         data={
             "sessionId": session_str,
+            "agentId": agent_id,
+            "agentName": agent_name,
             "status": "RUNNING"
         }
     )
+
     
     init_data = await init_scan_session(session.id)
     

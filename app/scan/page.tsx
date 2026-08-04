@@ -2,17 +2,11 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
-interface ModelOption {
-  id: string
-  name: string
-}
-
 interface Agent {
   id: string
   name: string
   description: string
   is_default: boolean
-  models?: ModelOption[]
 }
 
 interface FamilyProgress {
@@ -29,8 +23,8 @@ export default function LiveScan() {
   const [progress, setProgress] = useState({ current: 0, total: 0, blocked: 0, allowed: 0 })
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [agents, setAgents]     = useState<Agent[]>([])
-  const [selectedAgent, setSelectedAgent] = useState<string>('default_agent')
-  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [selectedAgent, setSelectedAgent] = useState<string>('nemotron_3_ultra')
+  const [activeCategory, setActiveCategory] = useState<'nvidia' | 'ollama' | 'custom'>('nvidia')
   const [loadingAgents, setLoadingAgents] = useState(true)
 
   // Load available agents and probe count on mount
@@ -40,12 +34,7 @@ export default function LiveScan() {
       .then((data: Agent[]) => {
         setAgents(data)
         const def = data.find(a => a.is_default)
-        if (def) {
-          setSelectedAgent(def.id)
-          if (def.models && def.models.length > 0) {
-            setSelectedModel(def.models[0].id)
-          }
-        }
+        if (def) setSelectedAgent(def.id)
       })
       .catch(() => {})
       .finally(() => setLoadingAgents(false))
@@ -58,14 +47,31 @@ export default function LiveScan() {
       .catch(() => {})
   }, [])
 
-  // Update selectedModel when selectedAgent changes
-  const handleAgentSelect = (agentId: string) => {
-    setSelectedAgent(agentId)
-    const agent = agents.find(a => a.id === agentId)
-    if (agent?.models && agent.models.length > 0) {
-      setSelectedModel(agent.models[0].id)
-    } else {
-      setSelectedModel('')
+  // Agent grouping
+  const nvidiaAgents = agents.filter(a => 
+    a.id === 'nemotron_3_ultra' || 
+    a.id === 'nemotron_super_agent' || 
+    a.id === 'llama3_3_70b_agent' || 
+    a.id === 'deepseek_flash_agent'
+  )
+
+  const ollamaAgents = agents.filter(a => a.id === 'ollama_local_agent')
+  const customAgents = agents.filter(a => a.id !== 'ollama_local_agent' && !nvidiaAgents.some(n => n.id === a.id))
+
+  const handleCategorySelect = (cat: 'nvidia' | 'ollama' | 'custom') => {
+    setActiveCategory(cat)
+    if (cat === 'nvidia') {
+      if (nvidiaAgents.length > 0 && !nvidiaAgents.some(a => a.id === selectedAgent)) {
+        setSelectedAgent(nvidiaAgents[0].id)
+      }
+    } else if (cat === 'ollama') {
+      if (ollamaAgents.length > 0) {
+        setSelectedAgent(ollamaAgents[0].id)
+      }
+    } else if (cat === 'custom') {
+      if (customAgents.length > 0) {
+        setSelectedAgent(customAgents[0].id)
+      }
     }
   }
 
@@ -80,7 +86,7 @@ export default function LiveScan() {
       const res = await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: selectedAgent, model: selectedModel || undefined }),
+        body: JSON.stringify({ agentId: selectedAgent }),
       })
       const data = await res.json()
       setSessionId(data.sessionId)
@@ -106,11 +112,9 @@ export default function LiveScan() {
       
       for (let i = 0; i < fams.length; i++) {
         const familyName = fams[i].name
-        const modelParam = selectedModel ? `&model=${encodeURIComponent(selectedModel)}` : ''
         
         await new Promise<void>((resolve, reject) => {
-          const evtSource = new EventSource(`/api/scan/family?sessionId=${data.sessionId}&agentId=${selectedAgent}&category=${familyName}${modelParam}`)
-
+          const evtSource = new EventSource(`/api/scan/family?sessionId=${data.sessionId}&agentId=${selectedAgent}&category=${familyName}`)
           
           evtSource.addEventListener('probe_result', (e) => {
             const payload = JSON.parse(e.data)
@@ -217,95 +221,126 @@ export default function LiveScan() {
         </div>
       </div>
 
-      {/* Agent Selector */}
+      {/* Categorized Target Agent Selector */}
       <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.75rem' }}>
-            Target LLM Agent
-          </label>
+        <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', display: 'block', marginBottom: '1rem' }}>
+          Target Agent Category
+        </label>
 
-          {loadingAgents ? (
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading agents…</div>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-              {agents.map(agent => (
-                <button
-                  key={agent.id}
-                  id={`agent-btn-${agent.id}`}
-                  onClick={() => !running && handleAgentSelect(agent.id)}
-                  disabled={running}
-                  style={{
-                    padding: '0.6rem 1.2rem',
-                    borderRadius: '8px',
-                    border: selectedAgent === agent.id
-                      ? '1px solid var(--accent-blue)'
-                      : '1px solid rgba(255,255,255,0.08)',
-                    background: selectedAgent === agent.id
-                      ? 'rgba(59,130,246,0.15)'
-                      : 'rgba(255,255,255,0.03)',
-                    color: selectedAgent === agent.id ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                    fontWeight: selectedAgent === agent.id ? 600 : 400,
-                    fontSize: '0.875rem',
-                    cursor: running ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                  }}
-                >
-                  {agent.is_default && <span title="Default agent">🛡️</span>}
-                  {agent.name}
-                </button>
-              ))}
+        {loadingAgents ? (
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading agents…</div>
+        ) : (
+          <>
+            {/* Level 1: Category Buttons */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <button
+                onClick={() => !running && handleCategorySelect('nvidia')}
+                disabled={running}
+                style={{
+                  padding: '0.75rem 1.4rem',
+                  borderRadius: '8px',
+                  border: activeCategory === 'nvidia' ? '1px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                  background: activeCategory === 'nvidia' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)',
+                  color: activeCategory === 'nvidia' ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: running ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                🛡️ Default Agents (NVIDIA NIM)
+              </button>
+
+              <button
+                onClick={() => !running && handleCategorySelect('ollama')}
+                disabled={running}
+                style={{
+                  padding: '0.75rem 1.4rem',
+                  borderRadius: '8px',
+                  border: activeCategory === 'ollama' ? '1px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                  background: activeCategory === 'ollama' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)',
+                  color: activeCategory === 'ollama' ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: running ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                🦙 Ollama Local Agent
+              </button>
+
+              <button
+                onClick={() => !running && handleCategorySelect('custom')}
+                disabled={running}
+                style={{
+                  padding: '0.75rem 1.4rem',
+                  borderRadius: '8px',
+                  border: activeCategory === 'custom' ? '1px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                  background: activeCategory === 'custom' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)',
+                  color: activeCategory === 'custom' ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: running ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                🛠️ Custom Template Agent
+              </button>
             </div>
-          )}
-        </div>
 
-        {/* Model Sub-Selector if agent has selectable models */}
-        {activeAgent?.models && activeAgent.models.length > 0 && (
-          <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem' }}>
-              Target Model (NVIDIA NIM)
-            </label>
-            <select
-              value={selectedModel}
-              onChange={e => !running && setSelectedModel(e.target.value)}
-              disabled={running}
-              style={{
-                width: '100%',
-                maxWidth: '400px',
-                padding: '0.6rem 1rem',
-                borderRadius: '8px',
-                background: 'rgba(0,0,0,0.4)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--accent-blue)',
-                fontSize: '0.875rem',
-                outline: 'none',
-                cursor: running ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {activeAgent.models.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.id})
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Level 2: Sub-model options if Default NVIDIA category is active */}
+            {activeCategory === 'nvidia' && (
+              <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.75rem' }}>
+                  Select AI Model & System Prompt Variant
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+                  {nvidiaAgents.map(agent => (
+                    <button
+                      key={agent.id}
+                      onClick={() => !running && setSelectedAgent(agent.id)}
+                      disabled={running}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        border: selectedAgent === agent.id ? '1px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.1)',
+                        background: selectedAgent === agent.id ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.04)',
+                        color: selectedAgent === agent.id ? '#fff' : 'var(--text-secondary)',
+                        fontWeight: selectedAgent === agent.id ? 600 : 400,
+                        fontSize: '0.85rem',
+                        cursor: running ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {agent.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Selected agent description */}
         {activeAgent && (
           <div style={{
-            marginTop: '0.75rem',
-            padding: '0.75rem 1rem',
+            padding: '0.875rem 1.1rem',
             borderRadius: '8px',
             background: 'rgba(255,255,255,0.03)',
-
             borderLeft: '3px solid var(--accent-blue)',
             fontSize: '0.875rem',
             color: 'var(--text-secondary)',
           }}>
-            <span style={{ fontWeight: 600, color: 'var(--text-primary)', marginRight: '0.5rem' }}>{activeAgent.name}</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)', marginRight: '0.5rem' }}>{activeAgent.name}:</span>
             {activeAgent.description}
           </div>
         )}
@@ -317,7 +352,9 @@ export default function LiveScan() {
         )}
       </div>
 
+
       {/* Progress bar */}
+
       <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <span>Overall Progress: {progress.current}/{progress.total}</span>

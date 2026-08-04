@@ -13,6 +13,8 @@ generator client {
 model Session {
   id          String       @id @default(cuid())
   sessionId   String       @unique @map("session_id")
+  agentId     String?      @map("agent_id")
+  agentName   String?      @map("agent_name")
   startedAt   DateTime     @default(now()) @map("started_at")
   finishedAt  DateTime?    @map("finished_at")
   totalProbes Int          @default(0) @map("total_probes")
@@ -27,6 +29,7 @@ model Session {
 
   @@map("sessions")
 }
+
 
 model ProbeEvent {
   id                   String   @id @default(cuid())

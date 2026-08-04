@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 AGENTS_DIR = Path(__file__).parent / "agents"
-DEFAULT_AGENT_ID = "default_agent"
+DEFAULT_AGENT_ID = "nemotron_3_ultra"
 
 
 def _load_module(agent_id: str):

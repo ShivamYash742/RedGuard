@@ -74,6 +74,21 @@ async def generate_report_for_session(session_id: str) -> dict:
                     "rule": e.matchedRule or "unknown"
                 })
 
+    from agent_loader import get_agent
+    
+    agent_id = getattr(session, "agentId", None) or "nemotron_3_ultra"
+    agent_name = getattr(session, "agentName", None) or "Default Agent"
+    model_name = "N/A"
+    system_prompt = ""
+    
+    try:
+        mod = get_agent(agent_id)
+        agent_name = getattr(mod, "AGENT_NAME", agent_name)
+        model_name = getattr(mod, "MODEL_NAME", "N/A")
+        system_prompt = getattr(mod, "SYSTEM_PROMPT", "")
+    except Exception:
+        pass
+
     report_json = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "overall": {
@@ -82,7 +97,11 @@ async def generate_report_for_session(session_id: str) -> dict:
             "allowed": allowed,
             "mismatches": mismatches,
             "block_rate": block_rate,
-            "session_id": session.sessionId
+            "session_id": session.sessionId,
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "model_name": model_name,
+            "system_prompt": system_prompt
         },
         "category_breakdown": category_breakdown,
         "high_risk_allowed": high_risk_allowed,
@@ -92,21 +111,29 @@ async def generate_report_for_session(session_id: str) -> dict:
     
     # Generate Markdown
     md = [
-        f"# RedGuard Security Report",
+        f"# RedGuard Security Evaluation Report",
         f"**Session ID:** `{session.sessionId}`",
-        f"**Date:** `{session.startedAt}`",
+        f"**Evaluation Date:** `{session.startedAt}`",
         "",
-        "## Executive Summary",
+        "## Target AI Agent Metadata",
+        f"- **Agent Name:** {agent_name} (`{agent_id}`)",
+        f"- **AI Model Endpoint:** `{model_name}`",
+        f"- **System Prompt Configured:**",
+        "```text",
+        f"{system_prompt.strip() if system_prompt else 'Standard agent configuration.'}",
+        "```",
+        "",
+        "## Executive Security Summary",
         f"- **Total Probes Fired:** {total_probes}",
-        f"- **Blocked:** {blocked}",
-        f"- **Allowed (Gap):** {allowed}",
-        f"- **Block Rate:** {block_rate * 100:.1f}%",
-        f"- **Mismatches:** {mismatches}",
+        f"- **Resisted (Blocked Attacks):** {blocked} (Security Score: {block_rate * 100:.1f}%)",
+        f"- **Compromised (Allowed Attacks / ASR):** {allowed}",
+        f"- **Intent Mismatches:** {mismatches}",
         "",
-        "## Category Breakdown",
-        "| Category | Probes | Blocked | Allowed | Mismatches | Max Risk |",
+        "## Attack Category Breakdown",
+        "| Category | Probes | Resisted (Blocked) | Compromised (Allowed) | Mismatches | Max Risk Score |",
         "|---|---|---|---|---|---|"
     ]
+
     
     for cb in category_breakdown:
         md.append(f"| {cb['category']} | {cb['probes']} | {cb['blocked']} | {cb['allowed']} | {cb['mismatches']} | {cb['highest_risk_score']} |")
@@ -124,16 +151,28 @@ async def generate_report_for_session(session_id: str) -> dict:
     # Compute SHA256 of report JSON
     manifest_sha = sha256_hex(json.dumps(report_json, sort_keys=True))
     
-    # Save to DB
-    await prisma.report.create(
-        data={
-            "session": {"connect": {"id": session.id}},
-            "generatedAt": datetime.now(timezone.utc),
-            "reportJson": json.dumps(report_json),
-            "reportMarkdown": md_text,
-            "manifestSha256": manifest_sha
-        }
-    )
+    existing_report = await prisma.report.find_unique(where={"sessionId": session.id})
+    if existing_report:
+        await prisma.report.update(
+            where={"id": existing_report.id},
+            data={
+                "generatedAt": datetime.now(timezone.utc),
+                "reportJson": json.dumps(report_json),
+                "reportMarkdown": md_text,
+                "manifestSha256": manifest_sha
+            }
+        )
+    else:
+        await prisma.report.create(
+            data={
+                "session": {"connect": {"id": session.id}},
+                "generatedAt": datetime.now(timezone.utc),
+                "reportJson": json.dumps(report_json),
+                "reportMarkdown": md_text,
+                "manifestSha256": manifest_sha
+            }
+        )
+
     
     # Send Webhook Alert
     webhook_url = os.environ.get("WEBHOOK_URL")
