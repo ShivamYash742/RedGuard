@@ -34,12 +34,14 @@ export default function Header({ onOpenSearch }: HeaderProps) {
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--surface-raised)]/95 px-6 backdrop-blur-md">
       {/* Left: Brand logo & version tags */}
       <div className="flex items-center gap-4">
-        <Link href="/" className="flex items-center gap-2 text-sm font-bold tracking-tight text-[var(--text-primary)]">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--primary)] text-white">
-            <Shield className="h-4 w-4" />
+        <Link href="/" className="flex items-center gap-2.5 text-sm font-bold tracking-tight text-[var(--text-primary)]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/15 p-1 border border-[var(--primary)]/30">
+            <img src="/shield.svg" alt="RedGuard Shield Logo" className="h-5 w-5" />
           </div>
-          <span>RedGuard</span>
-          <span className="text-xs font-normal text-[var(--text-muted)]">Benchmark</span>
+          <div className="flex flex-col">
+            <span className="text-sm font-black leading-none text-[var(--text-primary)] tracking-tight">RedGuard</span>
+            <span className="text-[10px] font-mono text-[var(--primary)] leading-none mt-0.5 font-semibold">AI Security Benchmark</span>
+          </div>
         </Link>
 
         <div className="hidden sm:flex items-center gap-2 border-l border-[var(--border-subtle)] pl-4 text-xs font-mono">

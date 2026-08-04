@@ -1,30 +1,29 @@
-"use client"
-import React, { useState } from 'react'
+import type { Metadata } from 'next'
 import './globals.css'
-import Sidebar from '@/components/Sidebar'
-import Header from '@/components/Header'
-import GlobalSearchModal from '@/components/GlobalSearchModal'
+import ClientLayout from '@/components/ClientLayout'
+
+export const metadata: Metadata = {
+  title: 'RedGuard v2.0 | AI Agent Security Benchmark',
+  description: 'Academic AI Agent Security Evaluation Platform based on DeepMind Traps Taxonomy',
+  icons: {
+    icon: '/shield.svg',
+    shortcut: '/shield.svg',
+    apple: '/shield.svg',
+  },
+}
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/shield.svg" type="image/svg+xml" />
+      </head>
       <body className="min-h-screen bg-[var(--surface-base)] text-[var(--text-primary)] antialiased" suppressHydrationWarning>
-        <div className="flex flex-col min-h-screen">
-          <Header onOpenSearch={() => setIsSearchOpen(true)} />
-          <div className="flex flex-1">
-            <Sidebar />
-            <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto w-full">
-              {children}
-            </main>
-          </div>
-        </div>
-        <GlobalSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   )
