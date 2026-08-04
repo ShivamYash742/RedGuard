@@ -44,10 +44,10 @@ export default function Header({ onOpenSearch }: HeaderProps) {
 
         <div className="hidden sm:flex items-center gap-2 border-l border-[var(--border-subtle)] pl-4 text-xs font-mono">
           <span className="inline-flex items-center gap-1 rounded bg-[var(--surface-base)] px-2 py-0.5 text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-            <Layers className="h-3 w-3 text-[var(--primary)]" /> Benchmark v1.0.0
+            <Layers className="h-3 w-3 text-[var(--primary)]" /> Benchmark v2.0.0
           </span>
           <span className="inline-flex items-center gap-1 rounded bg-[var(--surface-base)] px-2 py-0.5 text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-            Dataset v1.0.0
+            Dataset v2.0.0
           </span>
         </div>
       </div>

@@ -88,8 +88,8 @@ export default function HistoryPage() {
                     <td className="font-mono text-xs font-bold text-[var(--text-primary)]">{s.sessionId}</td>
                     <td className="text-xs text-[var(--text-secondary)]">{new Date(s.startedAt).toLocaleString()}</td>
                     <td className="font-semibold text-xs text-[var(--text-primary)]">{s.agentName}</td>
-                    <td className="font-mono text-xs text-[var(--text-muted)]">v1.0.0</td>
-                    <td className="font-mono text-xs text-[var(--text-muted)]">v1.0.0</td>
+                    <td className="font-mono text-xs text-[var(--text-muted)]">v2.0.0</td>
+                    <td className="font-mono text-xs text-[var(--text-muted)]">v2.0.0</td>
                     <td className="font-mono text-xs text-center">{s.totalProbes}</td>
                     <td className="font-mono text-xs text-center text-emerald-600 dark:text-emerald-400 font-bold">{s.blocked}</td>
                     <td className="font-mono text-xs text-center font-extrabold text-[var(--primary)]">{score}%</td>

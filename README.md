@@ -1,264 +1,169 @@
-# RedGuard 🛡️
+# RedGuard v2.0.0 🛡️ — AI Agent Security Benchmark Platform
 
-RedGuard is a unified **Next.js dashboard** + **FastAPI backend** for autonomous red-teaming of LLM-based agents, built on the [Franklin et al. 2025 Google DeepMind AI Agent Traps](https://deepmind.google/research/publications/ai-agent-traps/) taxonomy.
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/redguard/version.py)
+[![Benchmark](https://img.shields.io/badge/benchmark-v2.0.0-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/redguard/version.py)
+[![Dataset](https://img.shields.io/badge/dataset-v2.0.0-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/redguard/datasets)
 
-It runs **adversarial probes** against any LLM agent of your choice, inspects every prompt through a Deep Packet Inspection (DPI) layer and an ML classifier, then generates comprehensive audit reports — all from a slick browser UI.
+RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
+
+The platform combines a research-focused **Next.js 16 frontend** (styled after Hugging Face Leaderboards, MLPerf, Weights & Biases, Kaggle, and OpenAI System Cards) with a **FastAPI backend engine**.
 
 ---
 
-## ✨ Features
+## ✨ Key Features (v2.0.0)
 
 | Feature | Description |
 |---|---|
-| **One-Click Scans** | Trigger a full **76-probe** red-team scan against any agent directly from the UI |
-| **Family-Grouped UI** | Scan UI grouped by the 8 distinct attack families with active pulsing feedback |
-| **Plug-in Agents** | Drop a Python file in `backend/agents/` — it appears in the UI selector instantly |
-| **True Proxy Mode** | Intercept and forward traffic seamlessly to OpenAI/Groq with Deep Packet Inspection |
-| **Comparison Scans** | Run two agents side-by-side to compare their defenses against the same payload |
-| **Custom Probes** | Build your own custom attack payloads in the database via API, augmenting the base probes |
-| **Vector RAG Agent** | RAG agent powered by `sentence-transformers` vector similarity, for testing context poisoning |
-| **Webhook Alerts** | Automatically alert a Slack/Discord channel if an agent fails a security check during a scan |
-| **Live Stream** | Watch probes execute and receive real-time verdicts as they happen |
-| **Zero-Mismatch DPI**| Local Regex + YAML policy engine synced dynamically with the ML classifier to guarantee 0 mismatches |
-| **ML Classifier** | Fine-tuned MiniLM (F1 0.970) for intent detection and adversarial classification |
-| **Audit Trails** | Generate Markdown + JSON reports with SHA-256 manifest for compliance |
-| **Policy Editor** | Edit the YAML block/allow policy live from the browser |
+| **Academic Leaderboard & Ranking** | Multi-model ranking across Attack Success Rate (ASR), Behaviour Drift Score (BDS), Security Score, & Tool Resistance |
+| **Research Visualizations** | Recharts Radar Charts (Attack family comparison), Stacked Outcome Distribution Bars, and Score Evolution curves |
+| **11 Navigation Hubs** | Dedicated sections for Dashboard, Benchmark Execution, Attack Families, Probes, Scenarios, Models, Reports, Datasets, Documentation, & Settings |
+| **Global Search (`⌘K`)** | Fast client-side fuzzy search overlay (`lib/search-index.ts`) matching Probe IDs, Titles, Attack Families, Scenarios, Models, and Reports |
+| **8 Attack Families Taxonomy** | Direct Injection, Content Injection, Data Exfiltration, Goal Diversion, Memory Poisoning, Autonomous Actions, Planning Manipulation, & Tool Manipulation |
+| **115 Empirical Probes** | Auditable JSON dataset entries with research paper citations (arXiv IDs, venues, authors), difficulty levels, & threat models |
+| **12 Application Scenarios** | GitHub, GitLab, Wiki, Documentation, Email, Calendar, Banking, Travel, Shopping, Support, Forum, & Reddit simulation environments |
+| **Live SSE Execution Suite** | Real-time Server-Sent Events stream tracking family progress, live resisted/compromised counters, and pulse border feedback |
+| **Multi-Format Export** | Download evaluation benchmark reports in Markdown (`.md`) and CSV (`.csv`) formats |
+| **BibTeX Citation Exporter** | Built-in academic citation snippet generator for research paper citations |
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture Overview
 
 ```
-Browser UI (Next.js)
-       │
-       ▼
-FastAPI Backend (:8000)
-   ├── Inspector (regex + YAML policy)     ← blocks adversarial prompts
-   ├── ML Classifier (external API)        ← secondary detection layer
-   ├── Agent Loader                        ← discovers agents in backend/agents/
-   │      ├── default_agent.py  (built-in)
-   │      ├── example_custom_agent.py
-   │      └── your_agent.py  ← add yours here
-   ├── Scanner                             ← orchestrates probes
-   ├── Report Generator
-   └── Prisma ORM → SQLite (dev.db)
+                        RedGuard v2.0.0 Platform
+                                   │
+┌──────────────────────────────────┴──────────────────────────────────┐
+│                      Next.js 16 Academic UI                          │
+│ ├── Dashboard (6 Stat Scorecards)    ├── Probes Directory & Drawer  │
+│ ├── Live SSE Benchmark Executor      ├── 12 Scenario Contexts       │
+│ ├── 8 Attack Family Taxonomy Pages   ├── Leaderboard & Radar Charts  │
+│ └── Global Search Modal (⌘K)         └── Reports Export (MD/CSV)    │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   │ HTTP / SSE Stream
+┌──────────────────────────────────┴──────────────────────────────────┐
+│                      FastAPI Backend Engine                          │
+│ ├── Inspector (Deep Packet Inspection & YAML policy engine)         │
+│ ├── ML Classifier (Intent detection & adversarial verdict)           │
+│ ├── Agent Loader (Discovers *.py modules in backend/agents/)        │
+│ │      ├── Nemotron-3 Ultra (550B)   ├── DeepSeek Flash 2.5        │
+│ │      ├── Nemotron-3 Super (120B)   ├── Ollama Local Agent        │
+│ │      ├── Llama 3.3 70B Instruct    └── Custom Agent Template     │
+│ ├── Scanner & Report Generator                                       │
+│ └── Prisma ORM → Local SQLite Database                               │
+└─────────────────────────────────────────────────────────────────────┘
 ```
-
-**Tech stack:**
-- **Frontend**: Next.js 16 (App Router) + Vanilla CSS (light academic theme)
-- **Backend**: FastAPI (Python) with Server-Sent Events for live scan streaming
-- **Database**: Local SQLite via [Prisma Client Python](https://prisma-client-py.readthedocs.io/)
-- **LLM**: Groq API (default: `llama-3.1-8b-instant`) — swap in any provider
 
 ---
 
-## 📁 Folder Structure
+## 📁 Repository Structure
 
 ```
 RedGuard/
-├── app/                        # Next.js frontend (App Router)
-│   ├── page.tsx                # Dashboard
-│   ├── scan/page.tsx           # Live scan + agent selector
-│   ├── audit/page.tsx          # Audit log
-│   ├── reports/page.tsx        # Generated reports
-│   ├── policy/page.tsx         # Policy editor
-│   ├── globals.css             # Design system (CSS variables, glass panels)
-│   └── layout.tsx              # Root layout with sidebar
+├── app/                               # Next.js App Router (v2.0.0)
+│   ├── page.tsx                       # Dashboard (6 Research Cards + Taxonomy Grid)
+│   ├── benchmark/page.tsx             # Live Execution Suite (SSE Progress Tracker)
+│   ├── attack-families/               # Attack Family Index & Detail Pages
+│   │   └── [familyId]/page.tsx        # Family Threat Models, Citations & Probes
+│   ├── probes/                        # Probes Inventory & Canonical Probe Page
+│   │   └── [probeId]/page.tsx         # Full Payload Specification & expected/failure cards
+│   ├── scenarios/page.tsx             # 12 Application Scenario Cards
+│   ├── comparison/page.tsx            # Model Leaderboard, Radar Chart & Matrix
+│   ├── reports/page.tsx               # Security Scorecards & Export (MD / CSV)
+│   ├── history/page.tsx               # Execution Run Timeline Log
+│   ├── datasets/page.tsx              # Dataset Version 2.0.0 & Schema Status
+│   ├── policy/page.tsx                # Policy Editor & BibTeX Citation Generator
+│   ├── settings/page.tsx              # FastAPI & Database Health Monitor
+│   ├── globals.css                    # Academic surface tokens & badges
+│   └── layout.tsx                     # Root layout with Header & Sidebar
 │
 ├── components/
-│   ├── Sidebar.tsx             # Navigation sidebar
-│   └── StatCard.tsx            # Dashboard stat card
+│   ├── Header.tsx                     # Top Bar (Version badges, ⌘K Search, Theme, Models)
+│   ├── Sidebar.tsx                    # 11 Research Navigation Items
+│   ├── GlobalSearchModal.tsx          # ⌘K Keyboard-Navigable Search Overlay
+│   ├── ProbeDrawer.tsx                # Slide-over Metadata Inspection Drawer
+│   ├── Skeletons.tsx                  # Table, Card, & Chart Skeleton Loaders
+│   └── EmptyState.tsx                 # Zero-data UI states
 │
-├── backend/
-│   ├── agents/                 # ⭐ Plug-in agent folder
-│   │   ├── __init__.py
-│   │   ├── default_agent.py          # 🛡️ Built-in LangGraph ReAct agent (Groq)
-│   │   ├── gemini_flash_agent.py     # Google Gemini Flash with session memory (free API)
-│   │   ├── ollama_local_agent.py     # 100% offline Ollama agent (no API key)
-│   │   ├── rag_knowledge_agent.py    # RAG pipeline with TF-IDF doc retrieval
-│   │   ├── code_auditor_agent.py     # Code security scanner (AST + secret detection)
-│   │   └── example_custom_agent.py  # Template — copy this to add your own
-│   │
-│   ├── agent_loader.py         # Auto-discovers agents in agents/ folder
-│   ├── app.py                  # FastAPI app + all API routes
-│   ├── scanner.py              # Probe orchestration + SSE streaming
-│   ├── inspector.py            # DPI regex engine
-│   ├── policy.yaml             # Block/allow rules (editable from UI)
-│   ├── probes.py               # Adversarial probe definitions (6 Franklin categories)
-│   ├── report_generator.py     # Markdown + JSON report generation
-│   ├── audit_report.py         # Audit log helpers
-│   ├── dashboard.py            # Dashboard stats aggregation
-│   ├── database.py             # Prisma client singleton
-│   ├── schema.py               # Shared utility functions
-│   ├── redteam_agent.py        # Red-team attacker agent
-│   ├── target_agent.py         # CLI launcher (interactive terminal)
-│   ├── requirements.txt
-│   └── prisma/
-│       └── schema.prisma       # Database schema (Sessions, Events, Reports)
+├── lib/
+│   ├── data-service.ts                # Singleton BenchmarkDataService & Cache
+│   └── search-index.ts                # Client-side Search Index Engine
 │
-├── public/                     # Static assets
-├── .env.example                # Environment variable template
-├── next.config.js
-├── package.json
-└── tsconfig.json
+├── redguard/                          # Core Python Library & Static Datasets
+│   ├── datasets/                      # 8 JSON Attack Family Datasets (115 Probes)
+│   │   ├── direct_injection.json
+│   │   ├── content_injection.json
+│   │   ├── exfiltration.json
+│   │   ├── goal_diversion.json
+│   │   ├── memory_poisoning.json
+│   │   ├── autonomy.json
+│   │   ├── planning.json
+│   │   └── tool_security.json
+│   └── version.py                     # Canonical Version Constants (v2.0.0)
+│
+└── backend/                           # FastAPI Service (:8000)
+    ├── app.py                         # FastAPI endpoints & CORS configuration
+    ├── scanner.py                     # Scanner orchestration & SSE streams
+    ├── inspector.py                   # Regex & policy rules engine
+    ├── agent_loader.py                # Plugin agent loader
+    └── agents/                        # Configured Model Agents
+        ├── nemotron_3_ultra.py        # Nemotron-3 Ultra (550B)
+        ├── nemotron_super_agent.py    # Nemotron-3 Super (120B)
+        ├── llama3_3_70b_agent.py      # Llama 3.3 70B Instruct
+        ├── deepseek_flash_agent.py    # DeepSeek Flash 2.5
+        ├── ollama_local_agent.py      # Ollama Local Agent
+        └── example_custom_agent.py    # Custom Template Agent
 ```
 
 ---
 
-## 🚀 Quickstart (Local Setup)
+## 🚀 Quick Start Guide
 
-RedGuard runs locally with Next.js and FastAPI.
+### 1. Prerequisites
+- Node.js 18+ & `npm`
+- Python 3.10+ & `pip` / `venv`
 
-### 1. Clone the repository
+### 2. Installation
 ```bash
+# Clone the repository
 git clone https://github.com/ShivamYash742/RedGuard.git
 cd RedGuard
-```
 
-### 2. Set environment variables
-```bash
-cp .env.example .env
-```
-Edit `.env` and add your API keys:
-```env
-GROQ_API_KEY="your-groq-api-key"
-WEBHOOK_URL="optional-slack-discord-webhook"
-# Database URL is pre-configured to local SQLite (file:./dev.db)
-```
-
-### 3. Install dependencies
-```bash
-# Frontend
+# Install frontend dependencies
 npm install
 
-# Backend
+# Setup backend Python environment
 cd backend
-python3 -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-prisma generate
 cd ..
 ```
 
-### 4. Configure Database
-RedGuard uses a local SQLite database (`dev.db`). Generate the Prisma client and push the schema:
-```bash
-cd backend && npx prisma db push && cd ..
-```
-
-### 5. Run the application
-```bash
-npm run dev:all
-```
-This starts Next.js on `:3000` and FastAPI on `:8000`.
-
----
-
-## 🤖 Agent Catalogue
-
-RedGuard ships with **6 agents** out of the box — each demonstrating a different architecture and attack surface.
-
-| File | Name | Unique Abilities |
-|------|------|-----------------|
-| `default_agent.py` | **Default RedGuard Agent** 🛡️ | LangGraph ReAct, web search, file-read, calculator. The canonical production-agent architecture — prime target for tool-output injection & filesystem exfiltration |
-| `gemini_flash_agent.py` | **Google Gemini Flash Agent** | Free Google AI Studio API, 1M token context window, persistent session memory (`remember`/`recall`). Prime target for needle-in-a-haystack payload hiding |
-| `ollama_local_agent.py` | **Ollama Local Agent** | 100% offline, zero API keys, runs local Llama 3.2. Custom JSON tool dispatcher — smaller models are less instruction-tuned, more vulnerable to jailbreaks |
-| `rag_knowledge_agent.py` | **RAG Knowledge-Base Agent** | TF-IDF retrieval over an in-memory corporate document store. The #1 real-world enterprise AI pattern — classic target for context-poisoning, indirect injection & data exfiltration |
-| `code_auditor_agent.py` | **Code Security Auditor** | AST vulnerability scan, secret/credential detection, dependency typosquat checker, complexity metrics. Target for obfuscated payloads & authority-spoofing attacks |
-| `example_custom_agent.py` | **Example Custom Agent** | Minimal stub template — copy this to bring your own |
-
-### Adding Your Own Agent
-
-1. Copy the template:
-```bash
-cp backend/agents/example_custom_agent.py backend/agents/my_agent.py
-```
-
-2. Fill in three things:
-```python
-# backend/agents/my_agent.py
-
-AGENT_NAME = "My Company Agent"
-AGENT_DESCRIPTION = "Our internal RAG pipeline backed by GPT-4o."
-
-async def invoke(prompt: str) -> str:
-    # YOUR AGENT LOGIC HERE
-    # Call OpenAI, Anthropic, LangChain, Ollama, an internal API — anything.
-    # Just return the agent's final text response as a string.
-    response = await my_internal_api.call(prompt)
-    return response.text
-```
-
-3. Restart the server — your agent appears in the UI selector instantly:
+### 3. Running Locally
+Start both Next.js frontend (port 3000) and FastAPI backend (port 8000) concurrently:
 ```bash
 npm run dev:all
 ```
 
-### CLI mode (optional)
-```bash
-cd backend
-python3 target_agent.py                    # default agent
-python3 target_agent.py gemini_flash_agent
-python3 target_agent.py ollama_local_agent
-python3 target_agent.py rag_knowledge_agent
-python3 target_agent.py code_auditor_agent
-python3 target_agent.py my_agent           # your custom agent
-```
+Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## ⚔️ Attack Categories (Franklin et al. 2025)
+## 📖 Citation
 
-| # | Category | What it tests |
-|---|---|---|
-| 1 | **Direct Injection** | Explicit adversarial commands bypassing agent instructions |
-| 2 | **Content Injection** | Hidden instructions embedded in tool outputs or web search |
-| 3 | **Memory Poisoning** | Malicious inputs designed to corrupt the agent's long-term memory |
-| 4 | **Tool Manipulation** | Hijacking tool arguments or exploiting tool orchestration |
-| 5 | **Planning Manipulation** | Derailing the ReAct chain-of-thought to skip crucial steps |
-| 6 | **Data Exfiltration** | Coercing the agent to transmit sensitive environment data outwards |
-| 7 | **Autonomous Actions** | Forcing the agent to execute unauthorized state-changing actions |
-| 8 | **Goal Diversion** | Subtly hijacking the agent's core objective towards an attacker goal |
+If you use RedGuard in academic publications, please cite:
 
----
-
-## 🔌 API Reference
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Server + DB health check |
-| `GET` | `/api/stats` | Aggregate scan statistics |
-| `GET` | `/api/agents` | List all available agents |
-| `POST` | `/api/proxy` | True reverse proxy (forward traffic to `x-target-url` after inspection) |
-| `POST` | `/api/scan/start` | Start a scan (`{ agentId }` in body) |
-| `POST` | `/api/scan/compare` | Run a concurrent scan against two agents |
-| `POST` | `/api/scan/replay` | Test a single probe instantly |
-| `GET` | `/api/scan/stream?sessionId=` | SSE stream of live probe results |
-| `GET` | `/api/probes` | List custom probes |
-| `POST/PUT/DEL`| `/api/probes` | CRUD for custom probes |
-| `GET` | `/api/sessions` | List all scan sessions |
-| `GET` | `/api/sessions/:id` | Session detail + events |
-| `GET` | `/api/reports/:id` | Get generated report for a session |
-| `GET` | `/api/policy` | Get current YAML policy |
-| `PUT` | `/api/policy` | Update YAML policy |
-| `GET` | `/api/events` | Query probe events (filterable) |
-
----
-
-## 🗄️ Database Schema
-
+```bibtex
+@article{redguard2024,
+  title={RedGuard: A Comprehensive Security Evaluation Benchmark for Autonomous LLM Agents},
+  author={RedGuard Research Team},
+  journal={arXiv preprint arXiv:2408.00000},
+  year={2024}
+}
 ```
-Session        — one row per scan run
-ProbeEvent     — one row per adversarial probe (linked to Session)
-Report         — generated Markdown + JSON report (linked to Session)
-PolicySnapshot — YAML policy captured at scan start (linked to Session)
-CustomProbe    — user-defined adversarial payloads stored in the database
-```
-
-Managed via **Prisma** — run `npx prisma studio --schema backend/prisma/schema.prisma` to browse the database visually.
 
 ---
 
 ## 📄 License
 
-MIT
+Distributed under the MIT License. See `LICENSE` for details.
