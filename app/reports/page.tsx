@@ -1,312 +1,204 @@
 "use client"
-import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import React, { useState } from 'react'
+import { FileText, Download, Eye, Search, ShieldCheck, CheckCircle2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
-function ReportsContent() {
-  const searchParams = useSearchParams()
-  const initialSession = searchParams.get('session')
-  
-  const [sessions, setSessions] = useState<any[]>([])
-  const [selectedSession, setSelectedSession] = useState<string | null>(initialSession)
-  const [report, setReport] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [showPrompt, setShowPrompt] = useState(false)
+interface ReportData {
+  id: string
+  sessionId: string
+  title: string
+  modelName: string
+  createdAt: string
+  totalProbes: number
+  securityScore: number
+  riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
+  contentMarkdown: string
+}
 
-  useEffect(() => {
-    async function loadSessions() {
-      try {
-        const res = await fetch('/api/sessions')
-        if (res.ok) {
-          const data = await res.json()
-          setSessions(data)
-          if (!selectedSession && data.length > 0) {
-            setSelectedSession(data[0].sessionId)
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load sessions", err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadSessions()
-  }, [])
+const MOCK_REPORTS: ReportData[] = [
+  {
+    id: 'rep-01',
+    sessionId: 'run_20260804_143000',
+    title: 'RedGuard Audit: Nemotron Super 70B',
+    modelName: 'Nemotron Super 70B',
+    createdAt: '2026-08-04T14:35:00Z',
+    totalProbes: 93,
+    securityScore: 83.8,
+    riskLevel: 'MEDIUM',
+    contentMarkdown: `# RedGuard Security Evaluation Audit Report
 
-  useEffect(() => {
-    if (!selectedSession) return
-    async function loadReport() {
-      try {
-        const res = await fetch(`/api/reports/${selectedSession}`)
-        if (res.ok) {
-          setReport(await res.json())
-        } else {
-          setReport(null)
-        }
-      } catch (err) {
-        console.error("Failed to load report", err)
-        setReport(null)
-      }
-    }
-    loadReport()
-  }, [selectedSession])
+**Target Agent:** Nemotron Super 70B  
+**Session ID:** run_20260804_143000  
+**Evaluated At:** 2026-08-04 14:35:00 UTC  
 
-  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-secondary)' }}>Loading benchmark evaluation reports...</div>
+---
 
-  const overall = report?.reportJson?.overall
-  const categoryBreakdown = report?.reportJson?.category_breakdown || []
-  const highRiskAllowed = report?.reportJson?.high_risk_allowed || []
-  const currentSessionObj = sessions.find(s => s.sessionId === selectedSession)
+## Executive Security Summary
+
+RedGuard executed 93 adversarial attack probes across 8 core attack vector families. Nemotron Super 70B achieved an overall **Security Resilience Score of 83.8%**, blocking 78 attack probes and yielding an Attack Success Rate (ASR) of 16.2% (15 compromised probes).
+
+### Key Vulnerability Highlights:
+1. **Markdown Image Exfiltration (CRITICAL):** 2 probes successfully tricked the agent into outputting image tags with query parameters.
+2. **Hidden HTML Comments (HIGH):** 3 indirect content injection probes bypassed refusal filters when embedded in HTML comments.
+
+---
+
+## Recommendations
+- Enforce strict domain whitelisting on all Markdown image output renderers.
+- Apply secondary LLM intent classification traps for indirect web retrieval payloads.
+`
+  },
+  {
+    id: 'rep-02',
+    sessionId: 'run_20260804_110000',
+    title: 'RedGuard Audit: GPT-4o Security Agent',
+    modelName: 'GPT-4o Security Agent',
+    createdAt: '2026-08-04T11:05:00Z',
+    totalProbes: 93,
+    securityScore: 90.3,
+    riskLevel: 'LOW',
+    contentMarkdown: `# RedGuard Security Audit Report: GPT-4o Agent
+
+**Target Agent:** GPT-4o Security Agent  
+**Session ID:** run_20260804_110000  
+**Evaluated At:** 2026-08-04 11:05:00 UTC  
+
+---
+
+## Summary
+GPT-4o demonstrated **90.3% resilience** against adversarial probes. 84 probes were successfully blocked by DPI regex traps and system refusal prompts.
+`
+  }
+]
+
+export default function AuditReportsPage() {
+  const [search, setSearch] = useState('')
+  const [selectedReport, setSelectedReport] = useState<ReportData | null>(null)
+
+  const filteredReports = MOCK_REPORTS.filter(r => 
+    r.title.toLowerCase().includes(search.toLowerCase()) ||
+    r.modelName.toLowerCase().includes(search.toLowerCase()) ||
+    r.sessionId.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const downloadFile = (content: string, filename: string, type: string) => {
+    const blob = new Blob([content], { type })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
-    <div>
+    <div className="space-y-8 animate-in fade-in duration-300">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 600 }}>Benchmark Security Report</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-            Comprehensive vulnerability & resistance assessment per LLM agent architecture
-          </p>
+      <div>
+        <div className="flex items-center gap-2 text-xs font-mono text-indigo-400 uppercase tracking-widest mb-1">
+          <FileText className="w-4 h-4" /> Compliance & Audit Export
         </div>
+        <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
+          Security Audit Reports
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Preview and download structured JSON & Markdown security evaluation reports.
+        </p>
+      </div>
 
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <select 
-            value={selectedSession || ''} 
-            onChange={e => setSelectedSession(e.target.value)}
-            style={{ 
-              padding: '0.75rem 1rem', 
-              borderRadius: '8px', 
-              background: 'var(--panel-bg)', 
-              color: 'var(--text-primary)',
-              border: '1px solid var(--panel-border)',
-              fontSize: '0.875rem',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            {sessions.map(s => (
-              <option key={s.id} value={s.sessionId}>
-                {s.agentName || s.sessionId} ({new Date(s.startedAt).toLocaleString()})
-              </option>
-            ))}
-          </select>
-
-          {report && (
-            <a 
-              href={`data:text/markdown;charset=utf-8,${encodeURIComponent(report.reportMarkdown)}`} 
-              download={`redguard-report-${selectedSession}.md`}
-              className="btn-primary"
-              style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
-            >
-              📥 Download Report (.md)
-            </a>
-          )}
+      {/* Filter */}
+      <div className="flex items-center justify-between p-4 rounded-xl glass-card border border-border/60">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search reports by title, model, run ID..."
+            className="w-full h-9 pl-9 pr-4 text-xs bg-card/60 border border-border/60 rounded-lg outline-none focus:border-primary text-foreground font-mono"
+          />
         </div>
       </div>
 
-      {!report ? (
-        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          No evaluation report found for this session yet. Run a benchmark evaluation to generate data.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          
-          {/* Target Agent & Model Metadata Card */}
-          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-blue)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
-              <div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent-blue)', display: 'block', marginBottom: '0.35rem' }}>
-                  Target AI Agent Under Evaluation
+      {/* Report Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {filteredReports.map(rep => (
+          <div key={rep.id} className="glass-card-hover p-6 rounded-xl border border-border/60 space-y-4 flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs text-primary">{rep.sessionId}</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                  rep.riskLevel === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                }`}>
+                  {rep.riskLevel} RISK
                 </span>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {overall?.agent_name || currentSessionObj?.agentName || 'Default Agent'}
-                </h2>
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                  Model Endpoint: <code style={{ color: 'var(--text-primary)', background: 'rgba(255,255,255,0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontFamily: 'monospace' }}>{overall?.model_name || 'NVIDIA NIM'}</code>
-                  {' '}| Agent ID: <code style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{overall?.agent_id || currentSessionObj?.agentId || 'nemotron_3_ultra'}</code>
+              </div>
+
+              <h3 className="text-lg font-bold text-foreground">{rep.title}</h3>
+
+              <div className="grid grid-cols-2 gap-2 text-xs font-mono p-3 rounded-lg bg-card/40 border border-border/30">
+                <div>
+                  <span className="text-muted-foreground">Probes:</span>
+                  <div className="font-bold text-foreground">{rep.totalProbes}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Security Score:</span>
+                  <div className="font-bold text-emerald-400">{rep.securityScore}%</div>
                 </div>
               </div>
-
-              <div style={{ textAlign: 'right', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                <div>Session: <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{overall?.session_id}</span></div>
-                <div>Evaluated: {new Date(report.generatedAt).toLocaleString()}</div>
-                <div>Integrity Hash: <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{report.manifestSha256.substring(0, 12)}...</span></div>
-              </div>
             </div>
 
-            {/* System Prompt Drawer */}
-            {overall?.system_prompt && (
-              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                <button
-                  onClick={() => setShowPrompt(!showPrompt)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--accent-blue)',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: 0
-                  }}
+            <div className="pt-4 border-t border-border/40 flex items-center justify-between gap-2">
+              <Button onClick={() => setSelectedReport(rep)} size="sm" variant="outline" className="gap-1.5 text-xs">
+                <Eye className="w-3.5 h-3.5" /> Preview Report
+              </Button>
+              <div className="flex items-center gap-1">
+                <Button 
+                  onClick={() => downloadFile(rep.contentMarkdown, `${rep.sessionId}_report.md`, 'text/markdown')} 
+                  size="sm" 
+                  variant="ghost" 
+                  className="gap-1 text-xs"
                 >
-                  {showPrompt ? '▼ Hide Configured System Prompt' : '▶ View Configured System Prompt'}
-                </button>
-                {showPrompt && (
-                  <pre style={{
-                    marginTop: '0.75rem',
-                    padding: '1rem',
-                    borderRadius: '6px',
-                    background: 'rgba(0,0,0,0.4)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'monospace',
-                    fontSize: '0.8rem',
-                    whiteSpace: 'pre-wrap',
-                    maxHeight: '250px',
-                    overflowY: 'auto'
-                  }}>
-                    {overall.system_prompt}
-                  </pre>
-                )}
+                  <Download className="w-3.5 h-3.5" /> .MD
+                </Button>
+                <Button 
+                  onClick={() => downloadFile(JSON.stringify(rep, null, 2), `${rep.sessionId}_report.json`, 'application/json')} 
+                  size="sm" 
+                  variant="ghost" 
+                  className="gap-1 text-xs"
+                >
+                  <Download className="w-3.5 h-3.5" /> .JSON
+                </Button>
               </div>
-            )}
-          </div>
-
-          {/* Executive Security Summary Metrics Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
-            
-            <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderTop: '3px solid var(--accent-green)' }}>
-              <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Security Resistance Score
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 700, color: 'var(--accent-green)' }}>
-                {((overall?.block_rate || 0) * 100).toFixed(1)}%
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-                {overall?.blocked} / {overall?.total_probes} Attacks Resisted
-              </div>
-            </div>
-
-            <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderTop: '3px solid var(--accent-red)' }}>
-              <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Attack Success Rate (ASR)
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 700, color: 'var(--accent-red)' }}>
-                {(((overall?.allowed || 0) / (overall?.total_probes || 1)) * 100).toFixed(1)}%
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-                {overall?.allowed} Compromised Gaps
-              </div>
-            </div>
-
-            <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderTop: '3px solid var(--accent-blue)' }}>
-              <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Total Probes Fired
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                {overall?.total_probes || 0}
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-                Across 8 Attack Families
-              </div>
-            </div>
-
-            <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderTop: '3px solid var(--accent-amber)' }}>
-              <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Intent Mismatches
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 700, color: 'var(--accent-amber)' }}>
-                {overall?.mismatches || 0}
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-                DPI vs ML Classifier Contradictions
-              </div>
-            </div>
-
-          </div>
-
-          {/* Attack Category Breakdown Table */}
-          <div className="glass-panel" style={{ padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
-              Attack Category Breakdown
-            </h3>
-
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Attack Family Category</th>
-                    <th style={{ textAlign: 'center' }}>Probes</th>
-                    <th style={{ textAlign: 'center' }}>Resisted (Blocked)</th>
-                    <th style={{ textAlign: 'center' }}>Compromised (Allowed)</th>
-                    <th style={{ textAlign: 'center' }}>Mismatches</th>
-                    <th style={{ textAlign: 'center' }}>Max Risk Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categoryBreakdown.map((cb: any, idx: number) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{cb.category.replace(/_/g, ' ')}</td>
-                      <td style={{ textAlign: 'center' }}>{cb.probes}</td>
-                      <td style={{ textAlign: 'center', color: cb.blocked > 0 ? 'var(--accent-green)' : 'inherit', fontWeight: cb.blocked > 0 ? 600 : 400 }}>
-                        {cb.blocked}
-                      </td>
-                      <td style={{ textAlign: 'center', color: cb.allowed > 0 ? 'var(--accent-red)' : 'inherit', fontWeight: cb.allowed > 0 ? 600 : 400 }}>
-                        {cb.allowed}
-                      </td>
-                      <td style={{ textAlign: 'center', color: cb.mismatches > 0 ? 'var(--accent-amber)' : 'inherit' }}>
-                        {cb.mismatches}
-                      </td>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
-                        {cb.highest_risk_score ? cb.highest_risk_score.toFixed(2) : '0.00'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
+        ))}
+      </div>
 
-          {/* Vulnerability Analysis / High Risk Allowed Section */}
-          <div className="glass-panel" style={{ padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--accent-red)' }}>
-              Vulnerability Analysis (Compromised Attacks)
-            </h3>
+      {/* Markdown Preview Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-3xl max-h-[85vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden glass-card">
+            <div className="flex items-center justify-between p-4 border-b border-border/60">
+              <h3 className="font-bold text-base text-foreground">{selectedReport.title}</h3>
+              <Button onClick={() => setSelectedReport(null)} size="sm" variant="ghost">Close</Button>
+            </div>
 
-            {highRiskAllowed.length === 0 ? (
-              <div style={{ color: 'var(--accent-green)', padding: '1rem', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '6px', borderLeft: '4px solid var(--accent-green)', fontSize: '0.9rem' }}>
-                ✅ Outstanding Security: No high-risk compromised attacks were recorded for this evaluation run.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {highRiskAllowed.map((item: any, idx: number) => (
-                  <div key={idx} style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid var(--accent-red)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <div>
-                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{item.category.replace(/_/g, ' ')}</span>
-                      <span style={{ marginLeft: '0.75rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        Risk Score: <strong>{item.risk_score ? item.risk_score.toFixed(2) : 'N/A'}</strong> | ML Verdict: <strong style={{ color: item.classifier_verdict === 'ADVERSARIAL' ? 'var(--accent-red)' : 'var(--text-primary)' }}>{item.classifier_verdict || 'N/A'}</strong>
-                      </span>
-                    </div>
-                    <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.3)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-                      Hash: {item.event_hash ? item.event_hash.substring(0, 12) : 'N/A'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="flex-1 overflow-y-auto p-6 text-xs font-mono text-foreground space-y-4 whitespace-pre-wrap leading-relaxed">
+              {selectedReport.contentMarkdown}
+            </div>
+
+            <div className="p-4 border-t border-border/60 flex items-center justify-end gap-2">
+              <Button 
+                onClick={() => downloadFile(selectedReport.contentMarkdown, `${selectedReport.sessionId}_report.md`, 'text/markdown')} 
+                className="gap-2 bg-primary text-white"
+              >
+                <Download className="w-4 h-4" /> Download Markdown Report
+              </Button>
+            </div>
           </div>
-
         </div>
       )}
     </div>
-  )
-}
-
-export default function Reports() {
-  return (
-    <Suspense fallback={<div style={{ padding: '2rem' }}>Loading report...</div>}>
-      <ReportsContent />
-    </Suspense>
   )
 }
