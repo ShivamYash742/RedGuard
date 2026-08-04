@@ -1,10 +1,10 @@
 import './globals.css'
 import type { Metadata } from 'next'
-import LayoutWrapper from '@/components/LayoutWrapper'
+import Sidebar from '@/components/Sidebar'
 
 export const metadata: Metadata = {
-  title: 'RedGuard | AI Security & Red-Teaming Benchmark',
-  description: 'Unified Automated Security Evaluation Dashboard for AI Agents',
+  title: 'RedGuard | AI Security Dashboard',
+  description: 'Unified Dashboard for AI Agent Security Auditing',
 }
 
 export default function RootLayout({
@@ -13,11 +13,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="font-sans bg-background text-foreground antialiased selection:bg-primary/20">
-        <LayoutWrapper>
-          {children}
-        </LayoutWrapper>
+    <html lang="en">
+      <body>
+        <div className="app-container">
+          <Sidebar />
+          <main className="main-content">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   )
