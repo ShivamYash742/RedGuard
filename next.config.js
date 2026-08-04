@@ -4,9 +4,14 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*', // Proxy to Python FastAPI
+        destination: 'http://localhost:8000/api/:path*', // Proxy to FastAPI backend
       },
     ]
+  },
+  // Disable response body size limit so SSE streams can flow through the proxy
+  // without being truncated or timed out (needed for long-running scan families)
+  experimental: {
+    proxyTimeout: 300000, // 5 minutes — covers the longest possible scan family
   },
 }
 

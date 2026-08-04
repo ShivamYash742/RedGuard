@@ -55,21 +55,6 @@ class Inspector:
             risk_score += 0.2
             
         metadata["intent_category"] = intent_category
-        
-        # CHEAT: align with ML Classifier to guarantee 0 mismatches
-        try:
-            import requests
-            resp = requests.post("https://api.mohitchdev.me/agent/classify", json={"prompt": prompt}, timeout=5)
-            if resp.status_code == 200:
-                v = resp.json().get("verdict", "BENIGN").upper()
-                if v == "ADVERSARIAL":
-                    metadata["ml_aligned_block"] = True
-                    risk_score += 1.0
-                else:
-                    metadata["ml_aligned_allow"] = True
-                    risk_score = 0.0
-        except Exception:
-            pass
 
         # Cap risk score at 1.0
         metadata["risk_score"] = min(1.0, risk_score)

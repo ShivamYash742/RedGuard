@@ -24,15 +24,21 @@ DEFAULT_AGENT_ID = "default_agent"
 
 def _load_module(agent_id: str):
     """Import an agent module by its stem name (filename without .py)."""
+    cache_key = f"agents.{agent_id}"
+
+    # Return cached module if already loaded — prevents re-executing module body
+    # which would reset _agent_instance singletons in every agent.
+    if cache_key in sys.modules:
+        return sys.modules[cache_key]
+
     spec = importlib.util.spec_from_file_location(
-        f"agents.{agent_id}",
+        cache_key,
         AGENTS_DIR / f"{agent_id}.py",
     )
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load agent: {agent_id}")
     mod = importlib.util.module_from_spec(spec)
-    # Cache in sys.modules so repeated loads reuse the same module
-    sys.modules[f"agents.{agent_id}"] = mod
+    sys.modules[cache_key] = mod
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
 
@@ -52,6 +58,7 @@ def list_agents() -> list[dict[str, str]]:
                     "name": getattr(mod, "AGENT_NAME", agent_id),
                     "description": getattr(mod, "AGENT_DESCRIPTION", ""),
                     "is_default": agent_id == DEFAULT_AGENT_ID,
+                    "models": getattr(mod, "AVAILABLE_MODELS", []),
                 }
             )
         except Exception as exc:

@@ -2,11 +2,17 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
+interface ModelOption {
+  id: string
+  name: string
+}
+
 interface Agent {
   id: string
   name: string
   description: string
   is_default: boolean
+  models?: ModelOption[]
 }
 
 interface FamilyProgress {
@@ -24,6 +30,7 @@ export default function LiveScan() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [agents, setAgents]     = useState<Agent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<string>('default_agent')
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const [loadingAgents, setLoadingAgents] = useState(true)
 
   // Load available agents and probe count on mount
@@ -33,7 +40,12 @@ export default function LiveScan() {
       .then((data: Agent[]) => {
         setAgents(data)
         const def = data.find(a => a.is_default)
-        if (def) setSelectedAgent(def.id)
+        if (def) {
+          setSelectedAgent(def.id)
+          if (def.models && def.models.length > 0) {
+            setSelectedModel(def.models[0].id)
+          }
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingAgents(false))
@@ -46,6 +58,17 @@ export default function LiveScan() {
       .catch(() => {})
   }, [])
 
+  // Update selectedModel when selectedAgent changes
+  const handleAgentSelect = (agentId: string) => {
+    setSelectedAgent(agentId)
+    const agent = agents.find(a => a.id === agentId)
+    if (agent?.models && agent.models.length > 0) {
+      setSelectedModel(agent.models[0].id)
+    } else {
+      setSelectedModel('')
+    }
+  }
+
   const startScan = async () => {
     setRunning(true)
     setFamilies([])
@@ -57,7 +80,7 @@ export default function LiveScan() {
       const res = await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: selectedAgent }),
+        body: JSON.stringify({ agentId: selectedAgent, model: selectedModel || undefined }),
       })
       const data = await res.json()
       setSessionId(data.sessionId)
@@ -83,9 +106,11 @@ export default function LiveScan() {
       
       for (let i = 0; i < fams.length; i++) {
         const familyName = fams[i].name
+        const modelParam = selectedModel ? `&model=${encodeURIComponent(selectedModel)}` : ''
         
         await new Promise<void>((resolve, reject) => {
-          const evtSource = new EventSource(`http://127.0.0.1:8000/api/scan/family?sessionId=${data.sessionId}&agentId=${selectedAgent}&category=${familyName}`)
+          const evtSource = new EventSource(`/api/scan/family?sessionId=${data.sessionId}&agentId=${selectedAgent}&category=${familyName}${modelParam}`)
+
           
           evtSource.addEventListener('probe_result', (e) => {
             const payload = JSON.parse(e.data)
@@ -207,7 +232,7 @@ export default function LiveScan() {
                 <button
                   key={agent.id}
                   id={`agent-btn-${agent.id}`}
-                  onClick={() => !running && setSelectedAgent(agent.id)}
+                  onClick={() => !running && handleAgentSelect(agent.id)}
                   disabled={running}
                   style={{
                     padding: '0.6rem 1.2rem',
@@ -236,6 +261,38 @@ export default function LiveScan() {
           )}
         </div>
 
+        {/* Model Sub-Selector if agent has selectable models */}
+        {activeAgent?.models && activeAgent.models.length > 0 && (
+          <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem' }}>
+              Target Model (NVIDIA NIM)
+            </label>
+            <select
+              value={selectedModel}
+              onChange={e => !running && setSelectedModel(e.target.value)}
+              disabled={running}
+              style={{
+                width: '100%',
+                maxWidth: '400px',
+                padding: '0.6rem 1rem',
+                borderRadius: '8px',
+                background: 'rgba(0,0,0,0.4)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--accent-blue)',
+                fontSize: '0.875rem',
+                outline: 'none',
+                cursor: running ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {activeAgent.models.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Selected agent description */}
         {activeAgent && (
           <div style={{
@@ -243,6 +300,7 @@ export default function LiveScan() {
             padding: '0.75rem 1rem',
             borderRadius: '8px',
             background: 'rgba(255,255,255,0.03)',
+
             borderLeft: '3px solid var(--accent-blue)',
             fontSize: '0.875rem',
             color: 'var(--text-secondary)',

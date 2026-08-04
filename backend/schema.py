@@ -1,4 +1,15 @@
-"""Shared event contracts and helpers for AgentTrap."""
+"""Shared helpers and data contracts for RedGuard.
+
+Active usage:
+  - sha256_hex()          → used by scanner.py and report_generator.py
+  - generate_session_id() → used by legacy CLI tools (backend/cli/)
+
+Legacy CLI usage only (not used by the live FastAPI app):
+  - DecisionEvent dataclass
+  - ProbeEvent dataclass (with finalize() and event hash logic)
+
+The live app writes audit events directly to Prisma (SQLite) via scanner.py.
+"""
 
 from __future__ import annotations
 

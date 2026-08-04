@@ -1,11 +1,20 @@
 import asyncio
 import json
+import os
+import sys
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
+
+# Make redguard library importable from backend/
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+from redguard.datasets.loader import load_all_datasets
 
 from database import get_db, init_db, close_db
 from inspector import Inspector
@@ -14,7 +23,15 @@ from report_generator import generate_report_for_session
 from agent_loader import list_agents, DEFAULT_AGENT_ID
 import httpx
 
-app = FastAPI(title="RedGuard API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle — connect DB on startup, disconnect on shutdown."""
+    await init_db()
+    yield
+    await close_db()
+
+app = FastAPI(title="RedGuard API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,14 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-async def startup_event():
-    await init_db()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await close_db()
 
 @app.get("/api/health")
 async def health_check():
@@ -187,15 +196,7 @@ async def get_probes():
 @app.get("/api/probes/count")
 async def get_probe_count():
     """Return total count of built-in + active custom probes."""
-    import sys
-    import os
-    if os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) not in sys.path:
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    from redguard.datasets.loader import load_all_datasets
-
     prisma = await get_db()
-    
-    # We load with validate=False for speed just to count
     builtin_count = len(load_all_datasets(validate=False))
     custom_count = await prisma.customprobe.count(where={"active": True})
     return {"builtin": builtin_count, "custom": custom_count, "total": builtin_count + custom_count}
@@ -247,9 +248,11 @@ async def get_agents():
 @app.post("/api/scan/start")
 async def start_scan(request: Request):
     prisma = await get_db()
+    model_name = None
     try:
         body = await request.json()
         agent_id = body.get("agentId", DEFAULT_AGENT_ID)
+        model_name = body.get("model")
     except Exception:
         agent_id = DEFAULT_AGENT_ID
 
@@ -262,24 +265,23 @@ async def start_scan(request: Request):
         }
     )
     
-    from scanner import init_scan_session
     init_data = await init_scan_session(session.id)
     
     return {
         "sessionId": session.id,
         "displayId": session_str,
         "agentId": agent_id,
+        "model": model_name,
         "total_probes": init_data["total_probes"],
         "families": init_data["families"]
     }
 
 @app.get("/api/scan/family")
-async def scan_family(sessionId: str, agentId: str, category: str):
+async def scan_family(sessionId: str, agentId: str, category: str, model: str = None):
     if not all([sessionId, agentId, category]):
         raise HTTPException(status_code=400, detail="Missing required parameters")
         
-    from scanner import run_family_scan
-    gen = run_family_scan(sessionId, agentId, category)
+    gen = run_family_scan(sessionId, agentId, category, model_name=model)
     
     async def sse_generator():
         async for data in gen:
@@ -290,6 +292,7 @@ async def scan_family(sessionId: str, agentId: str, category: str):
             
     return EventSourceResponse(sse_generator())
 
+
 @app.post("/api/scan/finalize")
 async def finalize_scan_route(request: Request):
     body = await request.json()
@@ -298,7 +301,6 @@ async def finalize_scan_route(request: Request):
     if not session_id:
         raise HTTPException(status_code=400, detail="Missing sessionId")
         
-    from scanner import finalize_scan
     results = await finalize_scan(session_id)
     await generate_report_for_session(session_id)
     return results
