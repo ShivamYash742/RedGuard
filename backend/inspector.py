@@ -1,9 +1,12 @@
+import os
 import re
 import yaml
 from typing import Dict, Any, List
 
+_DEFAULT_POLICY = os.path.join(os.path.dirname(__file__), "policy.yaml")
+
 class Inspector:
-    def __init__(self, policy_path: str = "policy.yaml"):
+    def __init__(self, policy_path: str = _DEFAULT_POLICY):
         self.policy_path = policy_path
         self.policy = self._load_policy()
         self.patterns = self._compile_patterns()

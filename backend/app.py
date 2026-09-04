@@ -3,12 +3,24 @@ import json
 import os
 import sys
 import uuid
+from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import datetime
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
+
+# Load environment variables early
+_root_env = Path(__file__).resolve().parent.parent / ".env"
+_backend_env = Path(__file__).resolve().parent / ".env"
+if _root_env.exists():
+    load_dotenv(dotenv_path=_root_env)
+elif _backend_env.exists():
+    load_dotenv(dotenv_path=_backend_env)
+else:
+    load_dotenv()
 
 # Make redguard library importable from backend/
 _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -22,6 +34,9 @@ from scanner import init_scan_session, run_family_scan, finalize_scan, _invoke_a
 from report_generator import generate_report_for_session
 from agent_loader import list_agents, get_agent, DEFAULT_AGENT_ID
 import httpx
+
+_POLICY_FILE = os.path.join(os.path.dirname(__file__), "policy.yaml")
+
 
 
 @asynccontextmanager
@@ -165,7 +180,7 @@ async def get_report(session_id: str):
 @app.get("/api/policy")
 async def get_policy():
     try:
-        with open("policy.yaml", "r") as f:
+        with open(_POLICY_FILE, "r") as f:
             yaml_content = f.read()
             return {"yaml": yaml_content}
     except Exception as e:
@@ -175,7 +190,7 @@ async def get_policy():
 async def update_policy(request: Request):
     data = await request.json()
     yaml_content = data.get("yaml", "")
-    with open("policy.yaml", "w") as f:
+    with open(_POLICY_FILE, "w") as f:
         f.write(yaml_content)
     return {"status": "success"}
 
