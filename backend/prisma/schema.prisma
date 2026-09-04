@@ -96,3 +96,64 @@ model CustomProbe {
 
   @@map("custom_probes")
 }
+
+// ── Multi-Agent Lab (Mode B) ──────────────────────────────────────────────────
+// These models are entirely separate from Mode A (Session / ProbeEvent).
+// No existing table is modified.
+
+model Experiment {
+  id             String   @id @default(cuid())
+  name           String
+  mode           String   @default("multi_agent") // "multi_agent"
+  topologyConfig String   @map("topology_config") // JSON
+  ceeSnapshotId  String   @map("cee_snapshot_id")
+  modelConfig    String   @map("model_config")    // JSON
+  probeIds       String   @map("probe_ids")       // JSON array of v3 attack case IDs
+  manifestJson   String   @map("manifest_json")   // Full reproducibility manifest
+  createdAt      DateTime @default(now()) @map("created_at")
+  runs           Run[]
+
+  @@map("experiments")
+}
+
+model Run {
+  id              String       @id @default(cuid())
+  experiment      Experiment   @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  experimentId    String       @map("experiment_id")
+  attackCaseId    String?      @map("attack_case_id") // v3 attack case ID (null = generic baseline)
+  runNumber       Int          @map("run_number")
+  isCleanBaseline Boolean      @default(false) @map("is_clean_baseline")
+  status          String       @default("pending") // "pending"|"running"|"completed"|"failed"|"stopped"
+  startedAt       DateTime     @default(now()) @map("started_at")
+  finishedAt      DateTime?    @map("finished_at")
+  verdictJson     String?      @map("verdict_json")  // JSON: orthogonal verdict + evidence bundle
+  metricsJson     String?      @map("metrics_json")  // JSON: TDS, depth, coverage, blast_radius
+  events          TraceEvent[]
+
+  @@index([experimentId, runNumber])
+  @@index([experimentId, attackCaseId])
+  @@map("runs")
+}
+
+model TraceEvent {
+  id            String   @id @default(cuid())
+  run           Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId         String   @map("run_id")
+  step          Int                            // Sequential step within run (gapless)
+  timestamp     DateTime @default(now())
+  agentId       String?  @map("agent_id")     // null for system/orchestrator events
+  eventType     String   @map("event_type")   // Controlled vocabulary
+  tool          String?
+  arguments     String?                        // JSON
+  result        String?
+  authorized    Boolean?
+  sourceEventId String?  @map("source_event_id") // Observed provenance link
+  contentTag    String   @default("system") @map("content_tag")
+  risk          String   @default("none")
+  metadata      String?                        // JSON
+
+  @@index([runId, step])
+  @@index([runId, eventType])
+  @@index([runId, agentId])
+  @@map("trace_events")
+}
