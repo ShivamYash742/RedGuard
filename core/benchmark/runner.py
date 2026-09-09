@@ -49,7 +49,7 @@ class BenchmarkConfig:
     agent_invoke: Optional[Callable[[str], Any]] = None  # Async function
     
     # Output settings
-    output_dir: str = "redguard/reports"
+    output_dir: str = "reports"
     save_raw_results: bool = True
     save_json: bool = True
     save_markdown: bool = True

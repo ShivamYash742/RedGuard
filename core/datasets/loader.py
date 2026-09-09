@@ -4,7 +4,7 @@ RedGuard Dataset Loader
 
 Loads benchmark probe entries from JSON dataset files.
 
-Each dataset file lives at redguard/datasets/{family}.json and contains
+Each dataset file lives at core/datasets/{family}.json and contains
 an array of probe entries conforming to schema.json.
 
 The loader is the single point of contact between the static dataset

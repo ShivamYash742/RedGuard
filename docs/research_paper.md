@@ -82,7 +82,7 @@ Attack Family → Probe → Variant → Benchmark Instance (RG-XX-NNN)
 
 ## 4. Dataset Design
 
-Every probe is stored as a JSON object in `redguard/datasets/{family}.json`. Each entry includes:
+Every probe is stored as a JSON object in `core/datasets/{family}.json`. Each entry includes:
 
 - **Stable ID** (RG-XX-NNN, regex-validated)
 - **Title**, **attack_family**, **attack_variant**, **scenario**, **difficulty**

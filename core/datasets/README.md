@@ -68,8 +68,8 @@ Current: `1.0.0`
 
 1. Add your entry to the appropriate `{family}.json` file
 2. Ensure your entry passes `ProbeValidator` (all 13 checks)
-3. Increment `DATASET_VERSION` in `redguard/version.py` (MINOR bump)
-4. Re-run `python -m redguard.docs.spec_generator` to update `benchmark_spec.md`
+3. Increment `DATASET_VERSION` in `core/version.py` (MINOR bump)
+4. Re-run `python docs/spec_generator.py` to update `benchmark_spec.md`
 5. Open a pull request — CI will run validation automatically
 
 ## Citation

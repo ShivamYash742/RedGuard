@@ -194,7 +194,7 @@ class BenchmarkReporter:
 
 def generate_report(
     metrics: BenchmarkMetrics,
-    output_dir: str = "redguard/reports",
+    output_dir: str = "reports",
     formats: List[str] = None
 ) -> Dict[str, Path]:
     """

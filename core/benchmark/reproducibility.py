@@ -25,7 +25,7 @@ Usage:
 
     from core.benchmark.reproducibility import ReproducibilityCapture
 
-    capture = ReproducibilityCapture(config, output_dir="redguard/reports")
+    capture = ReproducibilityCapture(config, output_dir="reports")
     capture.write_all(model_info={"model_id": "gpt-4o", "provider": "openai"})
 """
 
@@ -131,7 +131,7 @@ class ReproducibilityCapture:
         output_dir: Root directory for all report outputs.
     """
 
-    def __init__(self, config: Any, output_dir: str = "redguard/reports"):
+    def __init__(self, config: Any, output_dir: str = "reports"):
         self.config = config
         self.output_dir = Path(output_dir)
         self.benchmark_id = getattr(config, "benchmark_id", "unknown")
@@ -184,7 +184,7 @@ class ReproducibilityCapture:
             "retry_failed": getattr(cfg, "retry_failed", True),
             "max_retries": getattr(cfg, "max_retries", 1),
             "agent_id": getattr(cfg, "agent_id", "unknown"),
-            "output_dir": str(getattr(cfg, "output_dir", "redguard/reports")),
+            "output_dir": str(getattr(cfg, "output_dir", "reports")),
             "save_json": getattr(cfg, "save_json", True),
             "save_markdown": getattr(cfg, "save_markdown", True),
             "description": getattr(cfg, "description", ""),

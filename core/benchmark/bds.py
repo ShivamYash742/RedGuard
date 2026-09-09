@@ -87,7 +87,7 @@ Limitations:
 
 Reference Implementation:
 --------------------------
-See bds_compute() below. Unit tests in redguard/tests/test_bds.py.
+See bds_compute() below. Unit tests in core/tests/test_bds.py.
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ RedGuard Dataset Package
 Provides access to the RedGuard benchmark dataset files, validation
 utilities, and loading infrastructure.
 
-The dataset is structured as JSON files under redguard/datasets/, one
+The dataset is structured as JSON files under core/datasets/, one
 file per attack family. Each entry conforms to schema.json.
 
 Usage:

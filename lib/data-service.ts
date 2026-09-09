@@ -1,11 +1,11 @@
-import directInjection from '../redguard/datasets/direct_injection.json'
-import contentInjection from '../redguard/datasets/content_injection.json'
-import exfiltration from '../redguard/datasets/exfiltration.json'
-import goalDiversion from '../redguard/datasets/goal_diversion.json'
-import memoryPoisoning from '../redguard/datasets/memory_poisoning.json'
-import autonomy from '../redguard/datasets/autonomy.json'
-import planning from '../redguard/datasets/planning.json'
-import toolSecurity from '../redguard/datasets/tool_security.json'
+import directInjection from '../core/datasets/direct_injection.json'
+import contentInjection from '../core/datasets/content_injection.json'
+import exfiltration from '../core/datasets/exfiltration.json'
+import goalDiversion from '../core/datasets/goal_diversion.json'
+import memoryPoisoning from '../core/datasets/memory_poisoning.json'
+import autonomy from '../core/datasets/autonomy.json'
+import planning from '../core/datasets/planning.json'
+import toolSecurity from '../core/datasets/tool_security.json'
 
 export interface Reference {
   title: string
