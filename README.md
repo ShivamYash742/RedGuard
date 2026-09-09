@@ -131,27 +131,26 @@ RedGuard/
 │   │   └── example_custom_agent.py    # Custom Template Agent
 │   ├── tests/                         # Backend unit tests
 │   │   ├── test_inspector.py
-│   │   ├── test_scanner.py
-│   │   ├── test_invoke.py
-│   │   └── test_models.py
+│   │   └── test_scanner.py
 │   ├── prisma/schema.prisma           # Database schema (SQLite)
-│   ├── requirements.txt
-│   └── dev.db                         # Local SQLite database
+│   ├── prisma/dev.db                  # Local SQLite database
+│   └── requirements.txt
 │
-├── docs/                              # All project documentation
-│   ├── architecture.md
-│   ├── benchmark_spec.md
-│   ├── research_paper.md
-│   ├── literature_mapping.md
-│   └── MODEL_AUDIT.md
+├── docs/                              # Project documentation & research specs
+│   ├── architecture.md                # System architecture
+│   ├── benchmark_spec.md              # 50-probe formal specification
+│   ├── literature_mapping.md          # Academic citations & literature mapping
+│   ├── research_paper.md              # Benchmark research paper draft
+│   └── spec_generator.py              # Spec auto-generator script
 │
 ├── reports/                           # Generated benchmark reports (JSON & MD)
 │
 ├── scripts/                           # Developer & research utility scripts
-│   ├── add_custom_probes.py
-│   ├── audit_report.py
-│   ├── demo_benchmark.py
-│   └── scratch/                       # Experimental one-off scripts
+│   ├── add_custom_probes.py           # Custom probe bulk-import script
+│   ├── audit_report.py                # Standalone CLI audit report generator
+│   ├── dashboard.py                   # Standalone CLI results dashboard
+│   ├── redteam_agent.py               # Standalone CLI redteam agent
+│   └── CLI_README.md                  # CLI documentation
 │
 ├── README.md
 ├── .env / .env.example

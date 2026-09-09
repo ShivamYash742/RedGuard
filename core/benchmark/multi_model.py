@@ -31,7 +31,7 @@ Usage:
     comparison = runner.run_all_sync()
 
     # Save leaderboard
-    comparison.save_leaderboard("redguard/reports/leaderboard.json")
+    comparison.save_leaderboard("reports/leaderboard.json")
 """
 
 from __future__ import annotations

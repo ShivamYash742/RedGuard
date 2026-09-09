@@ -51,7 +51,7 @@ Every entry conforms to `schema.json`. Required fields:
 Run the validator to check dataset integrity:
 
 ```bash
-python -m redguard.datasets.validator
+python -m core.datasets.validator
 ```
 
 ## Versioning

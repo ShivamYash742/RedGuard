@@ -20,7 +20,7 @@ Usage:
     from core.benchmark.statistics import compute_run_statistics, export_csv
 
     stats = compute_run_statistics(results)
-    export_csv(results, "redguard/reports/run_001.csv")
+    export_csv(results, "reports/run_001.csv")
 """
 
 from __future__ import annotations

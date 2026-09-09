@@ -1,17 +1,19 @@
 .env
+.env.local
+.env.*
 audit.jsonl
 report.md
 report.json
 logs/
 __pycache__/
 *.pyc
-.env.local
-lobstertrap/
-lt
-opencodeignore
-opencodeignore
+*.tsbuildinfo
+.claude/
 node_modules/
 .next/
 .venv/
 venv/
+*.db
+!backend/prisma/dev.db
+
 

@@ -1,9 +1,12 @@
 import re
 import yaml
+from pathlib import Path
 from typing import Dict, Any, List
 
 class Inspector:
-    def __init__(self, policy_path: str = "policy.yaml"):
+    def __init__(self, policy_path: str = None):
+        if policy_path is None:
+            policy_path = str(Path(__file__).parent / "policy.yaml")
         self.policy_path = policy_path
         self.policy = self._load_policy()
         self.patterns = self._compile_patterns()

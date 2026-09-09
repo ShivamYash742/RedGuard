@@ -19,7 +19,7 @@ from core.benchmark.metrics import BenchmarkMetrics, ProbeMetrics, FamilyMetrics
 class BenchmarkReporter:
     """Generates reports from benchmark metrics."""
     
-    def __init__(self, metrics: BenchmarkMetrics, output_dir: str = "redguard/reports"):
+    def __init__(self, metrics: BenchmarkMetrics, output_dir: str = "reports"):
         self.metrics = metrics
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)

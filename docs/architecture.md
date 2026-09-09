@@ -7,7 +7,7 @@ RedGuard has been transformed from a prompt injection testing framework into a c
 ## Directory Structure
 
 ```
-redguard/
+core/
 ├── probes/                    # Attack probes organized by family
 │   ├── base.py               # Core probe classes (Probe, ProbeMetadata, etc.)
 │   ├── registry.py           # Probe registry with filtering & discovery
@@ -106,9 +106,9 @@ Probes can be executed within realistic contexts:
 ### Running a Full Benchmark
 
 ```python
-from redguard.benchmark import run_benchmark, BenchmarkConfig
-from redguard.probes.base import AttackFamily, DifficultyLevel
-from redguard.scenarios.base import ScenarioType
+from core.benchmark import run_benchmark, BenchmarkConfig
+from core.probes.base import AttackFamily, DifficultyLevel
+from core.scenarios.base import ScenarioType
 
 config = BenchmarkConfig(
     attack_families=[AttackFamily.CONTENT_INJECTION, AttackFamily.TOOL_MANIPULATION],
@@ -126,8 +126,8 @@ print(f"Security Score: {run.security_score:.2%}")
 ### Using the Probe Registry
 
 ```python
-from redguard.probes.registry import get_registry
-from redguard.probes.base import AttackFamily, ScenarioType
+from core.probes.registry import get_registry
+from core.probes.base import AttackFamily, ScenarioType
 
 registry = get_registry()
 
@@ -145,8 +145,8 @@ for meta in registry.get_all_metadata():
 ### Generating Reports
 
 ```python
-from redguard.benchmark.metrics import compute_all_metrics
-from redguard.benchmark.reporting import generate_report
+from core.benchmark.metrics import compute_all_metrics
+from core.benchmark.reporting import generate_report
 
 metrics = compute_all_metrics(results, benchmark_id="run_001")
 reports = generate_report(metrics, formats=["json", "markdown"])
@@ -156,14 +156,14 @@ print(f"Markdown: {reports['markdown']}")
 
 ## Backwards Compatibility
 
-The `redguard.compat` module provides drop-in replacements for legacy code:
+The `core.compat` module provides drop-in replacements for legacy code:
 
 ```python
 # Legacy code continues to work
-from redguard.compat import LEGACY_PROBE_LIBRARY, LegacyScannerAdapter
+from core.compat import LEGACY_PROBE_LIBRARY, LegacyScannerAdapter
 
 # Or migrate probes to new architecture
-from redguard.compat import migrate_probes_to_new_architecture
+from core.compat import migrate_probes_to_new_architecture
 count = migrate_probes_to_new_architecture()  # Returns number migrated
 ```
 
@@ -238,7 +238,7 @@ Supported sources:
 from backend.scanner import run_scan
 
 # New (drop-in compatible)
-from redguard.compat.scanner_adapter import run_scan
+from core.compat.scanner_adapter import run_scan
 ```
 
 ### From Legacy Probes
@@ -248,11 +248,11 @@ from redguard.compat.scanner_adapter import run_scan
 from backend.probes import PROBE_LIBRARY, CONTENT_INJECTION
 
 # New (with auto-migration)
-from redguard.compat.probes_adapter import LEGACY_PROBE_LIBRARY, migrate_probes_to_new_architecture
+from core.compat.probes_adapter import LEGACY_PROBE_LIBRARY, migrate_probes_to_new_architecture
 
 migrate_probes_to_new_architecture()  # One-time setup
 # Now use new registry
-from redguard.probes.registry import get_registry
+from core.probes.registry import get_registry
 registry = get_registry()
 probes = registry.filter(family=AttackFamily.CONTENT_INJECTION)
 ```
