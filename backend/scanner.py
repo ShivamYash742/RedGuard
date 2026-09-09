@@ -15,7 +15,7 @@ from agent_loader import get_agent, DEFAULT_AGENT_ID
 _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
-from redguard.datasets.loader import FAMILY_FILES, load_family_dataset
+from core.datasets.loader import FAMILY_FILES, load_family_dataset
 
 CLASSIFIER_URL = os.environ.get("CLASSIFIER_URL", "https://api.mohitchdev.me/agent/classify")
 

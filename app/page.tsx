@@ -10,18 +10,21 @@ export default function Dashboard() {
   const [stats, setStats] = useState<any>(null)
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
   const [families, setFamilies] = useState<AttackFamilyMeta[]>([])
+  const [probeCount, setProbeCount] = useState<number>(50)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadDashboardData() {
       try {
-        const [statsData, sessionsData] = await Promise.all([
+        const [statsData, sessionsData, probeCountData] = await Promise.all([
           benchmarkDataService.fetchStats(),
           benchmarkDataService.fetchSessions(),
+          fetch('/api/probes/count').then(r => r.json()).catch(() => ({ builtin: 50 })),
         ])
         setStats(statsData)
         setSessions(sessionsData)
         setFamilies(benchmarkDataService.getAttackFamilies())
+        setProbeCount(probeCountData.builtin ?? 50)
       } catch (err) {
         console.error('Failed to load dashboard data:', err)
       } finally {
@@ -90,7 +93,7 @@ export default function Dashboard() {
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Core Probes</span>
-          <div className="text-2xl font-black text-[var(--primary)] mt-1.5 font-mono">{stats?.totalProbes || 128}</div>
+          <div className="text-2xl font-black text-[var(--primary)] mt-1.5 font-mono">{probeCount}</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Built-in dataset</span>
         </div>
 

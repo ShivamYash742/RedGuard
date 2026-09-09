@@ -14,7 +14,7 @@ from sse_starlette.sse import EventSourceResponse
 _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
-from redguard.datasets.loader import load_all_datasets
+from core.datasets.loader import load_all_datasets
 
 from database import get_db, init_db, close_db
 from inspector import Inspector

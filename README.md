@@ -1,8 +1,8 @@
-# RedGuard v2.1.1 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v2.5.0 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/redguard/version.py)
-[![Benchmark](https://img.shields.io/badge/benchmark-v2.1.1-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/redguard/version.py)
-[![Dataset](https://img.shields.io/badge/dataset-v2.1.1-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/redguard/datasets)
+[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Benchmark](https://img.shields.io/badge/benchmark-v2.5.0-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Dataset](https://img.shields.io/badge/dataset-v2.5.0-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
 
@@ -10,7 +10,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ---
 
-## ✨ Key Features (v2.1.1)
+## ✨ Key Features (v2.5.0)
 
 | Feature | Description |
 |---|---|
@@ -30,7 +30,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v2.1.1 Platform
+                        RedGuard v2.5.0 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                          │
@@ -60,41 +60,41 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ```
 RedGuard/
-├── app/                               # Next.js App Router (v2.1.1)
+├── app/                               # Next.js App Router pages (v2.5.0)
 │   ├── page.tsx                       # Dashboard (6 Research Cards + Taxonomy Grid)
 │   ├── benchmark/page.tsx             # Live Execution Suite (SSE Progress Tracker)
 │   ├── attack-families/               # Attack Family Index & Detail Pages
-│   │   └── [familyId]/page.tsx        # Family Threat Models, Citations & Probes
+│   │   └── [familyId]/page.tsx
 │   ├── probes/                        # Probes Inventory & Canonical Probe Page
-│   │   └── [probeId]/page.tsx         # Full Payload Specification & expected/failure cards
+│   │   └── [probeId]/page.tsx
 │   ├── scenarios/page.tsx             # 12 Application Scenario Cards
 │   ├── comparison/page.tsx            # Model Leaderboard, Radar Chart & Matrix
 │   ├── reports/page.tsx               # Security Scorecards & Export (MD / CSV)
 │   ├── history/page.tsx               # Execution Run Timeline Log
-│   ├── datasets/page.tsx              # Dataset Version 2.1.1 & Schema Status
+│   ├── datasets/page.tsx              # Dataset Version 2.5.0 & Schema Status
 │   ├── policy/page.tsx                # Policy Editor & BibTeX Citation Generator
-│   ├── settings/page.tsx              # FastAPI & Database Health Monitor
 │   ├── audit/page.tsx                 # Audit Event Log Viewer
+│   ├── settings/page.tsx              # FastAPI & Database Health Monitor
 │   ├── globals.css                    # Academic surface tokens & badges
 │   └── layout.tsx                     # Root layout with Header & Sidebar
 │
-├── components/
-│   ├── Header.tsx                     # Top Bar (Version badges, ⌘K Search, Theme, Models)
+├── components/                        # Shared UI components
+│   ├── Header.tsx                     # Top Bar (Version badges, ⌘K Search, Theme)
 │   ├── Sidebar.tsx                    # 10 Research Navigation Items
 │   ├── ClientLayout.tsx               # Client-side layout wrapper
 │   ├── GlobalSearchModal.tsx          # ⌘K Keyboard-Navigable Search Overlay
 │   ├── ProbeDrawer.tsx                # Slide-over Metadata Inspection Drawer
 │   ├── StatCard.tsx                   # Dashboard stat card component
-│   ├── Skeletons.tsx                  # Table, Card, & Chart Skeleton Loaders
+│   ├── Skeletons.tsx                  # Table, Card & Chart Skeleton Loaders
 │   ├── EmptyState.tsx                 # Zero-data UI states
-│   └── ui/                            # Shared UI primitives
+│   └── ui/                            # Shared UI primitives (button, card, badge…)
 │
-├── lib/
+├── lib/                               # Frontend data services
 │   ├── data-service.ts                # Singleton BenchmarkDataService & Cache
 │   ├── search-index.ts                # Client-side Search Index Engine
 │   └── utils.ts                       # Shared utility functions
 │
-├── redguard/                          # Core Python Library & Static Datasets
+├── core/                              # Shared Python research library (importable by backend)
 │   ├── datasets/                      # 8 JSON Attack Family Datasets (50 Probes total)
 │   │   ├── direct_injection.json      # 8 probes
 │   │   ├── content_injection.json     # 9 probes
@@ -104,27 +104,61 @@ RedGuard/
 │   │   ├── autonomy.json              # 5 probes
 │   │   ├── planning.json              # 5 probes
 │   │   ├── tool_security.json         # 7 probes
-│   │   └── schema.json                # Probe JSON schema definition
-│   ├── version.py                     # Canonical Version Constants (v2.1.1)
-│   └── (benchmark/, compat/, docs/, probes/, reports/, scenarios/, tests/)
+│   │   ├── schema.json                # Probe JSON schema definition
+│   │   ├── loader.py                  # Dataset loader (used by FastAPI backend)
+│   │   └── validator.py               # Schema validation utilities
+│   ├── probes/                        # Probe class definitions per family
+│   ├── scenarios/                     # 12 scenario context classes
+│   ├── version.py                     # Canonical Version Constants (v2.5.0)
+│   └── __init__.py
 │
-└── backend/                           # FastAPI Service (:8000)
-    ├── app.py                         # FastAPI endpoints & CORS configuration
-    ├── scanner.py                     # Scanner orchestration & SSE streams
-    ├── inspector.py                   # Regex & policy rules engine
-    ├── agent_loader.py                # Plugin agent loader
-    ├── database.py                    # Database connection setup
-    ├── schema.py                      # Pydantic request/response schemas
-    ├── report_generator.py            # Evaluation report generation
-    ├── target_agent.py                # Target agent wrapper
-    ├── policy.yaml                    # YAML security policy rules
-    └── agents/                        # Configured Model Agents
-        ├── nemotron_3_ultra.py        # Nemotron-3 Ultra (550B)
-        ├── nemotron_super_agent.py    # Nemotron-3 Super (120B)
-        ├── llama3_3_70b_agent.py      # Llama 3.3 70B Instruct
-        ├── deepseek_flash_agent.py    # DeepSeek Flash 2.5
-        ├── ollama_local_agent.py      # Ollama Local Agent
-        └── example_custom_agent.py    # Custom Template Agent
+├── backend/                           # FastAPI Service (:8000)
+│   ├── app.py                         # FastAPI endpoints & CORS configuration
+│   ├── scanner.py                     # Scanner orchestration & SSE streams
+│   ├── inspector.py                   # Regex & YAML policy rules engine
+│   ├── agent_loader.py                # Plugin agent auto-discovery
+│   ├── database.py                    # Prisma ORM connection
+│   ├── schema.py                      # Pydantic request/response schemas
+│   ├── report_generator.py            # Evaluation report generation
+│   ├── target_agent.py                # Target agent wrapper
+│   ├── policy.yaml                    # YAML security policy rules
+│   ├── agents/                        # Configured Model Agents
+│   │   ├── nemotron_3_ultra.py        # Nemotron-3 Ultra (550B)
+│   │   ├── nemotron_super_agent.py    # Nemotron-3 Super (120B)
+│   │   ├── llama3_3_70b_agent.py      # Llama 3.3 70B Instruct
+│   │   ├── deepseek_flash_agent.py    # DeepSeek Flash 2.5
+│   │   ├── ollama_local_agent.py      # Ollama Local Agent
+│   │   └── example_custom_agent.py    # Custom Template Agent
+│   ├── tests/                         # Backend unit tests
+│   │   ├── test_inspector.py
+│   │   ├── test_scanner.py
+│   │   ├── test_invoke.py
+│   │   └── test_models.py
+│   ├── prisma/schema.prisma           # Database schema (SQLite)
+│   ├── requirements.txt
+│   └── dev.db                         # Local SQLite database
+│
+├── docs/                              # All project documentation
+│   ├── architecture.md
+│   ├── benchmark_spec.md
+│   ├── research_paper.md
+│   ├── literature_mapping.md
+│   └── MODEL_AUDIT.md
+│
+├── reports/                           # Generated benchmark reports (JSON & MD)
+│
+├── scripts/                           # Developer & research utility scripts
+│   ├── add_custom_probes.py
+│   ├── audit_report.py
+│   ├── demo_benchmark.py
+│   └── scratch/                       # Experimental one-off scripts
+│
+├── README.md
+├── .env / .env.example
+├── package.json                       # Frontend deps & dev:all script
+├── next.config.js
+├── tailwind.config.ts
+└── tsconfig.json
 ```
 
 ---
