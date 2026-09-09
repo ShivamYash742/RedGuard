@@ -1,17 +1,5 @@
-import os
-from pathlib import Path
-from dotenv import load_dotenv
+import asyncio
 from prisma import Prisma
-
-# Load environment variables
-_root_env = Path(__file__).resolve().parent.parent / ".env"
-_backend_env = Path(__file__).resolve().parent / ".env"
-if _root_env.exists():
-    load_dotenv(dotenv_path=_root_env)
-elif _backend_env.exists():
-    load_dotenv(dotenv_path=_backend_env)
-else:
-    load_dotenv()
 
 # Global prisma client
 prisma = Prisma()
@@ -31,4 +19,3 @@ async def get_db():
     if not prisma.is_connected():
         await init_db()
     return prisma
-
