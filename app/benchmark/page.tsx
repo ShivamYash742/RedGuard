@@ -32,11 +32,19 @@ export default function BenchmarkPage() {
     benchmarkDataService.fetchAgents().then(data => {
       if (data && data.length > 0) setAgents(data)
     })
-
-    benchmarkDataService.fetchStats().then(stats => {
-      if (stats) setProgress(p => ({ ...p, total: stats.totalProbes || 128 }))
-    })
   }, [])
+
+  // Dynamically compute the total probes to evaluate based on selected families
+  useEffect(() => {
+    if (running) return
+
+    const allProbes = benchmarkDataService.getAllProbes()
+    const activeCount = allProbes.filter(p =>
+      selectedFamilies.length === 0 || selectedFamilies.some(f => normalizeFamily(f) === normalizeFamily(p.attack_family))
+    ).length
+
+    setProgress(p => ({ ...p, total: activeCount }))
+  }, [selectedFamilies, running])
 
   const startScan = async () => {
     setRunning(true)
@@ -53,7 +61,6 @@ export default function BenchmarkPage() {
       })
       const data = await res.json()
       setSessionId(data.sessionId)
-      setProgress(p => ({ ...p, total: data.total_probes }))
 
       let fams: FamilyProgress[] = []
       if (data.families) {
@@ -68,6 +75,10 @@ export default function BenchmarkPage() {
           }))
         setFamilies(fams)
       }
+
+      // Count the exact number of probes that will be executed for the selected families
+      const activeTotal = fams.reduce((acc, f) => acc + f.total, 0)
+      setProgress(p => ({ ...p, total: activeTotal }))
 
       // 2. Stream family scans
       let overallBlocked = 0

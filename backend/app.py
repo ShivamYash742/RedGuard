@@ -59,9 +59,15 @@ async def get_stats():
     
     rate = (tb / tp) if tp > 0 else 0.0
     
+    # Count actual unique probes in benchmark (builtin datasets + active custom probes)
+    builtin_count = len(load_all_datasets(validate=False))
+    custom_count = await prisma.customprobe.count(where={"active": True})
+    total_active_probes = builtin_count + custom_count
+    
     return {
         "totalSessions": total_sessions,
-        "totalProbes": tp,
+        "totalProbes": total_active_probes,
+        "totalEvaluationsFired": tp,
         "totalBlocked": tb,
         "totalAllowed": ta,
         "overallBlockRate": rate,
