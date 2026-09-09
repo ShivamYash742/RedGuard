@@ -32,7 +32,7 @@ export default function DatasetsPage() {
 
         <div className="flex items-center gap-2 font-mono text-xs">
           <span className="badge-semantic badge-success py-1 px-3">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Schema v2.0.0 PASSED
+            <CheckCircle2 className="h-3.5 w-3.5" /> Schema v2.1.1 PASSED
           </span>
         </div>
       </div>
@@ -41,13 +41,13 @@ export default function DatasetsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Dataset Version</span>
-          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">2.0.0</div>
-          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">SemVer 2.0.0</span>
+          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">2.1.1</div>
+          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">SemVer 2.1.1</span>
         </div>
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Probe Schema Version</span>
-          <div className="text-2xl font-black font-mono text-indigo-500 mt-1">2.0.0</div>
+          <div className="text-2xl font-black font-mono text-indigo-500 mt-1">2.1.1</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Strict JSON Schema</span>
         </div>
 

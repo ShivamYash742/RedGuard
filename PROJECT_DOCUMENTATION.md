@@ -1,6 +1,6 @@
-# RedGuard v2.0.0 — System Architecture & Technical Documentation
+# RedGuard v2.1.1 — System Architecture & Technical Documentation
 
-RedGuard v2.0.0 is an automated security evaluation and red-teaming benchmark system designed to test Large Language Model (LLM) agents against complex adversarial attacks.
+RedGuard v2.1.1 is an automated security evaluation and red-teaming benchmark system designed to test Large Language Model (LLM) agents against complex adversarial attacks.
 
 ---
 
@@ -8,7 +8,7 @@ RedGuard v2.0.0 is an automated security evaluation and red-teaming benchmark sy
 
 Modern AI agents use tools (web search, file reading, code execution, SQL access) and operate autonomously in multi-step reasoning loops (ReAct). This capability creates critical security risks such as prompt injection, context poisoning, filesystem exfiltration, and goal diversion.
 
-RedGuard v2.0.0 serves as a **vulnerability scanner and security benchmark platform** for AI agents. It fires 115 curated adversarial attack probes across 8 distinct attack families, inspects inputs with a Deep Packet Inspection (DPI) policy engine, queries an ML intent classifier, and records whether target LLM agents resist or succumb to attacks.
+RedGuard v2.1.1 serves as a **vulnerability scanner and security benchmark platform** for AI agents. It fires 115 curated adversarial attack probes across 8 distinct attack families, inspects inputs with a Deep Packet Inspection (DPI) policy engine, queries an ML intent classifier, and records whether target LLM agents resist or succumb to attacks.
 
 ---
 
