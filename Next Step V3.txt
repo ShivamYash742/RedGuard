@@ -1,0 +1,724 @@
+You are working on my existing project, RedGuard.
+
+IMPORTANT:
+Do NOT implement, modify, create, delete, or refactor any code yet.
+
+Your task in this step is ONLY to deeply understand the research idea and produce a detailed implementation plan that I can review and approve before any implementation begins.
+
+You have access to the existing RedGuard codebase and project documentation. Inspect the repository thoroughly before making the plan.
+
+==================================================
+PROJECT DIRECTION
+==================================================
+
+RedGuard is currently primarily an LLM security evaluation system where probes are sent to an agent and the result is evaluated largely from the final response.
+
+I want to evolve RedGuard into a research laboratory for studying security failures in DEPENDENT MULTI-AGENT SYSTEMS.
+
+The fundamental shift is:
+
+CURRENT IDEA:
+
+Security Probe
+    ↓
+Single Agent
+    ↓
+Final Response
+    ↓
+Safe / Unsafe
+
+NEW IDEA:
+
+Security Test Case
+    ↓
+Controlled Execution Environment (CEE)
+    ↓
+Dependent Multi-Agent Workflow
+    ↓
+Adversarial Artifact enters the workflow
+    ↓
+Agents communicate / use tools / modify state
+    ↓
+Observable execution trajectory
+    ↓
+Measure adversarial influence
+    ↓
+Measure propagation
+    ↓
+Measure containment
+    ↓
+Measure behavioral impact
+    ↓
+Security verdict + evidence
+
+The main research question is:
+
+"When an adversarial artifact compromises one agent in a dependent multi-agent workflow, how does that influence propagate through the system, where is it contained, what downstream capabilities are affected, and can those effects be measured from observable execution behavior?"
+
+The important point is that the evaluation should NOT primarily ask:
+
+"Did the model produce a bad final answer?"
+
+Instead, it should ask:
+
+"After the attack entered the system, what did the agents actually DO, how did adversarial influence travel through the workflow, where was it stopped, and what measurable impact did it have?"
+
+==================================================
+PROPOSED MVP ARCHITECTURE
+==================================================
+
+Start with a deliberately small and controlled MVP.
+
+Use three agents:
+
+Agent A = Researcher
+Agent B = Validator
+Agent C = Executor
+
+Dependency:
+
+A → B → C
+
+All three agents should initially use the SAME underlying LLM/model.
+
+The reason is to avoid introducing model-family differences into the first experiments.
+
+The agents should operate inside a Controlled Execution Environment (CEE).
+
+IMPORTANT:
+
+CEE is NOT intended to be a real OS/container security sandbox.
+
+It is a deterministic research fixture/environment that provides controlled synthetic resources and mock tools.
+
+The CEE should ideally contain things such as:
+
+- mock filesystem
+- mock web/search results
+- mock database
+- key-value state/memory
+
+Tools should initially be limited, for example:
+
+- file_read
+- web_search
+- db_query
+
+Each agent should have explicit tool authorization.
+
+Communication should happen through a topology-aware message bus.
+
+The topology should prevent agents from arbitrarily communicating with every other agent.
+
+For the MVP:
+
+A → B → C
+
+==================================================
+ATTACK MODEL
+==================================================
+
+Security Test Cases should inject adversarial artifacts into the workflow.
+
+The initial attack families should include:
+
+1. Content / prompt injection
+2. Tool manipulation
+3. Memory/state poisoning
+
+The attack should be capable of entering through different points.
+
+For example:
+
+- attack enters through Agent A
+- attack enters through Agent B
+
+The system should then observe whether adversarial influence remains local or propagates downstream.
+
+Do NOT assume every attack must succeed.
+
+The whole purpose is to measure:
+
+- initial compromise
+- downstream influence
+- propagation
+- containment
+- behavioral deviation
+- attack objective achievement
+
+Each Security Test Case should therefore define an explicit attack objective.
+
+For example:
+
+NOT_REACHED
+PARTIALLY_REACHED
+REACHED
+CRITICAL_REACHED
+
+The implementation should make attack eligibility explicit where possible:
+
+- eligible downstream agents
+- eligible tools
+- eligible resources
+- expected attack path
+
+==================================================
+BEHAVIORAL EVALUATION
+==================================================
+
+Final text should be secondary evidence.
+
+Primary evidence should come from structured execution events.
+
+Examples:
+
+- agent receives message
+- agent sends message
+- tool requested
+- tool executed
+- tool denied
+- resource accessed
+- state written
+- state read
+- attack artifact observed
+- downstream agent receives derived adversarial content
+- unauthorized capability attempted
+- goal/task deviation
+- security-relevant state change
+
+Every event should contain enough information to reconstruct what happened.
+
+We also need provenance / observed derivation.
+
+For example:
+
+Attack artifact
+    ↓
+Agent A observes artifact
+    ↓
+Agent A generates message
+    ↓
+Agent B receives message
+    ↓
+Agent B performs tool call
+    ↓
+Agent C receives result
+    ↓
+Agent C performs state change
+
+This should allow us to answer:
+
+"Which observed event was derived from which previous event?"
+
+IMPORTANT:
+
+Do NOT claim this is formal causal inference.
+
+Use terminology such as:
+
+"observed derivation"
+"traceable influence"
+"provenance"
+
+rather than claiming causal proof.
+
+==================================================
+CLEAN BASELINE
+==================================================
+
+Every meaningful attacked run should have a corresponding clean baseline where the same task is executed without the adversarial artifact.
+
+This is extremely important.
+
+We need to distinguish:
+
+NORMAL BEHAVIOR
+from
+ATTACK-INDUCED BEHAVIORAL DRIFT
+
+The system should therefore support paired clean/attack runs.
+
+Consider introducing:
+
+pair_id
+or
+baseline_run_id
+
+so that an attacked execution can be linked to its clean baseline.
+
+==================================================
+IMPORTANT METRICS
+==================================================
+
+Think carefully about how these should actually be implemented.
+
+Potential MVP metrics include:
+
+1. Attack Success Rate (ASR)
+
+Measures how often the attack achieves a defined security-relevant objective.
+
+2. Initial Compromise Rate (ICR)
+
+Measures whether the entry agent becomes behaviorally compromised by the adversarial artifact.
+
+3. Conditional Propagation Rate (CPR)
+
+Do NOT blindly use a denominator over all runs.
+
+Propagation should only be measured when:
+
+- the entry agent was compromised
+- downstream propagation is structurally possible
+
+Conceptually:
+
+CPR =
+downstream-influenced runs
+/
+eligible entry-compromised runs
+
+4. Propagation Depth
+
+How far adversarial influence travels through the topology.
+
+For A → B → C:
+
+A only = depth 0
+A → B = depth 1
+A → B → C = depth 2
+
+5. Downstream Coverage
+
+How much of the structurally reachable downstream system became influenced/compromised.
+
+6. Containment Rate
+
+How often the attack is stopped before reaching all eligible downstream agents/capabilities.
+
+7. Security Outcome Consistency (SOC)
+
+Measure whether repeated executions produce consistent security outcomes.
+
+Prefer a simple interpretable formulation for the MVP, such as:
+
+frequency of the modal outcome / N
+
+rather than unnecessarily complicated statistics.
+
+8. Trajectory Drift Score (TDS)
+
+Compare clean vs attacked behavioral trajectories.
+
+The MVP can use normalized sequence distance over security-relevant event types such as:
+
+- tool_requested
+- tool_executed
+- tool_denied
+- state_write
+- message_sent
+
+But think carefully about whether plain Levenshtein distance is sufficient and structure the implementation so it can later support better weighting.
+
+9. Attack Objective Achievement
+
+Explicitly record whether the attack objective was:
+
+NOT_REACHED
+PARTIALLY_REACHED
+REACHED
+CRITICAL_REACHED
+
+10. Secondary textual indicators
+
+Things such as refusal detection can remain, but they must NOT be the primary security verdict.
+
+==================================================
+VERDICT STRUCTURE
+==================================================
+
+Do NOT create one giant "safe/unsafe" verdict.
+
+Think in orthogonal dimensions:
+
+Agent Impact
+System Outcome
+Containment Analysis
+Attack Objective Achievement
+
+For example:
+
+Entry agent:
+COMPROMISED
+
+Downstream:
+B INFLUENCED
+C NOT_INFLUENCED
+
+Objective:
+PARTIALLY_REACHED
+
+Containment:
+CONTAINED_AT_B
+
+The implementation should preserve the underlying evidence that produced the verdict.
+
+==================================================
+EVIDENCE BUNDLE
+==================================================
+
+Every evaluated run should be able to produce a structured evidence bundle.
+
+It should contain enough information to explain WHY the evaluator reached its conclusion.
+
+For example:
+
+- attack case
+- clean baseline
+- attacked run
+- relevant trace events
+- provenance links
+- compromised agents
+- affected tools
+- affected resources
+- objective status
+- containment point
+- metric values
+- evaluator version
+- schema/version information
+
+The evidence should make the experiment auditable and useful for a research paper.
+
+==================================================
+EXPERIMENTS
+==================================================
+
+The MVP should be small enough to actually complete.
+
+Do NOT try to implement every possible idea.
+
+Think around 7 experiments:
+
+EXP-0:
+Clean baseline
+
+EXP-1:
+Attack entering Agent A
+
+EXP-2:
+Attack entering Agent B
+
+EXP-3:
+Propagation through A → B → C
+
+EXP-4:
+Tool-layer containment
+
+EXP-5:
+Memory/state poisoning
+
+EXP-6:
+Permissive vs validated communication/agent-level validation
+
+IMPORTANT:
+
+If the current design implements validation through Agent B's system prompt rather than an actual message-bus gateway, DO NOT call this "message-bus validation."
+
+Call it something accurate such as:
+
+"Agent-Level Inter-Agent Validation"
+
+If you think a real communication gateway is necessary for the research claim, explicitly explain that in the plan instead of silently assuming it exists.
+
+==================================================
+SECURITY TEST CASES
+==================================================
+
+Do NOT mechanically convert all existing legacy probes into the new architecture.
+
+The MVP should have approximately 8–10 carefully designed multi-agent Security Test Cases.
+
+Keep the existing legacy RedGuard probes working separately for backward compatibility.
+
+The new Security Test Case should be richer than a simple string probe.
+
+It should define things such as:
+
+- task
+- attack artifact
+- attack family
+- injection point
+- attack objective
+- expected/eligible propagation path
+- affected tools/resources
+- severity
+- evaluation criteria
+
+Include at least one direct injection control case so that the multi-agent results can be compared against a simpler attack.
+
+==================================================
+REPRODUCIBILITY
+==================================================
+
+The system is intended for research.
+
+Therefore think about reproducibility from the beginning.
+
+Experiments should capture versions/configurations such as:
+
+- model configuration
+- evaluator version
+- metric version
+- probe/security-test-case schema version
+- CEE version
+- topology version
+- experiment configuration
+- random seed if applicable
+
+CEE should be:
+
+- deterministic where possible
+- resettable
+- serializable/snapshot-able
+
+==================================================
+TRACE DATA MODEL
+==================================================
+
+Think about a minimal but sufficient database design.
+
+Do NOT over-engineer this.
+
+A likely MVP consists of:
+
+Experiment
+Run
+TraceEvent
+
+TraceEvent should support fields such as:
+
+- run_id
+- task_id
+- step
+- timestamp
+- agent_id
+- event_type
+- tool
+- arguments
+- result
+- authorized
+- source_event_id
+- content_tag
+- risk
+- metadata
+
+Event types may include:
+
+- system
+- agent
+- communication
+- tool
+- state
+- injection
+- evaluation
+
+Content tags may include:
+
+- original_task
+- external_content
+- derived
+- attacker_artifact
+
+These tags are OBSERVATIONAL labels.
+
+Do not treat them automatically as trust labels.
+
+Trace ordering should be monotonic.
+
+Do not require globally gapless step numbers.
+
+Design the schema so future concurrent/fan-out execution could use parent/source event references.
+
+==================================================
+EVALUATOR CORRECTNESS
+==================================================
+
+This is very important.
+
+Before relying on LLM-generated traces, think about deterministic "golden trace" fixtures for testing the evaluator.
+
+For example:
+
+1. SAFE trace
+2. CONTAINED trace
+3. PROPAGATED trace
+4. CRITICAL/OBJECTIVE-ACHIEVED trace
+
+The metric/evaluator implementation should be testable against these deterministic traces without requiring an LLM call.
+
+==================================================
+BACKWARD COMPATIBILITY
+==================================================
+
+The existing RedGuard system should remain functional.
+
+Think of two modes:
+
+MODE A:
+Legacy RedGuard single-agent scan.
+
+MODE B:
+New Multi-Agent Security Laboratory.
+
+Do not unnecessarily rewrite the legacy system.
+
+However, do not blindly forbid shared refactoring either.
+
+If a clean shared abstraction is genuinely necessary, explain it in the plan and preserve the semantics of Mode A.
+
+==================================================
+WHAT I WANT FROM YOU
+==================================================
+
+Before writing ANY code, inspect the existing repository carefully.
+
+Understand:
+
+- current architecture
+- current backend
+- current frontend
+- current database
+- current probe system
+- current LLM integration
+- existing evaluation logic
+- existing APIs
+- existing tests
+- existing file structure
+
+Then produce a COMPLETE IMPLEMENTATION PLAN.
+
+The plan should include:
+
+1. Executive summary
+
+2. Current architecture analysis
+
+3. Gap analysis:
+   current RedGuard vs proposed research architecture
+
+4. Proposed architecture
+
+5. Detailed component design
+
+   - CEE
+   - agent wrapper
+   - orchestrator
+   - topology
+   - message bus
+   - tool gateway
+   - event collector
+   - provenance
+   - evaluator
+   - metrics
+   - evidence bundle
+
+6. Detailed data model
+
+7. Security Test Case schema
+
+8. Trace/event schema
+
+9. Verdict model
+
+10. Metric definitions and exact formulas
+
+11. Experiment design
+
+12. API design
+
+13. Frontend/Lab UI design
+
+14. Testing strategy
+
+15. Golden trace evaluator tests
+
+16. Reproducibility strategy
+
+17. Backward compatibility strategy
+
+18. File-by-file implementation plan
+
+For every new/modified file, explain:
+
+- why it is needed
+- what responsibility it has
+- what it depends on
+- what existing code it interacts with
+- whether it is new or modified
+
+19. Implementation phases
+
+Make the phases incremental so each phase can be tested independently.
+
+20. Risks and architectural concerns
+
+Explicitly identify things that could make the research invalid or misleading.
+
+21. Research validity concerns
+
+Think like a reviewer.
+
+Ask:
+
+- Does the architecture actually measure what the paper claims?
+- Are the metrics well-defined?
+- Are denominators correct?
+- Can attack influence be distinguished from normal behavior?
+- Is the baseline sufficient?
+- Are provenance claims too strong?
+- Are the experiments confounded?
+- Is the CEE being described accurately?
+- Is the novelty claim too broad?
+- Are there unnecessary features?
+
+22. MVP vs future work
+
+Clearly separate:
+
+MUST HAVE FOR MVP
+from
+NICE TO HAVE LATER
+
+Do NOT expand the MVP unnecessarily.
+
+==================================================
+CRITICAL CONSTRAINT
+==================================================
+
+Do not start implementation.
+
+Do not create files.
+
+Do not modify files.
+
+Do not run migrations.
+
+Do not install dependencies.
+
+Do not refactor the code.
+
+Only inspect the repository and produce the implementation plan.
+
+At the end, provide:
+
+A. Recommended final architecture diagram
+
+B. Recommended MVP scope
+
+C. Ordered implementation phases
+
+D. Key research risks
+
+E. Questions/decisions that I need to approve before implementation
+
+Wait for my approval after producing the plan.

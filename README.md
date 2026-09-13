@@ -185,13 +185,42 @@ pip install -r requirements.txt
 cd ..
 ```
 
-### 3. Running Locally
+### 3. Environment Variables
+Copy `.env.example` to `.env` and fill in the keys you need. `DATABASE_URL` is required for the Prisma/SQLite database; the rest are only needed for the specific agents you want to scan against:
+
+| Variable | Used By |
+|---|---|
+| `DATABASE_URL` | Prisma ORM (SQLite, always required) |
+| `NVIDIA_API_KEY` / `NVIDIA_MODEL` | Nemotron-3 Ultra & Super agents (default agents) |
+| `GROQ_API_KEY` / `GROQ_MODEL` | Llama 3.3 70B & DeepSeek Flash agents |
+| `GOOGLE_API_KEY` / `GEMINI_MODEL` | Gemini Flash agent |
+| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent (run `ollama serve` first) |
+| `CLASSIFIER_URL` | ML classifier endpoint used for secondary verdicts during a scan |
+| `WEBHOOK_URL` | Optional Slack/Discord webhook for post-scan alerts |
+
+### 4. Running Locally
 Start both Next.js frontend (port 3000) and FastAPI backend (port 8000) concurrently:
 ```bash
 npm run dev:all
 ```
 
+Or run them separately:
+```bash
+npm run dev                                                  # frontend only, :3000
+cd backend && ./.venv/bin/python -m uvicorn app:app --reload --port 8000   # backend only, :8000
+```
+
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 5. Running Tests & Checks
+```bash
+npm run lint                                                  # ESLint (Next.js config)
+npm run typecheck                                              # tsc --noEmit
+
+cd backend && source .venv/bin/activate
+pytest tests/                                                  # backend unit tests (inspector, scanner)
+pytest ../core/tests/                                          # core benchmark/dataset tests (BDS, stats, schema validation)
+```
 
 ---
 
