@@ -1,7 +1,7 @@
 """
 RedGuard Agent — Ollama (Local / Offline)
 ─────────────────────────────────────────
-The air-gapped survivor. Runs a local Llama model entirely on your machine.
+The air-gapped survivor. Runs a local Granite model entirely on your machine.
 No internet connection, no API keys, no data leaving your system.
 
 System prompt is loaded from agents/system_prompts.json via _prompt_loader.
@@ -14,12 +14,12 @@ Custom tools (no LangChain required):
 
 Prerequisites:
   1. Install Ollama: https://ollama.com/download
-  2. Pull a model:   ollama pull llama3.2
+  2. Pull a model:   ollama pull granite3.3:2b
   3. Start Ollama:   ollama serve   (runs on http://localhost:11434)
 
 Environment variables (optional):
   OLLAMA_BASE_URL="http://localhost:11434"  (default)
-  OLLAMA_MODEL="llama3.2"                  (default)
+  OLLAMA_MODEL="granite3.3:2b"               (default)
 """
 
 from __future__ import annotations
@@ -31,14 +31,14 @@ from agents._prompt_loader import build_system_prompt
 
 AGENT_NAME = "Ollama Local Agent"
 AGENT_DESCRIPTION = (
-    "100% offline agent running Llama 3.2 on your own hardware via Ollama. "
+    "100% offline agent running Granite 3.3 (2B) on your own hardware via Ollama. "
     "No API key, no internet, no data leaves your machine. "
     "Hardened system prompt covers all 12 RedGuard scenarios and 8 attack families. "
     "Uses a custom JSON tool dispatcher with hardened input validation."
 )
 
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL: str    = os.getenv("OLLAMA_MODEL", "llama3.2")
+OLLAMA_MODEL: str    = os.getenv("OLLAMA_MODEL", "granite3.3:2b")
 
 # ── Built-in tools (simple function dispatch — no LangChain required) ─────────
 
