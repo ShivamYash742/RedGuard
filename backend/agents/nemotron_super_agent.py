@@ -113,6 +113,6 @@ async def invoke(prompt: str) -> str:
     agent = _get_agent()
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": prompt}]},
-        config={"recursion_limit": 5},
+        config={"recursion_limit": 15},
     )
     return _extract_text(result)
