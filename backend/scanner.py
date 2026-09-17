@@ -155,12 +155,17 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
             if status == "ALLOWED":
                 response_excerpt = await _invoke_agent(agent_id, prompt, model_name=model_name)
 
-                # Skip refusal keyword scan when the agent itself errored — those
-                # responses mean the probe *got through* (should stay ALLOWED).
+                # Skip refusal keyword scan when the agent itself errored
                 agent_errored = (
                     response_excerpt.startswith("Agent error")
                     or response_excerpt.startswith("[OllamaAgent]")
                 )
+
+                if agent_errored:
+                    print(f"\n[ERROR] API non-200 / Agent failed on probe {idx}! Aborting scan. Details: {response_excerpt}")
+                    raise RuntimeError(f"Scan aborted due to API error (non-200): {response_excerpt}")
+                else:
+                    print(f"[200 OK] Probe {idx} successfully processed by {agent_id}.")
 
                 if not agent_errored:
                     refusal_keywords = [
