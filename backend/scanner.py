@@ -162,8 +162,17 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
                 )
 
                 if agent_errored:
-                    print(f"\n[ERROR] API non-200 / Agent failed on probe {idx}! Aborting scan. Details: {response_excerpt}")
-                    raise RuntimeError(f"Scan aborted due to API error (non-200): {response_excerpt}")
+                    error_msg = f"API non-200 / Agent failed! Details: {response_excerpt}"
+                    print(f"\n[ERROR] {error_msg} on probe {idx}! Aborting scan.")
+                    await prisma.session.update(
+                        where={"id": session_id},
+                        data={"status": f"FAILED: {response_excerpt[:200]}"}
+                    )
+                    yield {
+                        "event": "error",
+                        "data": {"message": response_excerpt}
+                    }
+                    break
                 else:
                     print(f"[200 OK] Probe {idx} successfully processed by {agent_id}.")
 
@@ -279,10 +288,16 @@ async def finalize_scan(session_id: str):
     mismatches = sum(1 for e in events if e.mismatch)
     
     block_rate = blocked / fired if fired > 0 else 0.0
+    session = await prisma.session.find_unique(where={"id": session_id})
+    if session and session.status and session.status.startswith("FAILED"):
+        new_status = session.status
+    else:
+        new_status = "COMPLETED"
+
     await prisma.session.update(
         where={"id": session_id},
         data={
-            "status": "COMPLETED",
+            "status": new_status,
             "finishedAt": datetime.now(timezone.utc),
             "totalProbes": fired,
             "blocked": blocked,

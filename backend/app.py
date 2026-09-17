@@ -368,3 +368,19 @@ async def proxy_request(request: Request):
             return JSONResponse(status_code=resp.status_code, content=resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text)
         except Exception as e:
             return JSONResponse(status_code=502, content={"error": "Bad Gateway", "details": str(e)})
+
+@app.post("/api/scan/cancel")
+async def cancel_scan_route(request: Request):
+    body = await request.json()
+    session_id = body.get("sessionId")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing sessionId")
+    
+    prisma = await get_db()
+    # Delete cascade or delete manually
+    await prisma.probeevent.delete_many(where={"sessionId": session_id})
+    await prisma.report.delete_many(where={"sessionId": session_id})
+    await prisma.policysnapshot.delete_many(where={"sessionId": session_id})
+    await prisma.session.delete(where={"id": session_id})
+    
+    return {"status": "cancelled and deleted"}

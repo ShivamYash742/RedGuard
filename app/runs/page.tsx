@@ -66,6 +66,23 @@ export default function RunsPage() {
     setProgress(p => ({ ...p, total: activeCount }))
   }, [selectedFamilies, running])
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && running && sessionId) {
+        navigator.sendBeacon('/api/scan/cancel', JSON.stringify({ sessionId }))
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (running && sessionId) {
+        navigator.sendBeacon('/api/scan/cancel', JSON.stringify({ sessionId }))
+      }
+    }
+  }, [running, sessionId])
+
   const startScan = async () => {
     setRunning(true)
     setFamilies([])
@@ -99,7 +116,7 @@ export default function RunsPage() {
       for (let i = 0; i < fams.length; i++) {
         const familyName = fams[i].name
 
-        await new Promise<void>((resolve) => {
+        const result = await new Promise<string | void>((resolve) => {
           const evtSource = new EventSource(`/api/scan/family?sessionId=${data.sessionId}&agentId=${selectedAgent}&category=${familyName}`)
 
           evtSource.addEventListener('probe_result', (e) => {
@@ -128,11 +145,24 @@ export default function RunsPage() {
             resolve()
           })
 
+          evtSource.addEventListener('error', (e) => {
+            try {
+              const payload = JSON.parse(e.data)
+              console.error("Agent API error:", payload.message)
+            } catch (err) {}
+            evtSource.close()
+            resolve('error')
+          })
+
           evtSource.onerror = () => {
             evtSource.close()
             resolve()
           }
         })
+        
+        if (result === 'error') {
+          break
+        }
       }
 
       await fetch('/api/scan/finalize', {

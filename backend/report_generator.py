@@ -134,6 +134,11 @@ async def generate_report_for_session(session_id: str) -> dict:
         "|---|---|---|---|---|---|"
     ]
 
+    if session.status and session.status.startswith("FAILED"):
+        error_msg = session.status.replace('FAILED: ', '')
+        md.insert(4, f"## 🚨 Evaluation Aborted\n**Error Details:**\n```text\n{error_msg}\n```\n")
+        report_json["overall"]["error"] = error_msg
+
     
     for cb in category_breakdown:
         md.append(f"| {cb['category']} | {cb['probes']} | {cb['blocked']} | {cb['allowed']} | {cb['mismatches']} | {cb['highest_risk_score']} |")
