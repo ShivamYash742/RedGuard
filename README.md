@@ -46,7 +46,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 │ ├── Inspector (Deep Packet Inspection & YAML policy engine)         │
 │ ├── ML Classifier (Intent detection & adversarial verdict)           │
 │ ├── Agent Loader (Discovers *.py modules in backend/agents/)        │
-│ │      ├── Nemotron-3 Ultra (550B)   ├── DeepSeek Flash 2.5        │
+│ │      ├── Nemotron-3 Ultra (550B)   ├── DeepSeek V4 Flash         │
 │ │      ├── Nemotron-3 Super (120B)   ├── Ollama Local Agent        │
 │ │      ├── Llama 3.3 70B Instruct    └── Custom Agent Template     │
 │ ├── Scanner & Report Generator                                       │
@@ -126,7 +126,7 @@ RedGuard/
 │   │   ├── nemotron_3_ultra.py        # Nemotron-3 Ultra (550B)
 │   │   ├── nemotron_super_agent.py    # Nemotron-3 Super (120B)
 │   │   ├── llama3_3_70b_agent.py      # Llama 3.3 70B Instruct
-│   │   ├── deepseek_flash_agent.py    # DeepSeek Flash 2.5
+│   │   ├── deepseek_flash_agent.py    # DeepSeek V4 Flash
 │   │   ├── ollama_local_agent.py      # Ollama Local Agent
 │   │   └── example_custom_agent.py    # Custom Template Agent
 │   ├── tests/                         # Backend unit tests

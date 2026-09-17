@@ -157,7 +157,7 @@ export const KNOWN_AGENTS: KnownAgent[] = [
   { id: 'nemotron_3_ultra', name: 'Nemotron-3 Ultra (550B)', badge: 'NVIDIA NIM', category: 'nvidia' },
   { id: 'nemotron_super_agent', name: 'Nemotron-3 Super (120B)', badge: 'NVIDIA NIM', category: 'nvidia' },
   { id: 'llama3_3_70b_agent', name: 'Llama 3.3 70B Instruct', badge: 'NVIDIA NIM', category: 'nvidia' },
-  { id: 'deepseek_flash_agent', name: 'DeepSeek Flash 2.5', badge: 'NVIDIA NIM', category: 'nvidia' },
+  { id: 'deepseek_flash_agent', name: 'DeepSeek V4 Flash', badge: 'NVIDIA NIM', category: 'nvidia' },
   { id: 'ollama_local_agent', name: 'Ollama Local Agent', badge: 'Local Ollama', category: 'ollama' },
   { id: 'example_custom_agent', name: 'Example Custom Agent', badge: 'Custom Template', category: 'custom' },
 ]
