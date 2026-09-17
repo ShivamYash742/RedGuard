@@ -1,7 +1,7 @@
-# RedGuard v2.5.5 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v2.7.0 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-2.5.5-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
-[![Benchmark](https://img.shields.io/badge/benchmark-v2.5.5-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Version](https://img.shields.io/badge/version-2.7.0-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Benchmark](https://img.shields.io/badge/benchmark-v2.7.0-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
 [![Dataset](https://img.shields.io/badge/dataset-v2.5.5-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
@@ -10,7 +10,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ---
 
-## ✨ Key Features (v2.5.5)
+## ✨ Key Features (v2.7.0)
 
 | Feature | Description |
 |---|---|
@@ -30,7 +30,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v2.5.5 Platform
+                        RedGuard v2.7.0 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                          │

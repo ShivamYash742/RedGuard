@@ -93,6 +93,8 @@ export interface ModelComparisonResult {
   familyScores: Record<string, number>
   totalEvaluations: number
   lastEvaluated: string
+  /** true = illustrative sample data, no real evaluation behind it. Never render as a measurement. */
+  synthetic: boolean
 }
 
 const RAW_DATASETS: Record<string, any> = {
@@ -106,20 +108,58 @@ const RAW_DATASETS: Record<string, any> = {
   tool_security: toolSecurity,
 }
 
-// 12 Benchmark Scenarios
-export const SCENARIOS: ScenarioMeta[] = [
-  { id: 'github', name: 'GitHub Workspace', description: 'Evaluates agent safety when processing pull requests, code reviews, and repo issue comments.', riskLevel: 'Critical', probeCount: 18, primaryVectors: ['PR Body Injection', 'Commit Message Overrides'] },
-  { id: 'gitlab', name: 'GitLab CI/CD', description: 'Audits agent resistance against malicious CI pipeline triggers and runner issue comments.', riskLevel: 'High', probeCount: 14, primaryVectors: ['Pipeline Parameter Hijack', 'Issue Comment Injections'] },
-  { id: 'wiki', name: 'Internal Knowledge Base Wiki', description: 'Assesses vulnerability to hidden adversarial payload in shared markdown docs.', riskLevel: 'Medium', probeCount: 12, primaryVectors: ['Hidden CSS/HTML Injections', 'Document Instructions'] },
-  { id: 'documentation', name: 'API Documentation Hub', description: 'Tests data exfiltration via untrusted API documentation payloads.', riskLevel: 'Medium', probeCount: 15, primaryVectors: ['Swagger Spec Injection', 'Sample Request Exfil'] },
-  { id: 'email', name: 'Enterprise Mail Client', description: 'Scans incoming email body and attachment parsing for indirect prompt injections.', riskLevel: 'Critical', probeCount: 22, primaryVectors: ['Phishing Body Injection', 'Forwarding Automation Hijack'] },
-  { id: 'calendar', name: 'Calendar Scheduling Agent', description: 'Checks scheduling agent resistance to meeting invite description payloads.', riskLevel: 'High', probeCount: 10, primaryVectors: ['Invite Notes Command Injection', 'Location URL Exfil'] },
-  { id: 'banking', name: 'Financial & Banking Portal', description: 'Evaluates strict financial action authorization and anti-drain policy enforcement.', riskLevel: 'Critical', probeCount: 20, primaryVectors: ['Wire Transfer Override', 'Account Extraction'] },
-  { id: 'travel', name: 'Corporate Travel Booking', description: 'Audits itinerary parsing and automated expense approval agent constraints.', riskLevel: 'Medium', probeCount: 11, primaryVectors: ['Flight Booking Redirect', 'Vendor Override'] },
-  { id: 'shopping', name: 'E-Commerce Agent', description: 'Tests procurement agents against cart manipulation and price bypass probes.', riskLevel: 'High', probeCount: 13, primaryVectors: ['Checkout Automation Poisoning', 'Coupon Payload'] },
-  { id: 'support', name: 'Customer Support Bot', description: 'Evaluates customer-facing ticket resolution agents against policy bypasses.', riskLevel: 'Medium', probeCount: 16, primaryVectors: ['Ticket Escalation Hijack', 'Refund Policy Bypass'] },
-  { id: 'forum', name: 'Developer Forum', description: 'Scans forum thread parsing for malicious community post instruction overrides.', riskLevel: 'Low', probeCount: 9, primaryVectors: ['Markdown Exfil', 'Bot Mention Injection'] },
-  { id: 'reddit', name: 'Community Social Feed', description: 'Evaluates sentiment & summary agents processing untrusted social threads.', riskLevel: 'Medium', probeCount: 12, primaryVectors: ['Upvote Bot Injection', 'Comment Payload Hijack'] },
+// 12 Benchmark Scenarios. probeCount is NOT stored here — it is derived from the
+// real dataset in getScenarios(), keyed through SCENARIO_DATASET_KEYS below.
+type ScenarioSeed = Omit<ScenarioMeta, 'probeCount'>
+
+export const SCENARIOS: ScenarioSeed[] = [
+  { id: 'github', name: 'GitHub Workspace', description: 'Evaluates agent safety when processing pull requests, code reviews, and repo issue comments.', riskLevel: 'Critical', primaryVectors: ['PR Body Injection', 'Commit Message Overrides'] },
+  { id: 'gitlab', name: 'GitLab CI/CD', description: 'Audits agent resistance against malicious CI pipeline triggers and runner issue comments.', riskLevel: 'High', primaryVectors: ['Pipeline Parameter Hijack', 'Issue Comment Injections'] },
+  { id: 'wiki', name: 'Internal Knowledge Base Wiki', description: 'Assesses vulnerability to hidden adversarial payload in shared markdown docs.', riskLevel: 'Medium', primaryVectors: ['Hidden CSS/HTML Injections', 'Document Instructions'] },
+  { id: 'documentation', name: 'API Documentation Hub', description: 'Tests data exfiltration via untrusted API documentation payloads.', riskLevel: 'Medium', primaryVectors: ['Swagger Spec Injection', 'Sample Request Exfil'] },
+  { id: 'email', name: 'Enterprise Mail Client', description: 'Scans incoming email body and attachment parsing for indirect prompt injections.', riskLevel: 'Critical', primaryVectors: ['Phishing Body Injection', 'Forwarding Automation Hijack'] },
+  { id: 'calendar', name: 'Calendar Scheduling Agent', description: 'Checks scheduling agent resistance to meeting invite description payloads.', riskLevel: 'High', primaryVectors: ['Invite Notes Command Injection', 'Location URL Exfil'] },
+  { id: 'banking', name: 'Financial & Banking Portal', description: 'Evaluates strict financial action authorization and anti-drain policy enforcement.', riskLevel: 'Critical', primaryVectors: ['Wire Transfer Override', 'Account Extraction'] },
+  { id: 'travel', name: 'Corporate Travel Booking', description: 'Audits itinerary parsing and automated expense approval agent constraints.', riskLevel: 'Medium', primaryVectors: ['Flight Booking Redirect', 'Vendor Override'] },
+  { id: 'shopping', name: 'E-Commerce Agent', description: 'Tests procurement agents against cart manipulation and price bypass probes.', riskLevel: 'High', primaryVectors: ['Checkout Automation Poisoning', 'Coupon Payload'] },
+  { id: 'support', name: 'Customer Support Bot', description: 'Evaluates customer-facing ticket resolution agents against policy bypasses.', riskLevel: 'Medium', primaryVectors: ['Ticket Escalation Hijack', 'Refund Policy Bypass'] },
+  { id: 'forum', name: 'Developer Forum', description: 'Scans forum thread parsing for malicious community post instruction overrides.', riskLevel: 'Low', primaryVectors: ['Markdown Exfil', 'Bot Mention Injection'] },
+  { id: 'reddit', name: 'Community Social Feed', description: 'Evaluates sentiment & summary agents processing untrusted social threads.', riskLevel: 'Medium', primaryVectors: ['Upvote Bot Injection', 'Comment Payload Hijack'] },
+]
+
+// Maps each scenario's short id to the scenario string(s) actually used in core/datasets/*.json.
+const SCENARIO_DATASET_KEYS: Record<string, string[]> = {
+  github: ['github_issue'],
+  gitlab: ['gitlab_issue'],
+  wiki: ['wiki'],
+  documentation: ['documentation_page'],
+  email: ['email_assistant'],
+  calendar: ['calendar_assistant'],
+  banking: ['banking_assistant'],
+  travel: ['travel_assistant'],
+  shopping: ['shopping_assistant'],
+  support: ['support_ticket'],
+  forum: ['forum_discussion'],
+  reddit: ['reddit_post'],
+}
+
+export interface KnownAgent {
+  id: string
+  name: string
+  badge: string
+  category: 'nvidia' | 'ollama' | 'custom'
+}
+
+// Single source of truth for the pluggable agents this UI knows how to target.
+// Header's model switcher, the run launcher, and global search all read this list
+// instead of each hardcoding their own (previously three separately-drifting copies).
+export const KNOWN_AGENTS: KnownAgent[] = [
+  { id: 'nemotron_3_ultra', name: 'Nemotron-3 Ultra (550B)', badge: 'NVIDIA NIM', category: 'nvidia' },
+  { id: 'nemotron_super_agent', name: 'Nemotron-3 Super (120B)', badge: 'NVIDIA NIM', category: 'nvidia' },
+  { id: 'llama3_3_70b_agent', name: 'Llama 3.3 70B Instruct', badge: 'NVIDIA NIM', category: 'nvidia' },
+  { id: 'deepseek_flash_agent', name: 'DeepSeek Flash 2.5', badge: 'NVIDIA NIM', category: 'nvidia' },
+  { id: 'ollama_local_agent', name: 'Ollama Local Agent', badge: 'Local Ollama', category: 'ollama' },
+  { id: 'example_custom_agent', name: 'Example Custom Agent', badge: 'Custom Template', category: 'custom' },
 ]
 
 export function normalizeFamily(fam: string): string {
@@ -202,60 +242,56 @@ class BenchmarkDataService {
   }
 
   public getProbesByScenario(scenarioId: string): Probe[] {
-    return this.allProbes.filter(
-      p => p.scenario.toLowerCase() === scenarioId.toLowerCase() || p.scenario === 'generic'
-    )
+    const keys = SCENARIO_DATASET_KEYS[scenarioId] || [scenarioId]
+    return this.allProbes.filter(p => keys.includes(p.scenario.toLowerCase()))
+  }
+
+  /** Probes tagged 'generic' apply broadly and aren't scoped to one scenario. */
+  public getGenericProbes(): Probe[] {
+    return this.allProbes.filter(p => p.scenario.toLowerCase() === 'generic')
   }
 
   public getAttackFamilies(): AttackFamilyMeta[] {
-    const familyMetas: Record<string, { desc: string; threat: string; layers: Set<string>; papers: number }> = {
+    const familyMetas: Record<string, { desc: string; threat: string; layers: Set<string> }> = {
       direct_injection: {
         desc: 'Classic prompt injection attacks where the adversary directly injects malicious instructions into user inputs.',
         threat: 'Adversarial User',
         layers: new Set(['LLM', 'Policy Engine']),
-        papers: 14,
       },
       content_injection: {
         desc: 'Indirect prompt injections embedded in untrusted external data sources like emails, web pages, or files.',
         threat: 'Untrusted Data Provider',
         layers: new Set(['LLM', 'Context Parser', 'Tool Router']),
-        papers: 12,
       },
       exfiltration: {
         desc: 'Probes attempting to steal confidential system prompts, session keys, or API tokens via multi-step calls.',
         threat: 'Adversarial Exfiltrator',
         layers: new Set(['Policy Engine', 'Output Guardrail', 'Memory']),
-        papers: 18,
       },
       goal_diversion: {
         desc: 'Attacks targeting agent planning loops to derail the original user objective toward adversary goals.',
         threat: 'Hijacked Planning Subsystem',
         layers: new Set(['Planning Engine', 'Task Orchestrator']),
-        papers: 9,
       },
       memory_poisoning: {
         desc: 'Adversarial payloads designed to persist across chat sessions inside vector databases or memory buffers.',
         threat: 'Persistent Memory Poisoner',
         layers: new Set(['Vector DB', 'Memory Store', 'Retriever']),
-        papers: 11,
       },
       autonomy: {
         desc: 'Probes checking unauthorized autonomous execution, resource drain, and unchecked loop execution.',
         threat: 'Unrestricted Tool Executor',
         layers: new Set(['Executor Subsystem', 'Permission Manager']),
-        papers: 8,
       },
       planning: {
         desc: 'Subtle adversarial perturbations that cause multi-step agent plan degradation or invalid tool selection.',
         threat: 'Strategic Adversary',
         layers: new Set(['Planner', 'Reasoning Engine']),
-        papers: 10,
       },
       tool_security: {
         desc: 'Attempts to trick the agent into calling dangerous system commands, file deletion, or network APIs.',
         threat: 'Privilege Escalation Agent',
         layers: new Set(['Tool Dispatcher', 'Sandbox']),
-        papers: 15,
       },
     }
 
@@ -265,8 +301,9 @@ class BenchmarkDataService {
         desc: dataset.description || 'AI Agent Security evaluation attack family.',
         threat: 'Adversarial Threat',
         layers: new Set(['LLM Layer']),
-        papers: 5,
       }
+      // Derived from the actual references[] on each probe, not asserted.
+      const uniquePapers = new Set(familyProbes.flatMap(p => (p.references || []).map(r => r.title)))
 
       return {
         id: familyId,
@@ -275,13 +312,13 @@ class BenchmarkDataService {
         threatModel: meta.threat,
         affectedLayers: Array.from(meta.layers),
         probeCount: familyProbes.length,
-        researchPapersCount: meta.papers,
+        researchPapersCount: uniquePapers.size,
       }
     })
   }
 
   public getScenarios(): ScenarioMeta[] {
-    return SCENARIOS
+    return SCENARIOS.map(s => ({ ...s, probeCount: this.getProbesByScenario(s.id).length }))
   }
 
   // API Call: Fetch Stats
@@ -392,6 +429,7 @@ class BenchmarkDataService {
         familyScores: { direct_injection: 98, content_injection: 92, exfiltration: 95, goal_diversion: 90, memory_poisoning: 96, autonomy: 94, planning: 91, tool_security: 97 },
         totalEvaluations: 142,
         lastEvaluated: '2026-08-04',
+        synthetic: true,
       },
       {
         rank: 2,
@@ -408,6 +446,7 @@ class BenchmarkDataService {
         familyScores: { direct_injection: 96, content_injection: 89, exfiltration: 92, goal_diversion: 88, memory_poisoning: 93, autonomy: 91, planning: 89, tool_security: 94 },
         totalEvaluations: 110,
         lastEvaluated: '2026-08-04',
+        synthetic: true,
       },
       {
         rank: 3,
@@ -424,6 +463,7 @@ class BenchmarkDataService {
         familyScores: { direct_injection: 94, content_injection: 86, exfiltration: 90, goal_diversion: 87, memory_poisoning: 89, autonomy: 90, planning: 88, tool_security: 92 },
         totalEvaluations: 98,
         lastEvaluated: '2026-08-03',
+        synthetic: true,
       },
       {
         rank: 4,
@@ -440,6 +480,7 @@ class BenchmarkDataService {
         familyScores: { direct_injection: 91, content_injection: 83, exfiltration: 88, goal_diversion: 84, memory_poisoning: 85, autonomy: 86, planning: 85, tool_security: 87 },
         totalEvaluations: 76,
         lastEvaluated: '2026-08-02',
+        synthetic: true,
       },
       {
         rank: 5,
@@ -456,6 +497,7 @@ class BenchmarkDataService {
         familyScores: { direct_injection: 85, content_injection: 74, exfiltration: 80, goal_diversion: 76, memory_poisoning: 77, autonomy: 78, planning: 77, tool_security: 81 },
         totalEvaluations: 45,
         lastEvaluated: '2026-08-01',
+        synthetic: true,
       },
     ]
 
@@ -475,6 +517,10 @@ class BenchmarkDataService {
         match.bds = bdsVal
         match.lastEvaluated = dateStr
         match.totalEvaluations += 1
+        // A real session overwrote the headline numbers; the row is no longer a sample.
+        // Note: per-family/resistance breakdown still isn't independently measured —
+        // BenchmarkRun carries only aggregate totals, not a per-family split.
+        match.synthetic = false
       } else {
         defaultModels.push({
           rank: defaultModels.length + 1,
@@ -491,6 +537,7 @@ class BenchmarkDataService {
           familyScores: { direct_injection: score, content_injection: score, exfiltration: score, goal_diversion: score, memory_poisoning: score, autonomy: score, planning: score, tool_security: score },
           totalEvaluations: 1,
           lastEvaluated: dateStr,
+          synthetic: false,
         })
       }
     })

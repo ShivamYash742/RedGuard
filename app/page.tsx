@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta } from '@/lib/data-service'
 import { CardSkeleton, TableSkeleton } from '@/components/Skeletons'
 import EmptyState from '@/components/EmptyState'
-import { ShieldAlert, Play, BarChart2, Layers, Cpu, Award, ArrowUpRight } from 'lucide-react'
+import { ShieldAlert, Play, Boxes, Award, ArrowUpRight } from 'lucide-react'
 
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null)
@@ -37,14 +37,15 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">AI Agent Security Benchmark Dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">RedGuard Benchmark Overview</h1>
         <CardSkeleton count={4} />
         <TableSkeleton rows={5} />
       </div>
     )
   }
 
-  const latestScore = stats?.overallBlockRate ? (stats.overallBlockRate * 100).toFixed(1) : '94.2'
+  const hasScore = stats?.overallBlockRate !== undefined && stats?.totalSessions > 0
+  const latestScore = hasScore ? (stats.overallBlockRate * 100).toFixed(1) : null
 
   return (
     <div className="space-y-8">
@@ -52,31 +53,30 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--primary)] uppercase tracking-wider mb-1">
-            <ShieldAlert className="h-4 w-4" /> Comprehensive AI Evaluation Suite
+            <ShieldAlert className="h-4 w-4" /> AI Agent Security Benchmark
           </div>
-          <h1 className="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">RedGuard Benchmark Dashboard</h1>
+          <h1 className="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">RedGuard Overview</h1>
           <p className="text-xs text-[var(--text-secondary)] mt-1">
             Empirical evaluation of LLM agent resistance against indirect prompt injections, goal diversion, & tool exploits.
           </p>
         </div>
 
-        {/* Quick Actions Bar */}
         <div className="flex items-center gap-2">
           <Link
-            href="/benchmark"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[var(--primary)] text-white text-xs font-semibold shadow-xs hover:bg-[var(--primary-hover)] transition-colors"
+            href="/runs"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius)] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-xs hover:bg-[var(--primary-hover)] transition-colors"
           >
             <Play className="h-3.5 w-3.5 fill-current" /> Run Benchmark
           </Link>
           <Link
-            href="/reports"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[var(--surface-raised)] border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
+            href="/corpus"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius)] bg-[var(--surface-raised)] border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
           >
-            <BarChart2 className="h-3.5 w-3.5 text-[var(--primary)]" /> Reports
+            <Boxes className="h-3.5 w-3.5 text-[var(--primary)]" /> Corpus
           </Link>
           <Link
-            href="/comparison"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[var(--surface-raised)] border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
+            href="/models"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius)] bg-[var(--surface-raised)] border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
           >
             <Award className="h-3.5 w-3.5 text-amber-500" /> Leaderboard
           </Link>
@@ -87,7 +87,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Attack Families</span>
-          <div className="text-2xl font-black text-[var(--text-primary)] mt-1.5 font-mono">8</div>
+          <div className="text-2xl font-black text-[var(--text-primary)] mt-1.5 font-mono">{families.length || 8}</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Curated taxonomy</span>
         </div>
 
@@ -117,8 +117,17 @@ export default function Dashboard() {
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Top Security Score</span>
-          <div className="text-2xl font-black text-[var(--success)] mt-1.5 font-mono">{latestScore}%</div>
-          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Nemotron-3 Guard</span>
+          {hasScore ? (
+            <>
+              <div className="text-2xl font-black text-[var(--success)] mt-1.5 font-mono">{latestScore}%</div>
+              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">From real runs</span>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-black text-[var(--text-muted)] mt-1.5 font-mono">—</div>
+              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">No runs yet</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -126,8 +135,8 @@ export default function Dashboard() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-[var(--text-primary)] tracking-tight">Attack Family Taxonomy Breakdown</h2>
-          <Link href="/attack-families" className="text-xs text-[var(--primary)] font-semibold flex items-center gap-1 hover:underline">
-            View All Families <ArrowUpRight className="h-3.5 w-3.5" />
+          <Link href="/corpus" className="text-xs text-[var(--primary)] font-semibold flex items-center gap-1 hover:underline">
+            View Full Corpus <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
@@ -135,12 +144,12 @@ export default function Dashboard() {
           {families.slice(0, 8).map((fam) => (
             <Link
               key={fam.id}
-              href={`/attack-families/${fam.id}`}
+              href={`/corpus/families/${fam.id}`}
               className="research-card group hover:border-[var(--primary)] transition-all cursor-pointer flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--primary)]/10 text-[var(--primary)]">
+                  <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded-[var(--radius)] bg-[var(--primary)]/10 text-[var(--primary)]">
                     {fam.probeCount} Probes
                   </span>
                   <span className="text-[11px] text-[var(--text-muted)]">{fam.researchPapersCount} Papers</span>
@@ -166,8 +175,8 @@ export default function Dashboard() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-[var(--text-primary)] tracking-tight">Recent Benchmark Execution History</h2>
-          <Link href="/history" className="text-xs text-[var(--primary)] font-semibold flex items-center gap-1 hover:underline">
-            View Full Timeline <ArrowUpRight className="h-3.5 w-3.5" />
+          <Link href="/runs" className="text-xs text-[var(--primary)] font-semibold flex items-center gap-1 hover:underline">
+            View All Runs <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
@@ -176,11 +185,11 @@ export default function Dashboard() {
             title="No evaluation runs recorded"
             description="Start your first benchmark evaluation run to assess model security."
             actionLabel="Run Benchmark"
-            actionHref="/benchmark"
+            actionHref="/runs"
             icon="play"
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+          <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
             <table className="research-table">
               <thead>
                 <tr>
@@ -212,7 +221,7 @@ export default function Dashboard() {
                       </td>
                       <td>
                         <Link
-                          href={`/reports?session=${s.sessionId}`}
+                          href={`/runs/${s.sessionId}`}
                           className="text-xs text-[var(--primary)] font-semibold hover:underline"
                         >
                           View Report

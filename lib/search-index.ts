@@ -1,4 +1,4 @@
-import { benchmarkDataService, Probe, AttackFamilyMeta, ScenarioMeta } from './data-service'
+import { benchmarkDataService, Probe, AttackFamilyMeta, ScenarioMeta, KNOWN_AGENTS } from './data-service'
 
 export interface SearchResultItem {
   id: string
@@ -32,7 +32,7 @@ export function searchBenchmark(query: string): SearchResultItem[] {
         title: `${probe.id}: ${probe.title}`,
         subtitle: `Family: ${probe.attack_family} | Difficulty: ${probe.difficulty} | Layer: ${(probe.affected_layers || []).join(', ')}`,
         badgeText: 'Probe',
-        link: `/probes/${probe.id}`,
+        link: `/corpus/probes/${probe.id}`,
       })
     }
   })
@@ -51,7 +51,7 @@ export function searchBenchmark(query: string): SearchResultItem[] {
         title: fam.name,
         subtitle: `${fam.probeCount} Probes | Threat Model: ${fam.threatModel}`,
         badgeText: 'Attack Family',
-        link: `/attack-families/${fam.id}`,
+        link: `/corpus/families/${fam.id}`,
       })
     }
   })
@@ -70,28 +70,21 @@ export function searchBenchmark(query: string): SearchResultItem[] {
         title: scen.name,
         subtitle: `${scen.description} (Risk: ${scen.riskLevel})`,
         badgeText: 'Scenario',
-        link: `/scenarios`,
+        link: `/corpus?scenario=${scen.id}`,
       })
     }
   })
 
   // 4. Search Models & Leaderboards
-  const models = [
-    { id: 'nemotron_3_ultra', name: 'Nemotron-3 Ultra Guard' },
-    { id: 'llama3_3_70b_agent', name: 'Llama 3.3 70B Instruct' },
-    { id: 'deepseek_flash_agent', name: 'DeepSeek Flash 2.5' },
-    { id: 'ollama_local_agent', name: 'Ollama Local Agent' },
-    { id: 'nemotron_super_agent', name: 'Custom Policy Super Agent' },
-  ]
-  models.forEach(m => {
+  KNOWN_AGENTS.forEach(m => {
     if (m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)) {
       results.push({
         id: m.id,
         type: 'model',
         title: m.name,
-        subtitle: `Agent ID: ${m.id} | Benchmark Leaderboard`,
+        subtitle: `Agent ID: ${m.id} | ${m.badge}`,
         badgeText: 'Model',
-        link: `/comparison`,
+        link: `/models`,
       })
     }
   })

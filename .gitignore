@@ -9,6 +9,7 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 .claude/
+.impeccable/
 node_modules/
 .next/
 .venv/

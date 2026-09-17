@@ -145,7 +145,7 @@ export default function ProbeDrawer({ probe, onClose }: ProbeDrawerProps) {
         <div className="pt-4 border-t border-[var(--border-subtle)] flex justify-between items-center text-xs">
           <span className="text-[var(--text-muted)]">Canonical Deep Link available</span>
           <Link
-            href={`/probes/${probe.id}`}
+            href={`/corpus/probes/${probe.id}`}
             onClick={onClose}
             className="inline-flex items-center gap-1.5 font-semibold text-[var(--primary)] hover:underline"
           >

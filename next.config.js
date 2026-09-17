@@ -8,6 +8,30 @@ const nextConfig = {
       },
     ]
   },
+  // v3 IA consolidated 14 routes into 5 (Overview, Corpus, Runs, Models, Settings).
+  // These keep old bookmarks and external links reachable.
+  async redirects() {
+    return [
+      { source: '/benchmark', destination: '/runs', permanent: true },
+      { source: '/history', destination: '/runs', permanent: true },
+      {
+        source: '/reports',
+        has: [{ type: 'query', key: 'session', value: '(?<session>.*)' }],
+        destination: '/runs/:session',
+        permanent: true,
+      },
+      { source: '/reports', destination: '/runs', permanent: true },
+      { source: '/probes', destination: '/corpus', permanent: true },
+      { source: '/probes/:probeId', destination: '/corpus/probes/:probeId', permanent: true },
+      { source: '/attack-families', destination: '/corpus', permanent: true },
+      { source: '/attack-families/:familyId', destination: '/corpus/families/:familyId', permanent: true },
+      { source: '/scenarios', destination: '/corpus', permanent: true },
+      { source: '/datasets', destination: '/corpus', permanent: true },
+      { source: '/comparison', destination: '/models', permanent: true },
+      { source: '/policy', destination: '/settings?tab=policy', permanent: true },
+      { source: '/audit', destination: '/settings?tab=audit', permanent: true },
+    ]
+  },
   // Disable response body size limit so SSE streams can flow through the proxy
   // without being truncated or timed out (needed for long-running scan families)
   experimental: {

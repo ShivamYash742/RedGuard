@@ -4,18 +4,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
+  Boxes,
   PlayCircle,
-  ShieldAlert,
-  Target,
-  Globe,
   Award,
-  FileSpreadsheet,
-  Database,
-  BookOpen,
   Settings,
-  Flame,
   X,
 } from 'lucide-react'
+import { benchmarkDataService } from '@/lib/data-service'
 
 interface SidebarProps {
   isOpen: boolean
@@ -24,6 +19,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
+  const probeCount = benchmarkDataService.getAllProbes().length
 
   useEffect(() => {
     onClose()
@@ -31,15 +27,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   }, [pathname])
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { name: 'Benchmark', path: '/benchmark', icon: PlayCircle },
-    { name: 'Attack Families', path: '/attack-families', icon: ShieldAlert, count: '8' },
-    { name: 'Probes', path: '/probes', icon: Target },
-    { name: 'Scenarios', path: '/scenarios', icon: Globe, count: '12' },
-    { name: 'Models & Ranking', path: '/comparison', icon: Award },
-    { name: 'Reports & Results', path: '/reports', icon: FileSpreadsheet },
-    { name: 'Datasets', path: '/datasets', icon: Database },
-    { name: 'Documentation', path: '/policy', icon: BookOpen },
+    { name: 'Overview', path: '/', icon: LayoutDashboard },
+    { name: 'Corpus', path: '/corpus', icon: Boxes, count: String(probeCount) },
+    { name: 'Runs', path: '/runs', icon: PlayCircle },
+    { name: 'Models', path: '/models', icon: Award },
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
 
@@ -61,14 +52,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Section Header */}
       <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
         <span>Navigation</span>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 font-mono text-[10px] text-[var(--primary)] bg-[var(--primary)]/10 px-1.5 py-0.5 rounded">
-            <Flame className="h-3 w-3" /> Academic
-          </span>
-          <button onClick={onClose} className="p-0.5 rounded hover:bg-[var(--surface-base)] hover:text-[var(--text-primary)] lg:hidden">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <button onClick={onClose} className="p-0.5 rounded hover:bg-[var(--surface-base)] hover:text-[var(--text-primary)] lg:hidden">
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {/* Nav List */}
@@ -80,9 +66,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Link
               key={item.path}
               href={item.path}
-              className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+              className={`flex items-center justify-between px-3 py-2 rounded-[var(--radius)] text-xs font-medium transition-colors ${
                 isActive
-                  ? 'bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20 font-semibold'
+                  ? 'bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/25 font-semibold'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--surface-base)] hover:text-[var(--text-primary)]'
               }`}
             >
@@ -100,10 +86,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         })}
       </nav>
 
-      {/* Bottom Academic Citation note */}
-      <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--surface-base)] text-[11px] text-[var(--text-muted)]">
-        <div className="font-semibold text-[var(--text-secondary)]">RedGuard Benchmark</div>
-        <div className="mt-0.5 font-mono text-[10px]">Citation: redguard2024</div>
+      {/* Bottom build tag */}
+      <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--surface-base)] text-[11px] text-[var(--text-muted)] font-mono">
+        RedGuard v2.7.0
       </div>
       </aside>
     </>

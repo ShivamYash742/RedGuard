@@ -3,7 +3,7 @@ import React, { useState, use } from 'react'
 import Link from 'next/link'
 import { benchmarkDataService, Probe, AttackFamilyMeta } from '@/lib/data-service'
 import ProbeDrawer from '@/components/ProbeDrawer'
-import { ShieldAlert, BookOpen, ExternalLink, ArrowLeft, Search, Filter } from 'lucide-react'
+import { BookOpen, ExternalLink, ArrowLeft, Search, Filter } from 'lucide-react'
 
 export default function AttackFamilyDetailPage({ params }: { params: Promise<{ familyId: string }> }) {
   const resolvedParams = use(params)
@@ -21,26 +21,23 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
       <div className="p-8 text-center space-y-4">
         <h2 className="text-xl font-bold">Attack Family Not Found</h2>
         <p className="text-sm text-[var(--text-secondary)]">The requested attack family &quot;{familyId}&quot; does not exist in the benchmark.</p>
-        <Link href="/attack-families" className="text-xs text-[var(--primary)] font-semibold hover:underline">
-          ← Return to Attack Families
+        <Link href="/corpus" className="text-xs text-[var(--primary)] font-semibold hover:underline">
+          ← Return to Corpus
         </Link>
       </div>
     )
   }
 
-  // Filter probes
   const filteredProbes = probes.filter(p => {
+    const q = searchQuery.toLowerCase()
     const matchesSearch =
-      p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.prompt.toLowerCase().includes(searchQuery.toLowerCase())
-
+      p.id.toLowerCase().includes(q) ||
+      p.title.toLowerCase().includes(q) ||
+      p.prompt.toLowerCase().includes(q)
     const matchesDifficulty = difficultyFilter === 'all' || p.difficulty.toLowerCase() === difficultyFilter.toLowerCase()
-
     return matchesSearch && matchesDifficulty
   })
 
-  // Extract all unique references across probes in this family
   const allReferences = probes.flatMap(p => p.references || [])
   const uniqueReferences = Array.from(new Set(allReferences.map(r => r.title))).map(title =>
     allReferences.find(r => r.title === title)!
@@ -50,13 +47,13 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
     <div className="space-y-6">
       {/* Top Breadcrumb & Header */}
       <div>
-        <Link href="/attack-families" className="inline-flex items-center gap-1 text-xs text-[var(--primary)] font-semibold hover:underline mb-2">
-          <ArrowLeft className="h-3 w-3" /> Back to Taxonomy
+        <Link href="/corpus" className="inline-flex items-center gap-1 text-xs text-[var(--primary)] font-semibold hover:underline mb-2">
+          <ArrowLeft className="h-3 w-3" /> Back to Corpus
         </Link>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20">
+              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-[var(--radius)] bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20">
                 {family.id}
               </span>
               <span className="badge-semantic badge-neutral">Threat: {family.threatModel}</span>
@@ -85,7 +82,7 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
         <div className="pt-3 border-t border-[var(--border-subtle)] flex flex-wrap gap-2 text-xs">
           <span className="font-semibold text-[var(--text-muted)]">Target Architecture Layers:</span>
           {family.affectedLayers.map((layer, idx) => (
-            <span key={idx} className="font-mono text-[11px] px-2 py-0.5 rounded bg-[var(--surface-base)] border border-[var(--border-subtle)]">
+            <span key={idx} className="font-mono text-[11px] px-2 py-0.5 rounded-[var(--radius)] bg-[var(--surface-base)] border border-[var(--border-subtle)]">
               {layer}
             </span>
           ))}
@@ -100,7 +97,7 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {uniqueReferences.map((ref, idx) => (
-              <div key={idx} className="p-3 rounded-md bg-[var(--surface-base)] border border-[var(--border-subtle)] text-xs space-y-1">
+              <div key={idx} className="p-3 rounded-[var(--radius)] bg-[var(--surface-base)] border border-[var(--border-subtle)] text-xs space-y-1">
                 <div className="font-semibold text-[var(--text-primary)]">{ref.title}</div>
                 <div className="text-[var(--text-secondary)]">
                   {ref.authors ? ref.authors.join(', ') : 'Researchers'} ({ref.year}) — <span className="italic">{ref.venue}</span>
@@ -125,7 +122,7 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
             placeholder="Search probes in this family..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
+            className="w-full pl-9 pr-3 py-1.5 rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
           />
         </div>
 
@@ -134,7 +131,7 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
           <select
             value={difficultyFilter}
             onChange={e => setDifficultyFilter(e.target.value)}
-            className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none"
+            className="rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none"
           >
             <option value="all">All Difficulties</option>
             <option value="trivial">Trivial</option>
@@ -147,7 +144,7 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
       </div>
 
       {/* Probes Table */}
-      <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+      <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
         <table className="research-table">
           <thead>
             <tr>
@@ -170,7 +167,7 @@ export default function AttackFamilyDetailPage({ params }: { params: Promise<{ f
                 <td className="font-mono text-xs font-semibold text-[var(--primary)]">{p.id}</td>
                 <td className="font-medium text-xs text-[var(--text-primary)]">{p.title}</td>
                 <td className="font-mono text-xs text-[var(--text-secondary)]">{p.attack_variant}</td>
-                <td className="capitalize text-xs text-[var(--text-secondary)]">{p.scenario}</td>
+                <td className="capitalize text-xs text-[var(--text-secondary)]">{p.scenario.replace(/_/g, ' ')}</td>
                 <td>
                   <span className="badge-semantic badge-neutral uppercase text-[9px] font-mono">
                     {p.difficulty}

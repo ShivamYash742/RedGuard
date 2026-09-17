@@ -26,7 +26,7 @@ from __future__ import annotations
 
 #: Overall benchmark version. Bump MAJOR for any breaking change to probe IDs,
 #: metric definitions, or evaluation methodology.
-BENCHMARK_VERSION: str = "2.5.5"
+BENCHMARK_VERSION: str = "2.7.0"
 
 #: Version of the benchmark dataset (JSON files in core/datasets/).
 #: Bump when probes are added, removed, or their prompts change materially.
@@ -40,7 +40,7 @@ PROBE_SCHEMA_VERSION: str = "2.5.5"
 MIN_RUNS_FOR_STATISTICS: int = 3
 
 #: Human-readable release name.
-RELEASE_NAME: str = "RedGuard Benchmark v2.5.5"
+RELEASE_NAME: str = "RedGuard Benchmark v2.7.0"
 
 #: Citation key for the benchmark paper (placeholder until published).
 CITATION_KEY: str = "redguard2024"

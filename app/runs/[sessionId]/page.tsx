@@ -1,15 +1,15 @@
 "use client"
-import React, { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import React, { useEffect, useState, use } from 'react'
+import { useRouter } from 'next/navigation'
 import { benchmarkDataService, BenchmarkRun } from '@/lib/data-service'
-import { FileText, Download, ShieldCheck, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText, Download, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
+import Link from 'next/link'
 
-function ReportsContent() {
-  const searchParams = useSearchParams()
-  const initialSession = searchParams.get('session')
+export default function RunReportPage({ params }: { params: Promise<{ sessionId: string }> }) {
+  const { sessionId: routeSessionId } = use(params)
+  const router = useRouter()
 
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
-  const [selectedSession, setSelectedSession] = useState<string | null>(initialSession)
   const [report, setReport] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [showPrompt, setShowPrompt] = useState(false)
@@ -19,9 +19,6 @@ function ReportsContent() {
       try {
         const data = await benchmarkDataService.fetchSessions()
         setSessions(data)
-        if (!selectedSession && data.length > 0) {
-          setSelectedSession(data[0].sessionId)
-        }
       } catch (err) {
         console.error('Failed to load sessions:', err)
       } finally {
@@ -32,10 +29,10 @@ function ReportsContent() {
   }, [])
 
   useEffect(() => {
-    if (!selectedSession) return
+    if (!routeSessionId) return
     async function loadReport() {
       try {
-        const rep = await benchmarkDataService.fetchReport(selectedSession!)
+        const rep = await benchmarkDataService.fetchReport(routeSessionId)
         setReport(rep)
       } catch (err) {
         console.error('Failed to load report:', err)
@@ -43,31 +40,24 @@ function ReportsContent() {
       }
     }
     loadReport()
-  }, [selectedSession])
+  }, [routeSessionId])
 
   if (loading) return <div className="p-8 text-center text-xs">Loading benchmark reports...</div>
 
   const overall = report?.reportJson?.overall
   const categoryBreakdown = report?.reportJson?.category_breakdown || []
-  const highRiskAllowed = report?.reportJson?.high_risk_allowed || []
-  const currentSessionObj = sessions.find(s => s.sessionId === selectedSession)
+  const currentSessionObj = sessions.find(s => s.sessionId === routeSessionId)
 
   const downloadCSV = () => {
     if (!report) return
     const headers = ['Category', 'Probes', 'Blocked', 'Allowed', 'HighestRiskScore']
-    const rows = categoryBreakdown.map((cb: any) => [
-      cb.category,
-      cb.probes,
-      cb.blocked,
-      cb.allowed,
-      cb.highest_risk_score || 0,
-    ])
+    const rows = categoryBreakdown.map((cb: any) => [cb.category, cb.probes, cb.blocked, cb.allowed, cb.highest_risk_score || 0])
     const csvContent = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `redguard-report-${selectedSession}.csv`)
+    link.setAttribute('download', `redguard-report-${routeSessionId}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -78,21 +68,23 @@ function ReportsContent() {
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
         <div>
+          <Link href="/runs" className="inline-flex items-center gap-1 text-xs text-[var(--primary)] font-semibold hover:underline mb-2">
+            <ArrowLeft className="h-3 w-3" /> Back to Runs
+          </Link>
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--primary)] uppercase tracking-wider mb-1">
-            <FileText className="h-4 w-4" /> Academic Evaluation Report
+            <FileText className="h-4 w-4" /> Run Report
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Benchmark Security Report</h1>
           <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-            Empirical evaluation results, category breakdown, & threat analysis per LLM agent configuration.
+            Empirical evaluation results, category breakdown, & threat analysis for this run.
           </p>
         </div>
 
-        {/* Session selector & Download Export Buttons */}
         <div className="flex items-center gap-2">
           <select
-            value={selectedSession || ''}
-            onChange={e => setSelectedSession(e.target.value)}
-            className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
+            value={routeSessionId || ''}
+            onChange={e => router.push(`/runs/${e.target.value}`)}
+            className="rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
           >
             {sessions.map(s => (
               <option key={s.id} value={s.sessionId}>
@@ -105,14 +97,14 @@ function ReportsContent() {
             <div className="flex items-center gap-1.5">
               <a
                 href={`data:text/markdown;charset=utf-8,${encodeURIComponent(report.reportMarkdown || '')}`}
-                download={`redguard-report-${selectedSession}.md`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--primary)] text-white text-xs font-semibold hover:bg-[var(--primary-hover)] transition-colors"
+                download={`redguard-report-${routeSessionId}.md`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius)] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold hover:bg-[var(--primary-hover)] transition-colors"
               >
                 <Download className="h-3.5 w-3.5" /> Markdown
               </a>
               <button
                 onClick={downloadCSV}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--surface-raised)] border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius)] bg-[var(--surface-raised)] border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
               >
                 <Download className="h-3.5 w-3.5 text-[var(--success)]" /> CSV
               </button>
@@ -123,7 +115,7 @@ function ReportsContent() {
 
       {!report ? (
         <div className="research-card p-10 text-center text-xs text-[var(--text-muted)]">
-          No report generated for this session yet. Run a benchmark to view results.
+          No report found for session &quot;{routeSessionId}&quot;.
         </div>
       ) : (
         <div className="space-y-6">
@@ -148,7 +140,6 @@ function ReportsContent() {
               </div>
             </div>
 
-            {/* System Prompt Drawer */}
             {overall?.system_prompt && (
               <div className="pt-3 border-t border-[var(--border-subtle)]">
                 <button
@@ -160,7 +151,7 @@ function ReportsContent() {
                 </button>
 
                 {showPrompt && (
-                  <pre className="mt-3 p-4 rounded-lg bg-[var(--surface-base)] border border-[var(--border-subtle)] font-mono text-xs text-[var(--text-secondary)] whitespace-pre-wrap max-h-48 overflow-y-auto">
+                  <pre className="mt-3 p-4 rounded-[var(--radius)] bg-[var(--surface-base)] border border-[var(--border-subtle)] font-mono text-xs text-[var(--text-secondary)] whitespace-pre-wrap max-h-48 overflow-y-auto">
                     {overall.system_prompt}
                   </pre>
                 )}
@@ -189,7 +180,7 @@ function ReportsContent() {
             <div className="research-card text-center border-t-2 border-t-[var(--primary)]">
               <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Total Probes Fired</span>
               <div className="text-3xl font-black text-[var(--text-primary)] mt-2 font-mono">{overall?.total_probes || 0}</div>
-              <span className="text-xs text-[var(--text-secondary)] mt-1 block">Across 8 Attack Families</span>
+              <span className="text-xs text-[var(--text-secondary)] mt-1 block">Across {benchmarkDataService.getAttackFamilies().length} Attack Families</span>
             </div>
 
             <div className="research-card text-center border-t-2 border-t-[var(--warning)]">
@@ -205,7 +196,7 @@ function ReportsContent() {
               Attack Family Category Breakdown
             </h3>
 
-            <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)]">
+            <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)]">
               <table className="research-table">
                 <thead>
                   <tr>
@@ -235,13 +226,5 @@ function ReportsContent() {
         </div>
       )}
     </div>
-  )
-}
-
-export default function ReportsPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-center text-xs">Loading report interface...</div>}>
-      <ReportsContent />
-    </Suspense>
   )
 }

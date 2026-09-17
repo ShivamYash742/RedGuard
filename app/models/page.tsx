@@ -1,15 +1,8 @@
 "use client"
 import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { benchmarkDataService, ModelComparisonResult, BenchmarkRun } from '@/lib/data-service'
-import EmptyState from '@/components/EmptyState'
-import {
-  Award,
-  BarChart2,
-  TrendingUp,
-  ShieldCheck,
-  Zap,
-  Info,
-} from 'lucide-react'
+import { Award, BarChart2, TrendingUp, Info, FlaskConical } from 'lucide-react'
 import {
   Radar,
   RadarChart,
@@ -24,11 +17,9 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  LineChart,
-  Line,
 } from 'recharts'
 
-export default function ModelComparisonPage() {
+export default function ModelsPage() {
   const [models, setModels] = useState<ModelComparisonResult[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedModelsForRadar, setSelectedModelsForRadar] = useState<string[]>([])
@@ -49,22 +40,10 @@ export default function ModelComparisonPage() {
     loadData()
   }, [])
 
-  // Format Radar data: Attack Family vs Model resistance
-  const familyKeys = [
-    'direct_injection',
-    'content_injection',
-    'exfiltration',
-    'goal_diversion',
-    'memory_poisoning',
-    'autonomy',
-    'planning',
-    'tool_security',
-  ]
+  const familyKeys = ['direct_injection', 'content_injection', 'exfiltration', 'goal_diversion', 'memory_poisoning', 'autonomy', 'planning', 'tool_security']
 
   const radarData = familyKeys.map(fam => {
-    const entry: Record<string, any> = {
-      family: fam.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-    }
+    const entry: Record<string, any> = { family: fam.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) }
     models.forEach(m => {
       if (selectedModelsForRadar.includes(m.agentId)) {
         entry[m.modelName] = m.familyScores[fam] || 85
@@ -73,7 +52,6 @@ export default function ModelComparisonPage() {
     return entry
   })
 
-  // Stacked Bar Data
   const stackedBarData = models.map(m => ({
     name: m.modelName.split(' ')[0],
     Resisted: m.overallScore,
@@ -81,7 +59,8 @@ export default function ModelComparisonPage() {
     Compromised: parseFloat((m.asr * 0.6).toFixed(1)),
   }))
 
-  const colors = ['#2563eb', '#10b981', '#f59e0b', '#f43f5e', '#6366f1']
+  const colors = ['#9a6324', '#157a6e', '#a16207', '#c23616', '#44576b']
+  const hasSynthetic = models.some(m => m.synthetic)
 
   if (loading) return <div className="p-8 text-center text-xs">Loading Model Leaderboard & Comparison Matrix...</div>
 
@@ -90,13 +69,24 @@ export default function ModelComparisonPage() {
       {/* Header */}
       <div className="border-b border-[var(--border-subtle)] pb-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-[var(--primary)] uppercase tracking-wider mb-1">
-          <Award className="h-4 w-4 text-amber-500" /> Academic Benchmark Leaderboard
+          <Award className="h-4 w-4 text-amber-500" /> Model Security Leaderboard
         </div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Model Security Leaderboard & Comparison</h1>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Models</h1>
         <p className="text-xs text-[var(--text-secondary)] mt-0.5">
           Comparative security evaluation of LLM agent architectures across Attack Success Rate (ASR), Behaviour Drift Score (BDS), & Tool Security.
         </p>
       </div>
+
+      {hasSynthetic && (
+        <div className="research-card flex items-start gap-3 bg-[var(--warning-bg)]">
+          <FlaskConical className="h-4 w-4 text-[var(--warning)] mt-0.5 shrink-0" />
+          <div className="text-xs text-[var(--text-secondary)]">
+            <span className="font-semibold text-[var(--warning)]">Rows marked SAMPLE are illustrative, not measured.</span>{' '}
+            They show what the leaderboard looks like before any evaluation has run against that model. Run a benchmark from{' '}
+            <Link href="/runs" className="text-[var(--primary)] font-semibold hover:underline">Runs</Link> to replace a sample row with real results.
+          </div>
+        </div>
+      )}
 
       {/* Main Sortable Leaderboard Table */}
       <div className="space-y-3">
@@ -104,10 +94,9 @@ export default function ModelComparisonPage() {
           <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
             Overall Model Ranking Matrix
           </h2>
-          <span className="font-mono text-[11px] text-[var(--text-muted)]">CitingKey: redguard2024</span>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+        <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
           <table className="research-table">
             <thead>
               <tr>
@@ -121,6 +110,7 @@ export default function ModelComparisonPage() {
                 <th>Memory Res.</th>
                 <th>Planning Res.</th>
                 <th>Tool Res.</th>
+                <th>Data</th>
               </tr>
             </thead>
             <tbody>
@@ -142,6 +132,13 @@ export default function ModelComparisonPage() {
                   <td className="font-mono text-xs text-center">{m.memoryResistance}%</td>
                   <td className="font-mono text-xs text-center">{m.planningResistance}%</td>
                   <td className="font-mono text-xs text-center font-semibold text-[var(--success)]">{m.toolResistance}%</td>
+                  <td>
+                    {m.synthetic ? (
+                      <span className="badge-semantic badge-warning">Sample</span>
+                    ) : (
+                      <span className="badge-semantic badge-success">Measured</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -151,14 +148,13 @@ export default function ModelComparisonPage() {
 
       {/* Visualizations Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Radar Chart (Capped at 5 models) */}
         <div className="research-card space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
               <BarChart2 className="h-4 w-4 text-[var(--primary)]" /> Attack Family Resistance Profile
             </h3>
             <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] font-mono">
-              <Info className="h-3.5 w-3.5 text-amber-500" /> Max 5 Models
+              <Info className="h-3.5 w-3.5 text-[var(--warning)]" /> Max 5 Models
             </div>
           </div>
 
@@ -176,6 +172,7 @@ export default function ModelComparisonPage() {
                     stroke={colors[idx % colors.length]}
                     fill={colors[idx % colors.length]}
                     fillOpacity={0.15}
+                    strokeDasharray={m.synthetic ? '4 3' : undefined}
                   />
                 ))}
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
@@ -185,10 +182,9 @@ export default function ModelComparisonPage() {
           </div>
         </div>
 
-        {/* Stacked Outcome Distribution Bar Chart */}
         <div className="research-card space-y-3">
           <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
-            <TrendingUp className="h-4 w-4 text-emerald-500" /> Outcome Distribution Matrix
+            <TrendingUp className="h-4 w-4 text-[var(--success)]" /> Outcome Distribution Matrix
           </h3>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -198,9 +194,9 @@ export default function ModelComparisonPage() {
                 <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} domain={[0, 100]} />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--surface-overlay)', borderColor: 'var(--border-default)', fontSize: '11px' }} />
                 <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Bar dataKey="Resisted" stackId="a" fill="#10b981" />
-                <Bar dataKey="Diverted" stackId="a" fill="#f59e0b" />
-                <Bar dataKey="Compromised" stackId="a" fill="#f43f5e" />
+                <Bar dataKey="Resisted" stackId="a" fill="#157a6e" />
+                <Bar dataKey="Diverted" stackId="a" fill="#a16207" />
+                <Bar dataKey="Compromised" stackId="a" fill="#c23616" />
               </BarChart>
             </ResponsiveContainer>
           </div>
