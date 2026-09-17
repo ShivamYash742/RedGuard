@@ -30,11 +30,11 @@ BENCHMARK_VERSION: str = "2.7.0"
 
 #: Version of the benchmark dataset (JSON files in core/datasets/).
 #: Bump when probes are added, removed, or their prompts change materially.
-DATASET_VERSION: str = "2.5.5"
+DATASET_VERSION: str = "2.7.0"
 
 #: Version of the probe JSON schema (core/datasets/schema.json).
 #: Bump when new required fields are added to dataset entries.
-PROBE_SCHEMA_VERSION: str = "2.5.5"
+PROBE_SCHEMA_VERSION: str = "2.7.0"
 
 #: Minimum number of runs per probe required for statistical metrics (BDS, CI).
 MIN_RUNS_FOR_STATISTICS: int = 3
