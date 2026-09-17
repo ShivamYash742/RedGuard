@@ -61,7 +61,7 @@ function CorpusContent() {
         </div>
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Dataset Version</span>
-          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">2.7.0</div>
+          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">2.7.5</div>
         </div>
       </div>
 
@@ -71,11 +71,10 @@ function CorpusContent() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setFamilyFilter('all')}
-            className={`px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium border transition-colors ${
-              familyFilter === 'all'
+            className={`px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium border transition-colors ${familyFilter === 'all'
                 ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] font-semibold'
                 : 'bg-[var(--surface-raised)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-default)]'
-            }`}
+              }`}
           >
             All Families
           </button>
@@ -84,11 +83,10 @@ function CorpusContent() {
               key={fam.id}
               onClick={() => setFamilyFilter(familyFilter === fam.id ? 'all' : fam.id)}
               title={fam.description}
-              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium border transition-colors ${
-                familyFilter === fam.id
+              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium border transition-colors ${familyFilter === fam.id
                   ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] font-semibold'
                   : 'bg-[var(--surface-raised)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-default)] hover:text-[var(--text-primary)]'
-              }`}
+                }`}
             >
               {fam.name}
               <span className={`font-mono text-[10px] ${familyFilter === fam.id ? 'opacity-80' : 'text-[var(--text-muted)]'}`}>{fam.probeCount}</span>
@@ -226,7 +224,7 @@ function CorpusContent() {
             <FileJson className="h-4 w-4 text-[var(--primary)]" /> Dataset File Inventory
           </h2>
           <span className="badge-semantic badge-success">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Schema v2.7.0 Passed
+            <CheckCircle2 className="h-3.5 w-3.5" /> Schema v2.7.5 Passed
           </span>
         </div>
         <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">

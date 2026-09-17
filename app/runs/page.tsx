@@ -72,9 +72,9 @@ export default function RunsPage() {
         navigator.sendBeacon('/api/scan/cancel', JSON.stringify({ sessionId }))
       }
     }
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (running && sessionId) {
@@ -150,7 +150,7 @@ export default function RunsPage() {
               const msgEvent = e as MessageEvent
               const payload = JSON.parse(msgEvent.data)
               console.error("Agent API error:", payload.message)
-            } catch (err) {}
+            } catch (err) { }
             evtSource.close()
             resolve('error')
           })
@@ -160,7 +160,7 @@ export default function RunsPage() {
             resolve()
           }
         })
-        
+
         if (result === 'error') {
           break
         }
@@ -212,9 +212,8 @@ export default function RunsPage() {
           <button
             onClick={startScan}
             disabled={running}
-            className={`inline-flex items-center gap-2 px-5 py-2 rounded-[var(--radius)] text-xs font-bold text-[var(--primary-foreground)] shadow-xs transition-all ${
-              running ? 'bg-[var(--primary)]/60 cursor-not-allowed' : 'bg-[var(--primary)] hover:bg-[var(--primary-hover)] cursor-pointer'
-            }`}
+            className={`inline-flex items-center gap-2 px-5 py-2 rounded-[var(--radius)] text-xs font-bold text-[var(--primary-foreground)] shadow-xs transition-all ${running ? 'bg-[var(--primary)]/60 cursor-not-allowed' : 'bg-[var(--primary)] hover:bg-[var(--primary-hover)] cursor-pointer'
+              }`}
           >
             {running ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
             {running ? 'Evaluating Probes...' : 'Start Evaluation Run'}
@@ -226,7 +225,7 @@ export default function RunsPage() {
       <div className="research-card space-y-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Target Model & Agent Selection</h2>
-          <span className="font-mono text-[11px] text-[var(--text-muted)]">Benchmark Version: v2.7.0</span>
+          <span className="font-mono text-[11px] text-[var(--text-muted)]">Benchmark Version: v2.7.5</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -238,11 +237,10 @@ export default function RunsPage() {
             <button
               key={cat.key}
               onClick={() => !running && setActiveCategory(cat.key)}
-              className={`p-3 rounded-[var(--radius)] border text-left text-xs font-semibold transition-all ${
-                activeCategory === cat.key
+              className={`p-3 rounded-[var(--radius)] border text-left text-xs font-semibold transition-all ${activeCategory === cat.key
                   ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]'
                   : 'border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:border-[var(--border-default)]'
-              }`}
+                }`}
             >
               <span className="flex items-center gap-1.5"><cat.icon className="h-3.5 w-3.5" /> {cat.label}</span>
               <span className="block text-[10px] font-normal text-[var(--text-muted)] mt-1">{cat.sub}</span>
@@ -259,16 +257,14 @@ export default function RunsPage() {
               <button
                 key={agent.id}
                 onClick={() => !running && setSelectedAgent(agent.id)}
-                className={`px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-                  selectedAgent === agent.id
+                className={`px-3 py-1.5 rounded-[var(--radius)] text-xs font-medium border transition-colors flex items-center gap-1.5 ${selectedAgent === agent.id
                     ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] font-semibold shadow-xs'
                     : 'bg-[var(--surface-raised)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
+                  }`}
               >
                 <span>{agent.name}</span>
-                <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded ${
-                  selectedAgent === agent.id ? 'bg-black/10 text-[var(--primary-foreground)]' : 'bg-[var(--surface-base)] text-[var(--text-muted)] border border-[var(--border-subtle)]'
-                }`}>
+                <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded ${selectedAgent === agent.id ? 'bg-black/10 text-[var(--primary-foreground)]' : 'bg-[var(--surface-base)] text-[var(--text-muted)] border border-[var(--border-subtle)]'
+                  }`}>
                   {agent.badge}
                 </span>
               </button>
@@ -299,11 +295,10 @@ export default function RunsPage() {
                     if (running) return
                     setSelectedFamilies(isSelected ? selectedFamilies.filter(id => id !== fam.id) : [...selectedFamilies, fam.id])
                   }}
-                  className={`px-2.5 py-1 rounded-[var(--radius)] text-xs font-medium border transition-colors ${
-                    isSelected
+                  className={`px-2.5 py-1 rounded-[var(--radius)] text-xs font-medium border transition-colors ${isSelected
                       ? 'bg-[var(--primary)]/15 border-[var(--primary)] text-[var(--primary)] font-semibold'
                       : 'bg-[var(--surface-raised)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-60'
-                  }`}
+                    }`}
                 >
                   {isSelected ? '✓ ' : '+ '}{fam.name}
                 </button>

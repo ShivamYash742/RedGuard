@@ -1,8 +1,8 @@
-# RedGuard v2.7.0 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v2.7.5 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-2.7.0-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
-[![Benchmark](https://img.shields.io/badge/benchmark-v2.7.0-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
-[![Dataset](https://img.shields.io/badge/dataset-v2.7.0-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
+[![Version](https://img.shields.io/badge/version-2.7.5-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Benchmark](https://img.shields.io/badge/benchmark-v2.7.5-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Dataset](https://img.shields.io/badge/dataset-v2.7.5-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
 
@@ -10,7 +10,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ---
 
-## ✨ Key Features (v2.7.0)
+## ✨ Key Features (v2.7.5)
 
 | Feature | Description |
 |---|---|
@@ -30,7 +30,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v2.7.0 Platform
+                        RedGuard v2.7.5 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                          │
@@ -60,7 +60,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ```
 RedGuard/
-├── app/                               # Next.js App Router pages (v2.7.0)
+├── app/                               # Next.js App Router pages (v2.7.5)
 │   ├── page.tsx                       # Dashboard (6 Research Cards + Taxonomy Grid)
 │   ├── benchmark/page.tsx             # Live Execution Suite (SSE Progress Tracker)
 │   ├── attack-families/               # Attack Family Index & Detail Pages
@@ -71,7 +71,7 @@ RedGuard/
 │   ├── comparison/page.tsx            # Model Leaderboard, Radar Chart & Matrix
 │   ├── reports/page.tsx               # Security Scorecards & Export (MD / CSV)
 │   ├── history/page.tsx               # Execution Run Timeline Log
-│   ├── datasets/page.tsx              # Dataset Version 2.7.0 & Schema Status
+│   ├── datasets/page.tsx              # Dataset Version 2.7.5 & Schema Status
 │   ├── policy/page.tsx                # Policy Editor & BibTeX Citation Generator
 │   ├── audit/page.tsx                 # Audit Event Log Viewer
 │   ├── settings/page.tsx              # FastAPI & Database Health Monitor
@@ -109,7 +109,7 @@ RedGuard/
 │   │   └── validator.py               # Schema validation utilities
 │   ├── probes/                        # Probe class definitions per family
 │   ├── scenarios/                     # 12 scenario context classes
-│   ├── version.py                     # Canonical Version Constants (v2.7.0)
+│   ├── version.py                     # Canonical Version Constants (v2.7.5)
 │   └── __init__.py
 │
 ├── backend/                           # FastAPI Service (:8000)

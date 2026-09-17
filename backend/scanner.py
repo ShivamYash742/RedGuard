@@ -155,6 +155,8 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
             if status == "ALLOWED":
                 response_excerpt = await _invoke_agent(agent_id, prompt, model_name=model_name)
 
+                is_recursion_error = "Recursion limit" in response_excerpt or "GraphRecursionError" in response_excerpt
+
                 # Skip refusal keyword scan when the agent itself errored
                 agent_errored = (
                     response_excerpt.startswith("Agent error")
@@ -162,17 +164,21 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
                 )
 
                 if agent_errored:
-                    error_msg = f"API non-200 / Agent failed! Details: {response_excerpt}"
-                    print(f"\n[ERROR] {error_msg} on probe {idx}! Aborting scan.")
-                    await prisma.session.update(
-                        where={"id": session_id},
-                        data={"status": f"FAILED: {response_excerpt[:200]}"}
-                    )
-                    yield {
-                        "event": "error",
-                        "data": {"message": response_excerpt}
-                    }
-                    break
+                    if is_recursion_error:
+                        print(f"[WARN] Probe {idx} caused agent to hit recursion limit. Counting as BLOCKED.")
+                        status = "BLOCKED"
+                    else:
+                        error_msg = f"API non-200 / Agent failed! Details: {response_excerpt}"
+                        print(f"\n[ERROR] {error_msg} on probe {idx}! Aborting scan.")
+                        await prisma.session.update(
+                            where={"id": session_id},
+                            data={"status": f"FAILED: {response_excerpt[:200]}"}
+                        )
+                        yield {
+                            "event": "error",
+                            "data": {"message": response_excerpt}
+                        }
+                        break
                 else:
                     print(f"[200 OK] Probe {idx} successfully processed by {agent_id}.")
 
