@@ -27,7 +27,7 @@ AGENT_DESCRIPTION = (
 )
 
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
-MODEL_NAME: str = "deepseek-ai/deepseek-v4-flash"
+MODEL_NAME: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 
 # ── Tools (lazy-instantiated) ─────────────────────────────────────────────────
 

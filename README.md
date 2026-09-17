@@ -192,7 +192,7 @@ Copy `.env.example` to `.env` and fill in the keys you need. `DATABASE_URL` is r
 |---|---|
 | `DATABASE_URL` | Prisma ORM (SQLite, always required) |
 | `NVIDIA_API_KEY` / `NVIDIA_MODEL` | Nemotron-3 Ultra & Super agents (default agents) |
-| `GROQ_API_KEY` / `GROQ_MODEL` | Llama 3.3 70B & DeepSeek Flash agents |
+
 | `GOOGLE_API_KEY` / `GEMINI_MODEL` | Gemini Flash agent |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent (run `ollama serve` first) |
 | `CLASSIFIER_URL` | ML classifier endpoint used for secondary verdicts during a scan |
