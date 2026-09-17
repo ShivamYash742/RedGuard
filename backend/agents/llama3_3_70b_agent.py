@@ -27,7 +27,7 @@ AGENT_DESCRIPTION = (
 )
 
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
-MODEL_NAME: str = "meta/llama-3.2-11b-vision-instruct"
+MODEL_NAME: str = "meta/llama-3.3-70b-instruct"
 
 # ── Tools (lazy-instantiated) ─────────────────────────────────────────────────
 
