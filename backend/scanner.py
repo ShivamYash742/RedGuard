@@ -260,8 +260,12 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
                 )
             except Exception as exc:
                 if "RecordNotFoundError" in str(type(exc)):
-                    print(f"\\n[INFO] Session {session_id} was deleted mid-scan. Aborting generator.")
-                    break
+                    print(f"\n[INFO] Session {session_id} was deleted mid-scan. Aborting generator.")
+                    yield {
+                        "event": "error",
+                        "data": {"message": "Session cancelled"}
+                    }
+                    return
                 raise
             
             # Yield result to keep connection alive and update UI
@@ -301,7 +305,17 @@ async def finalize_scan(session_id: str):
     
     block_rate = blocked / fired if fired > 0 else 0.0
     session = await prisma.session.find_unique(where={"id": session_id})
-    if session and session.status and session.status.startswith("FAILED"):
+    if not session:
+        return {
+            "total": fired,
+            "blocked": blocked,
+            "allowed": allowed,
+            "mismatches": mismatches,
+            "blockRate": block_rate,
+            "status": "CANCELLED"
+        }
+
+    if session.status and session.status.startswith("FAILED"):
         new_status = session.status
     else:
         new_status = "COMPLETED"

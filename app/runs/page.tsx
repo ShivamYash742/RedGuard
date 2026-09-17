@@ -66,22 +66,6 @@ export default function RunsPage() {
     setProgress(p => ({ ...p, total: activeCount }))
   }, [selectedFamilies, running])
 
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && running && sessionId) {
-        navigator.sendBeacon('/api/scan/cancel', JSON.stringify({ sessionId }))
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      if (running && sessionId) {
-        navigator.sendBeacon('/api/scan/cancel', JSON.stringify({ sessionId }))
-      }
-    }
-  }, [running, sessionId])
 
   const startScan = async () => {
     setRunning(true)
@@ -157,7 +141,7 @@ export default function RunsPage() {
 
           evtSource.onerror = () => {
             evtSource.close()
-            resolve()
+            resolve('error')
           }
         })
 
