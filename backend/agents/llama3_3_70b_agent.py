@@ -21,13 +21,13 @@ from agents._prompt_loader import build_system_prompt
 
 AGENT_NAME = "Meta Llama 3.3 (70B)"
 AGENT_DESCRIPTION = (
-    "Meta Llama 3.3 70B Instruct — open-weights SOTA model via NVIDIA NIM. "
+    "meta/llama-3.2-11b-vision-instruct — open-weights SOTA model via NVIDIA NIM. "
     "Hardened system prompt covers all 12 RedGuard scenarios and 8 attack families. "
     "Tools: web search, file read, calculator."
 )
 
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
-MODEL_NAME: str = "meta/llama-3.3-70b-instruct"
+MODEL_NAME: str = "meta/llama-3.2-11b-vision-instruct"
 
 # ── Tools (lazy-instantiated) ─────────────────────────────────────────────────
 
