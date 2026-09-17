@@ -91,7 +91,7 @@ def _get_agent():
             base_url="https://integrate.api.nvidia.com/v1",
             temperature=0,
             max_retries=1,
-            timeout=25.0,
+            timeout=60.0,  # 25s was insufficient for 5-step ReAct loops
         )
         _agent_instance = create_react_agent(
             model=llm,

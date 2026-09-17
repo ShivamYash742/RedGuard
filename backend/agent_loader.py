@@ -38,8 +38,16 @@ def _load_module(agent_id: str):
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load agent: {agent_id}")
     mod = importlib.util.module_from_spec(spec)
+    # Register in sys.modules BEFORE exec so circular imports resolve correctly,
+    # but evict on failure so the next call retries instead of returning a
+    # permanently broken/empty module (which caused the
+    # "has no attribute 'invoke'" error when ddgs wasn't installed).
     sys.modules[cache_key] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    try:
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    except Exception:
+        sys.modules.pop(cache_key, None)  # evict broken module from cache
+        raise
     return mod
 
 
