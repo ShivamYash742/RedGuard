@@ -145,9 +145,10 @@ export default function RunsPage() {
             resolve()
           })
 
-          evtSource.addEventListener('error', (e) => {
+          evtSource.addEventListener('error', (e: Event) => {
             try {
-              const payload = JSON.parse(e.data)
+              const msgEvent = e as MessageEvent
+              const payload = JSON.parse(msgEvent.data)
               console.error("Agent API error:", payload.message)
             } catch (err) {}
             evtSource.close()
