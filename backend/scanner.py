@@ -227,30 +227,36 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
             event_hash_source = f"{session_id}{prompt_hash}{timestamp.isoformat()}"
             event_hash = sha256_hex(event_hash_source)
 
-            await prisma.probeevent.create(
-                data={
-                    "session": {"connect": {"id": session_id}},
-                    "timestamp": timestamp,
-                    "category": target_category,
-                    "probeIndex": idx,
-                    "promptText": prompt,
-                    "promptHash": prompt_hash,
-                    "regexVerdict": regex_verdict,
-                    "regexRiskScore": float(regex_risk),
-                    "regexMetadata": json.dumps(insp_result["metadata"]),
-                    "matchedRule": matched_rule,
-                    "classifierAvailable": not clf_err,
-                    "classifierVerdict": clf_verdict,
-                    "classifierScore": float(clf_score) if clf_score is not None else None,
-                    "classifierResult": json.dumps(clf_res) if clf_res else None,
-                    "status": status,
-                    "mismatch": mismatch,
-                    "declaredIntent": declared_intent,
-                    "detectedIntent": detected_intent,
-                    "responseExcerpt": response_excerpt,
-                    "eventHash": event_hash
-                }
-            )
+            try:
+                await prisma.probeevent.create(
+                    data={
+                        "session": {"connect": {"id": session_id}},
+                        "timestamp": timestamp,
+                        "category": target_category,
+                        "probeIndex": idx,
+                        "promptText": prompt,
+                        "promptHash": prompt_hash,
+                        "regexVerdict": regex_verdict,
+                        "regexRiskScore": float(regex_risk),
+                        "regexMetadata": json.dumps(insp_result["metadata"]),
+                        "matchedRule": matched_rule,
+                        "classifierAvailable": not clf_err,
+                        "classifierVerdict": clf_verdict,
+                        "classifierScore": float(clf_score) if clf_score is not None else None,
+                        "classifierResult": json.dumps(clf_res) if clf_res else None,
+                        "status": status,
+                        "mismatch": mismatch,
+                        "declaredIntent": declared_intent,
+                        "detectedIntent": detected_intent,
+                        "responseExcerpt": response_excerpt,
+                        "eventHash": event_hash
+                    }
+                )
+            except Exception as exc:
+                if "RecordNotFoundError" in str(type(exc)):
+                    print(f"\\n[INFO] Session {session_id} was deleted mid-scan. Aborting generator.")
+                    break
+                raise
             
             # Yield result to keep connection alive and update UI
             yield {
