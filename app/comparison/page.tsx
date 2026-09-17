@@ -89,7 +89,7 @@ export default function ModelComparisonPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="border-b border-[var(--border-subtle)] pb-4">
-        <div className="flex items-center gap-2 text-xs font-semibold text-amber-500 uppercase tracking-wider mb-1">
+        <div className="flex items-center gap-2 text-xs font-semibold text-[var(--primary)] uppercase tracking-wider mb-1">
           <Award className="h-4 w-4 text-amber-500" /> Academic Benchmark Leaderboard
         </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Model Security Leaderboard & Comparison</h1>
@@ -134,14 +134,14 @@ export default function ModelComparisonPage() {
                     </span>
                   </td>
                   <td className="font-bold text-xs text-[var(--text-primary)]">{m.modelName}</td>
-                  <td className="font-mono text-xs font-extrabold text-emerald-600 dark:text-emerald-400">{m.overallScore}%</td>
+                  <td className="font-mono text-xs font-extrabold text-[var(--success)]">{m.overallScore}%</td>
                   <td className="font-mono text-xs text-[var(--text-secondary)]">{m.bds.toFixed(2)}</td>
-                  <td className="font-mono text-xs font-bold text-rose-600 dark:text-rose-400">{m.asr}%</td>
-                  <td className="font-mono text-xs text-blue-500 font-semibold">{m.securityScore}%</td>
-                  <td className="font-mono text-xs text-indigo-500">{m.utilityScore}%</td>
+                  <td className="font-mono text-xs font-bold text-[var(--danger)]">{m.asr}%</td>
+                  <td className="font-mono text-xs text-[var(--primary)] font-semibold">{m.securityScore}%</td>
+                  <td className="font-mono text-xs text-[var(--text-secondary)]">{m.utilityScore}%</td>
                   <td className="font-mono text-xs text-center">{m.memoryResistance}%</td>
                   <td className="font-mono text-xs text-center">{m.planningResistance}%</td>
-                  <td className="font-mono text-xs text-center font-semibold text-emerald-500">{m.toolResistance}%</td>
+                  <td className="font-mono text-xs text-center font-semibold text-[var(--success)]">{m.toolResistance}%</td>
                 </tr>
               ))}
             </tbody>

@@ -1,39 +1,42 @@
 "use client"
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Search, Moon, Sun, Play, Shield, Layers } from 'lucide-react'
+import { Search, Moon, Sun, Play, Shield, Layers, Menu } from 'lucide-react'
 
 interface HeaderProps {
   onOpenSearch: () => void
+  onOpenSidebar: () => void
 }
 
-export default function Header({ onOpenSearch }: HeaderProps) {
+export default function Header({ onOpenSearch, onOpenSidebar }: HeaderProps) {
   const [isDark, setIsDark] = useState(true)
   const [selectedModel, setSelectedModel] = useState('nemotron_3_ultra')
 
   useEffect(() => {
-    // Check document class
-    if (document.documentElement.classList.contains('dark')) {
-      setIsDark(true)
-    } else {
-      setIsDark(false)
-    }
+    const stored = localStorage.getItem('theme')
+    const dark = stored ? stored === 'dark' : document.documentElement.classList.contains('dark')
+    document.documentElement.classList.toggle('dark', dark)
+    setIsDark(dark)
   }, [])
 
   const toggleTheme = () => {
-    if (isDark) {
-      document.documentElement.classList.remove('dark')
-      setIsDark(false)
-    } else {
-      document.documentElement.classList.add('dark')
-      setIsDark(true)
-    }
+    const next = !isDark
+    document.documentElement.classList.toggle('dark', next)
+    localStorage.setItem('theme', next ? 'dark' : 'light')
+    setIsDark(next)
   }
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--surface-raised)]/95 px-6 backdrop-blur-md">
       {/* Left: Brand logo & version tags */}
       <div className="flex items-center gap-4">
+        <button
+          onClick={onOpenSidebar}
+          aria-label="Open navigation"
+          className="p-1.5 -ml-1.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--surface-base)] hover:text-[var(--text-primary)] transition-colors lg:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <Link href="/" className="flex items-center gap-2.5 text-sm font-bold tracking-tight text-[var(--text-primary)]">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/15 p-1 border border-[var(--primary)]/30">
             <img src="/shield.svg" alt="RedGuard Shield Logo" className="h-5 w-5" />

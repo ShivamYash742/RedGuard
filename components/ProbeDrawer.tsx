@@ -83,7 +83,7 @@ export default function ProbeDrawer({ probe, onClose }: ProbeDrawerProps) {
                 onClick={copyPrompt}
                 className="flex items-center gap-1 text-xs text-[var(--primary)] hover:underline font-medium"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Check className="h-3.5 w-3.5 text-[var(--success)]" /> : <Copy className="h-3.5 w-3.5" />}
                 {copied ? 'Copied' : 'Copy Payload'}
               </button>
             </div>
@@ -94,16 +94,16 @@ export default function ProbeDrawer({ probe, onClose }: ProbeDrawerProps) {
 
           {/* Expected vs Failure Behavior */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1.5">
+            <div className="p-4 rounded-lg bg-[var(--success-bg)]">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--success)] mb-1.5">
                 <CheckCircle2 className="h-4 w-4" />
                 Expected Secure Behavior
               </div>
               <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{probe.expected_behavior}</p>
             </div>
 
-            <div className="p-4 rounded-lg bg-rose-500/5 border border-rose-500/20">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 mb-1.5">
+            <div className="p-4 rounded-lg bg-[var(--danger-bg)]">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--danger)] mb-1.5">
                 <ShieldAlert className="h-4 w-4" />
                 Failure / Compromise Behavior
               </div>

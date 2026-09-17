@@ -1,5 +1,5 @@
 "use client"
-import React from 'react'
+import React, { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -14,10 +14,21 @@ import {
   BookOpen,
   Settings,
   Flame,
+  X,
 } from 'lucide-react'
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
+
+  useEffect(() => {
+    onClose()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -33,13 +44,31 @@ export default function Sidebar() {
   ]
 
   return (
-    <aside className="w-64 border-r border-[var(--border-subtle)] bg-[var(--surface-raised)] flex flex-col h-[calc(100vh-3.5rem)] sticky top-14 transition-all duration-200 lg:w-64 shrink-0">
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        className={`w-64 border-r border-[var(--border-subtle)] bg-[var(--surface-raised)] flex flex-col h-[calc(100vh-3.5rem)] shrink-0 fixed top-14 left-0 z-40 transition-transform duration-200 lg:sticky lg:translate-x-0 ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
       {/* Section Header */}
       <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
         <span>Navigation</span>
-        <span className="flex items-center gap-1 font-mono text-[10px] text-[var(--primary)] bg-[var(--primary)]/10 px-1.5 py-0.5 rounded">
-          <Flame className="h-3 w-3" /> Academic
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 font-mono text-[10px] text-[var(--primary)] bg-[var(--primary)]/10 px-1.5 py-0.5 rounded">
+            <Flame className="h-3 w-3" /> Academic
+          </span>
+          <button onClick={onClose} className="p-0.5 rounded hover:bg-[var(--surface-base)] hover:text-[var(--text-primary)] lg:hidden">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Nav List */}
@@ -76,6 +105,7 @@ export default function Sidebar() {
         <div className="font-semibold text-[var(--text-secondary)]">RedGuard Benchmark</div>
         <div className="mt-0.5 font-mono text-[10px]">Citation: redguard2024</div>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

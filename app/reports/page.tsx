@@ -114,7 +114,7 @@ function ReportsContent() {
                 onClick={downloadCSV}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--surface-raised)] border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-base)] transition-colors"
               >
-                <Download className="h-3.5 w-3.5 text-emerald-500" /> CSV
+                <Download className="h-3.5 w-3.5 text-[var(--success)]" /> CSV
               </button>
             </div>
           )}
@@ -128,7 +128,7 @@ function ReportsContent() {
       ) : (
         <div className="space-y-6">
           {/* Target Metadata Card */}
-          <div className="research-card border-l-4 border-l-[var(--primary)] space-y-3">
+          <div className="research-card space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
               <div>
                 <span className="text-[10px] font-semibold text-[var(--primary)] uppercase tracking-wider block">
@@ -170,31 +170,31 @@ function ReportsContent() {
 
           {/* 4 Executive Metric Scorecards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="research-card text-center border-t-2 border-t-emerald-500">
+            <div className="research-card text-center border-t-2 border-t-[var(--success)]">
               <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Security Resistance Score</span>
-              <div className="text-3xl font-black text-emerald-500 mt-2 font-mono">
+              <div className="text-3xl font-black text-[var(--success)] mt-2 font-mono">
                 {((overall?.block_rate || 0) * 100).toFixed(1)}%
               </div>
               <span className="text-xs text-[var(--text-secondary)] mt-1 block font-mono">{overall?.blocked} / {overall?.total_probes} Resisted</span>
             </div>
 
-            <div className="research-card text-center border-t-2 border-t-rose-500">
+            <div className="research-card text-center border-t-2 border-t-[var(--danger)]">
               <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Attack Success Rate (ASR)</span>
-              <div className="text-3xl font-black text-rose-500 mt-2 font-mono">
+              <div className="text-3xl font-black text-[var(--danger)] mt-2 font-mono">
                 {(((overall?.allowed || 0) / (overall?.total_probes || 1)) * 100).toFixed(1)}%
               </div>
               <span className="text-xs text-[var(--text-secondary)] mt-1 block font-mono">{overall?.allowed} Compromised</span>
             </div>
 
-            <div className="research-card text-center border-t-2 border-t-blue-500">
+            <div className="research-card text-center border-t-2 border-t-[var(--primary)]">
               <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Total Probes Fired</span>
               <div className="text-3xl font-black text-[var(--text-primary)] mt-2 font-mono">{overall?.total_probes || 0}</div>
               <span className="text-xs text-[var(--text-secondary)] mt-1 block">Across 8 Attack Families</span>
             </div>
 
-            <div className="research-card text-center border-t-2 border-t-amber-500">
+            <div className="research-card text-center border-t-2 border-t-[var(--warning)]">
               <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Intent Mismatches</span>
-              <div className="text-3xl font-black text-amber-500 mt-2 font-mono">{overall?.mismatches || 0}</div>
+              <div className="text-3xl font-black text-[var(--warning)] mt-2 font-mono">{overall?.mismatches || 0}</div>
               <span className="text-xs text-[var(--text-secondary)] mt-1 block">Classifier Contradictions</span>
             </div>
           </div>
@@ -222,9 +222,9 @@ function ReportsContent() {
                     <tr key={idx}>
                       <td className="font-bold capitalize text-xs text-[var(--text-primary)]">{cb.category.replace(/_/g, ' ')}</td>
                       <td className="font-mono text-xs text-center">{cb.probes}</td>
-                      <td className="font-mono text-xs text-center text-emerald-600 dark:text-emerald-400 font-semibold">{cb.blocked}</td>
-                      <td className="font-mono text-xs text-center text-rose-600 dark:text-rose-400 font-semibold">{cb.allowed}</td>
-                      <td className="font-mono text-xs text-center text-amber-500">{cb.mismatches}</td>
+                      <td className="font-mono text-xs text-center text-[var(--success)] font-semibold">{cb.blocked}</td>
+                      <td className="font-mono text-xs text-center text-[var(--danger)] font-semibold">{cb.allowed}</td>
+                      <td className="font-mono text-xs text-center text-[var(--warning)]">{cb.mismatches}</td>
                       <td className="font-mono text-xs text-center font-bold">{cb.highest_risk_score ? cb.highest_risk_score.toFixed(2) : '0.00'}</td>
                     </tr>
                   ))}

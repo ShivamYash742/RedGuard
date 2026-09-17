@@ -91,7 +91,7 @@ export default function HistoryPage() {
                     <td className="font-mono text-xs text-[var(--text-muted)]">v2.5.5</td>
                     <td className="font-mono text-xs text-[var(--text-muted)]">v2.5.5</td>
                     <td className="font-mono text-xs text-center">{s.totalProbes}</td>
-                    <td className="font-mono text-xs text-center text-emerald-600 dark:text-emerald-400 font-bold">{s.blocked}</td>
+                    <td className="font-mono text-xs text-center text-[var(--success)] font-bold">{s.blocked}</td>
                     <td className="font-mono text-xs text-center font-extrabold text-[var(--primary)]">{score}%</td>
                     <td>
                       <span className="badge-semantic badge-success">

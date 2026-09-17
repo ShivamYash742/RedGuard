@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Play, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, FileText, ArrowRight } from 'lucide-react'
+import { Play, RefreshCw, FileText, Shield, Bot, Wrench } from 'lucide-react'
 import { benchmarkDataService, normalizeFamily } from '@/lib/data-service'
 
 interface FamilyProgress {
@@ -175,7 +175,7 @@ export default function BenchmarkPage() {
           {isComplete && (
             <Link
               href={`/reports?session=${sessionId}`}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-emerald-600 text-white text-xs font-semibold shadow-xs hover:bg-emerald-700 transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[var(--success)] text-white text-xs font-semibold shadow-xs hover:opacity-90 transition-opacity"
             >
               <FileText className="h-4 w-4" /> View Benchmark Report
             </Link>
@@ -186,12 +186,12 @@ export default function BenchmarkPage() {
             disabled={running}
             className={`inline-flex items-center gap-2 px-5 py-2 rounded-md text-xs font-bold text-white shadow-xs transition-all ${
               running
-                ? 'bg-blue-400 cursor-not-allowed opacity-75'
+                ? 'bg-[var(--primary)]/60 cursor-not-allowed'
                 : 'bg-[var(--primary)] hover:bg-[var(--primary-hover)] cursor-pointer'
             }`}
           >
             {running ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
-            {running ? 'Evaluating Probes...' : '▶ Start Evaluation Run'}
+            {running ? 'Evaluating Probes...' : 'Start Evaluation Run'}
           </button>
         </div>
       </div>
@@ -213,7 +213,7 @@ export default function BenchmarkPage() {
                 : 'border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:border-[var(--border-default)]'
             }`}
           >
-            🛡️ NVIDIA NIM Guards
+            <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" /> NVIDIA NIM Guards</span>
             <span className="block text-[10px] font-normal text-[var(--text-muted)] mt-1">Nemotron, Llama-3.3, DeepSeek</span>
           </button>
 
@@ -225,7 +225,7 @@ export default function BenchmarkPage() {
                 : 'border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:border-[var(--border-default)]'
             }`}
           >
-            🦙 Local Ollama Runner
+            <span className="flex items-center gap-1.5"><Bot className="h-3.5 w-3.5" /> Local Ollama Runner</span>
             <span className="block text-[10px] font-normal text-[var(--text-muted)] mt-1">Local mistral / llama endpoints</span>
           </button>
 
@@ -237,7 +237,7 @@ export default function BenchmarkPage() {
                 : 'border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:border-[var(--border-default)]'
             }`}
           >
-            🛠️ Custom Template Agent
+            <span className="flex items-center gap-1.5"><Wrench className="h-3.5 w-3.5" /> Custom Template Agent</span>
             <span className="block text-[10px] font-normal text-[var(--text-muted)] mt-1">Python backend custom agent</span>
           </button>
         </div>
@@ -346,8 +346,8 @@ export default function BenchmarkPage() {
             )}
           </div>
           <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="text-emerald-600 dark:text-emerald-400 font-bold">Resisted: {progress.blocked}</span>
-            <span className="text-rose-600 dark:text-rose-400 font-bold">Compromised: {progress.allowed}</span>
+            <span className="text-[var(--success)] font-bold">Resisted: {progress.blocked}</span>
+            <span className="text-[var(--danger)] font-bold">Compromised: {progress.allowed}</span>
           </div>
         </div>
 
@@ -384,14 +384,14 @@ export default function BenchmarkPage() {
 
                 <div className="h-2 w-full bg-[var(--surface-base)] rounded-full overflow-hidden mb-3 border border-[var(--border-subtle)]">
                   <div
-                    className={`h-full transition-all duration-300 ${isFinished ? 'bg-emerald-500' : 'bg-[var(--primary)]'}`}
+                    className={`h-full transition-all duration-300 ${isFinished ? 'bg-[var(--success)]' : 'bg-[var(--primary)]'}`}
                     style={{ width: `${f.total > 0 ? (f.current / f.total) * 100 : 0}%` }}
                   />
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] font-mono">
-                  <span className="text-emerald-600 dark:text-emerald-400">Secure: {f.blocked}</span>
-                  <span className="text-rose-600 dark:text-rose-400">Compromised: {f.allowed}</span>
+                  <span className="text-[var(--success)]">Secure: {f.blocked}</span>
+                  <span className="text-[var(--danger)]">Compromised: {f.allowed}</span>
                 </div>
               </div>
             )

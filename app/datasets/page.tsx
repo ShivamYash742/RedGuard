@@ -47,19 +47,19 @@ export default function DatasetsPage() {
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Probe Schema Version</span>
-          <div className="text-2xl font-black font-mono text-indigo-500 mt-1">2.5.5</div>
+          <div className="text-2xl font-black font-mono text-[var(--text-primary)] mt-1">2.5.5</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Strict JSON Schema</span>
         </div>
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Built-in Probe Count</span>
-          <div className="text-2xl font-black font-mono text-emerald-500 mt-1">{allProbes.length}</div>
+          <div className="text-2xl font-black font-mono text-[var(--text-primary)] mt-1">{allProbes.length}</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Across 8 JSON files</span>
         </div>
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Validation Status</span>
-          <div className="text-2xl font-black font-mono text-emerald-600 mt-1">100%</div>
+          <div className="text-2xl font-black font-mono text-[var(--success)] mt-1">100%</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Zero validation errors</span>
         </div>
       </div>

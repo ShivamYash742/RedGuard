@@ -111,13 +111,13 @@ export default function Dashboard() {
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Models Evaluated</span>
-          <div className="text-2xl font-black text-indigo-500 mt-1.5 font-mono">5</div>
+          <div className="text-2xl font-black text-[var(--text-primary)] mt-1.5 font-mono">5</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">NIM & Local LLMs</span>
         </div>
 
-        <div className="research-card border-l-4 border-l-emerald-500">
+        <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Top Security Score</span>
-          <div className="text-2xl font-black text-emerald-500 mt-1.5 font-mono">{latestScore}%</div>
+          <div className="text-2xl font-black text-[var(--success)] mt-1.5 font-mono">{latestScore}%</div>
           <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Nemotron-3 Guard</span>
         </div>
       </div>
@@ -202,8 +202,8 @@ export default function Dashboard() {
                       <td className="font-mono text-xs font-medium text-[var(--text-primary)]">{s.sessionId}</td>
                       <td className="font-medium text-xs text-[var(--text-primary)]">{s.agentName}</td>
                       <td className="font-mono text-xs text-center">{s.totalProbes}</td>
-                      <td className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-semibold text-center">{s.blocked}</td>
-                      <td className="font-mono text-xs text-rose-600 dark:text-rose-400 font-semibold text-center">{s.allowed}</td>
+                      <td className="font-mono text-xs text-[var(--success)] font-semibold text-center">{s.blocked}</td>
+                      <td className="font-mono text-xs text-[var(--danger)] font-semibold text-center">{s.allowed}</td>
                       <td className="font-mono text-xs font-bold text-center">{rate}%</td>
                       <td>
                         <span className="badge-semantic badge-success">

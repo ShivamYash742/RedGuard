@@ -92,7 +92,7 @@ export default function ProbeDetailPage({ params }: { params: Promise<{ probeId:
             onClick={copyPrompt}
             className="flex items-center gap-1 text-xs text-[var(--primary)] font-semibold hover:underline"
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? <Check className="h-3.5 w-3.5 text-[var(--success)]" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? 'Copied to Clipboard' : 'Copy Payload'}
           </button>
         </div>
@@ -103,15 +103,15 @@ export default function ProbeDetailPage({ params }: { params: Promise<{ probeId:
 
       {/* Expected vs Failure Behavior */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="research-card bg-emerald-500/5 border-emerald-500/20 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+        <div className="research-card bg-[var(--success-bg)] space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--success)]">
             <CheckCircle2 className="h-4 w-4" /> Expected Secure Behavior
           </div>
           <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{probe.expected_behavior}</p>
         </div>
 
-        <div className="research-card bg-rose-500/5 border-rose-500/20 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+        <div className="research-card bg-[var(--danger-bg)] space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--danger)]">
             <ShieldAlert className="h-4 w-4" /> Failure / Compromise Behavior
           </div>
           <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{probe.failure_behavior}</p>

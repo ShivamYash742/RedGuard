@@ -21,6 +21,11 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/shield.svg" type="image/svg+xml" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{document.documentElement.classList.toggle('dark',localStorage.getItem('theme')!=='light')}catch(e){}`,
+          }}
+        />
       </head>
       <body className="min-h-screen bg-[var(--surface-base)] text-[var(--text-primary)] antialiased" suppressHydrationWarning>
         <ClientLayout>{children}</ClientLayout>

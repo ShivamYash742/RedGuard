@@ -99,7 +99,7 @@ export default function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModal
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-md ${item.type === 'probe' ? 'bg-blue-500/10 text-blue-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+                      <div className={`p-2 rounded-md ${item.type === 'probe' ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'bg-[var(--accent)]/10 text-[var(--accent)]'}`}>
                         {item.type === 'probe' ? <Shield className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                       </div>
                       <div>
