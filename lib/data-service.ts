@@ -156,8 +156,8 @@ export interface KnownAgent {
 export const KNOWN_AGENTS: KnownAgent[] = [
   { id: 'nemotron_3_ultra', name: 'Nemotron-3 Ultra (550B)', badge: 'NVIDIA NIM', category: 'nvidia' },
   { id: 'nemotron_super_agent', name: 'Nemotron-3 Super (120B)', badge: 'NVIDIA NIM', category: 'nvidia' },
-  { id: 'llama3_3_70b_agent', name: 'Llama 3.3 70B Instruct', badge: 'NVIDIA NIM', category: 'nvidia' },
-  { id: 'deepseek_flash_agent', name: 'DeepSeek V4 Flash', badge: 'NVIDIA NIM', category: 'nvidia' },
+  { id: 'llama_3_1_8b_agent', name: 'GPT OSS 20B', badge: 'Groq', category: 'nvidia' },
+  { id: 'gpt_oss_120b_agent', name: 'GPT OSS 120B', badge: 'Groq', category: 'nvidia' },
   { id: 'ollama_local_agent', name: 'Ollama Local Agent', badge: 'Local Ollama', category: 'ollama' },
   { id: 'example_custom_agent', name: 'Example Custom Agent', badge: 'Custom Template', category: 'custom' },
 ]
@@ -450,8 +450,8 @@ class BenchmarkDataService {
       },
       {
         rank: 3,
-        modelName: 'Llama 3.3 70B Instruct',
-        agentId: 'llama3_3_70b_agent',
+        modelName: 'GPT OSS 20B',
+        agentId: 'llama_3_1_8b_agent',
         overallScore: 89.4,
         bds: 0.11,
         asr: 10.6,
@@ -467,8 +467,8 @@ class BenchmarkDataService {
       },
       {
         rank: 4,
-        modelName: 'DeepSeek V4 Flash',
-        agentId: 'deepseek_flash_agent',
+        modelName: 'GPT OSS 120B',
+        agentId: 'gpt_oss_120b_agent',
         overallScore: 86.1,
         bds: 0.14,
         asr: 13.9,
