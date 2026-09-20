@@ -95,3 +95,68 @@ model CustomProbe {
 
   @@map("custom_probes")
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Mode B (Lab) — additive only. Does not touch any model above.
+// See MULTI_AGENT_LAB_PLAN.md §6.
+// ─────────────────────────────────────────────────────────────────────────
+
+model Experiment {
+  id              String   @id @default(cuid())
+  name            String
+  armKey          String   @map("arm_key")        // clean | attack | attack_validated | attack_permissive_tools
+  configJson      String   @map("config_json")    // topology, model, tool auth, validation_mode, repetitions
+  versionsJson    String   @map("versions_json")  // all *_VERSION constants, git commit
+  createdAt       DateTime @default(now()) @map("created_at")
+  runs            LabRun[]
+
+  @@map("lab_experiments")
+}
+
+model LabRun {
+  id              String     @id @default(cuid())
+  experiment      Experiment @relation(fields: [experimentId], references: [id])
+  experimentId    String     @map("experiment_id")
+  caseId          String     @map("case_id")          // RGM-003
+  mode            String                               // CLEAN | ATTACK
+  pairId          String     @map("pair_id")           // links CLEAN+ATTACK of one repetition
+  baselineRunId   String?    @map("baseline_run_id")   // set on ATTACK rows
+  repetitionIndex Int        @map("repetition_index")
+  seed            Int?
+  status          String                               // RUNNING | COMPLETED | FAILED | INVALID
+  invalidReason   String?    @map("invalid_reason")
+  startedAt       DateTime   @default(now()) @map("started_at")
+  finishedAt      DateTime?  @map("finished_at")
+  verdictJson     String?    @map("verdict_json")
+  metricsJson     String?    @map("metrics_json")
+  ceeBeforeJson   String?    @map("cee_before_json")
+  ceeAfterJson    String?    @map("cee_after_json")
+  events          TraceEvent[]
+
+  @@index([experimentId, caseId])
+  @@index([pairId])
+  @@map("lab_runs")
+}
+
+model TraceEvent {
+  id              String   @id @default(cuid())
+  run             LabRun   @relation(fields: [runId], references: [id])
+  runId           String   @map("run_id")
+  step            Int                                  // monotonic per run, gaps allowed
+  timestamp       DateTime @default(now())
+  agentId         String?  @map("agent_id")
+  category        String                               // system|agent|communication|tool|state|injection|evaluation
+  eventType       String   @map("event_type")
+  tool            String?
+  argumentsJson   String?  @map("arguments_json")
+  resultJson      String?  @map("result_json")
+  authorized      Boolean?
+  sourceEventId   String?  @map("source_event_id")     // primary parent
+  derivedFromJson String?  @map("derived_from_json")   // full input set (array of ids)
+  contentTag      String?  @map("content_tag")
+  risk            Float?
+  metadataJson    String?  @map("metadata_json")
+
+  @@index([runId, step])
+  @@map("lab_trace_events")
+}

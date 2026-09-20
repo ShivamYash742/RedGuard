@@ -1,0 +1,154 @@
+"""
+RedGuard Lab Persistence (Mode B)
+===================================
+
+Thin Prisma layer over the three additive tables — `Experiment`, `LabRun`,
+`TraceEvent` (`backend/prisma/schema.prisma`). Never reads or writes a
+Mode A table (Session, ProbeEvent, Report, PolicySnapshot, CustomProbe).
+
+Events are addressed within a run by their `core.lab.trace.TraceEvent.step`
+(a small int, monotonic per run) — `sourceEventId` / `derivedFromJson` store
+that step, not the DB row's own cuid `id`. This matches how the trace module,
+the tool gateway, and the eventual evidence bundle all reference events (see
+MULTI_AGENT_LAB_PLAN.md §6 note 1, §8).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+# Make core.lab importable from backend/ (same pattern as scanner.py / app.py).
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+from core.lab.trace import ContentTag, EventCategory, EventCollector, EventType, TraceEvent
+
+
+async def create_experiment(
+    db: Any,
+    *,
+    name: str,
+    arm_key: str,
+    config: Dict[str, Any],
+    versions: Dict[str, Any],
+):
+    return await db.experiment.create(
+        data={
+            "name": name,
+            "armKey": arm_key,
+            "configJson": json.dumps(config),
+            "versionsJson": json.dumps(versions),
+        }
+    )
+
+
+async def create_run(
+    db: Any,
+    *,
+    experiment_id: str,
+    case_id: str,
+    mode: str,
+    pair_id: str,
+    repetition_index: int,
+    baseline_run_id: Optional[str] = None,
+    seed: Optional[int] = None,
+):
+    return await db.labrun.create(
+        data={
+            "experimentId": experiment_id,
+            "caseId": case_id,
+            "mode": mode,
+            "pairId": pair_id,
+            "baselineRunId": baseline_run_id,
+            "repetitionIndex": repetition_index,
+            "seed": seed,
+            "status": "RUNNING",
+        }
+    )
+
+
+async def finish_run(
+    db: Any,
+    *,
+    run_id: str,
+    status: str,
+    verdict: Optional[Dict[str, Any]] = None,
+    metrics: Optional[Dict[str, Any]] = None,
+    invalid_reason: Optional[str] = None,
+    cee_before: Optional[Dict[str, Any]] = None,
+    cee_after: Optional[Dict[str, Any]] = None,
+):
+    return await db.labrun.update(
+        where={"id": run_id},
+        data={
+            "status": status,
+            "finishedAt": datetime.now(timezone.utc),
+            "verdictJson": json.dumps(verdict) if verdict is not None else None,
+            "metricsJson": json.dumps(metrics) if metrics is not None else None,
+            "invalidReason": invalid_reason,
+            "ceeBeforeJson": json.dumps(cee_before) if cee_before is not None else None,
+            "ceeAfterJson": json.dumps(cee_after) if cee_after is not None else None,
+        },
+    )
+
+
+def _event_to_row(run_id: str, event: TraceEvent) -> Dict[str, Any]:
+    return {
+        "runId": run_id,
+        "step": event.step,
+        "timestamp": event.timestamp,
+        "agentId": event.agent_id,
+        "category": event.category.value,
+        "eventType": event.event_type.value,
+        "tool": event.tool,
+        "argumentsJson": json.dumps(event.arguments) if event.arguments is not None else None,
+        "resultJson": json.dumps(event.result) if event.result is not None else None,
+        "authorized": event.authorized,
+        "sourceEventId": str(event.source_event_id) if event.source_event_id is not None else None,
+        "derivedFromJson": json.dumps(list(event.derived_from)),
+        "contentTag": event.content_tag.value if event.content_tag else None,
+        "risk": event.risk,
+        "metadataJson": json.dumps(event.metadata) if event.metadata is not None else None,
+    }
+
+
+async def persist_events(db: Any, *, run_id: str, collector: EventCollector) -> int:
+    """Insert every event currently in `collector` under `run_id`.
+
+    Returns the number of rows inserted. Safe to call once per run after the
+    run finishes — this module does not do incremental/streaming inserts.
+    """
+    events = collector.events
+    if not events:
+        return 0
+    await db.traceevent.create_many(data=[_event_to_row(run_id, e) for e in events])
+    return len(events)
+
+
+def _row_to_event(row: Any) -> TraceEvent:
+    return TraceEvent(
+        step=row.step,
+        category=EventCategory(row.category),
+        event_type=EventType(row.eventType),
+        timestamp=row.timestamp,
+        agent_id=row.agentId,
+        tool=row.tool,
+        arguments=json.loads(row.argumentsJson) if row.argumentsJson else None,
+        result=json.loads(row.resultJson) if row.resultJson else None,
+        authorized=row.authorized,
+        source_event_id=int(row.sourceEventId) if row.sourceEventId is not None else None,
+        derived_from=tuple(json.loads(row.derivedFromJson)) if row.derivedFromJson else (),
+        content_tag=ContentTag(row.contentTag) if row.contentTag else None,
+        risk=row.risk,
+        metadata=json.loads(row.metadataJson) if row.metadataJson else None,
+    )
+
+
+async def load_run_events(db: Any, run_id: str) -> List[TraceEvent]:
+    """Ordered replay of one run's trace, reconstructed as `TraceEvent`s."""
+    rows = await db.traceevent.find_many(where={"runId": run_id}, order={"step": "asc"})
+    return [_row_to_event(row) for row in rows]
