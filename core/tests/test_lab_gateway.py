@@ -125,6 +125,66 @@ class TestArtifactLinkage:
         assert artifact_event.step not in executed.derived_from
 
 
+class TestStateGateway:
+    """The kv path needs the same chokepoint property as the tool path:
+    `topology.state_auth` decides, the event records the decision, and an
+    unauthorized access never reaches the CEE.
+    """
+
+    def _gateway(self, cee, collector):
+        from core.lab.tools import StateGateway
+
+        return StateGateway(cee, linear_abc(), collector)
+
+    def test_authorized_write_applies_and_records(self):
+        cee = _fixture()
+        collector = EventCollector(run_id="r1")
+        gateway = self._gateway(cee, collector)
+
+        result = gateway.write("C", "approved", ["Acme"])  # C has read+write
+
+        assert result.ok
+        assert cee.get_kv("approved") == ["Acme"]
+        written = [e for e in collector.events if e.event_type == EventType.STATE_WRITE][0]
+        assert written.authorized is True
+
+    def test_unauthorized_write_is_recorded_and_not_applied(self):
+        cee = _fixture()
+        collector = EventCollector(run_id="r1")
+        gateway = self._gateway(cee, collector)
+        before = cee.snapshot()
+
+        result = gateway.write("A", "approved", ["Acme"])  # A has no state auth
+
+        assert not result.ok and result.error == "not_authorized"
+        assert cee.snapshot() == before
+        written = [e for e in collector.events if e.event_type == EventType.STATE_WRITE][0]
+        assert written.authorized is False
+
+    def test_read_requires_read_auth(self):
+        cee = _fixture()
+        cee.set_kv("approved", ["Acme"])
+        collector = EventCollector(run_id="r1")
+        gateway = self._gateway(cee, collector)
+
+        assert gateway.read("B", "approved").value == ["Acme"]  # B has read
+        assert not gateway.read("A", "approved").ok  # A has none
+
+        reads = [e for e in collector.events if e.event_type == EventType.STATE_READ]
+        assert [e.authorized for e in reads] == [True, False]
+
+    def test_write_then_read_by_a_later_agent(self):
+        """The memory-poisoning shape (RGM-006): one agent writes kv, a later
+        agent reads it back.
+        """
+        cee = _fixture()
+        collector = EventCollector(run_id="r1")
+        gateway = self._gateway(cee, collector)
+
+        gateway.write("C", "note", "poisoned")
+        assert gateway.read("B", "note").value == "poisoned"
+
+
 class TestScriptedP0Driver:
     """End-to-end, non-LLM: plants an artifact at A, walks it through the
     gateway and bus to B, has B attempt an unauthorized tool, then restores

@@ -66,6 +66,15 @@ TOOLS: Dict[str, Callable[[ControlledExecutionEnvironment, Dict[str, Any]], Tool
     "db_query": db_query,
 }
 
+#: How each tool is described to a model in its system prompt. Lives beside
+#: the implementations so a new tool cannot be added without also saying how
+#: it is called.
+TOOL_SIGNATURES: Dict[str, str] = {
+    "file_read": 'file_read — args: {"path": "<file path>"}',
+    "web_search": 'web_search — args: {"query": "<search text>"}',
+    "db_query": 'db_query — args: {"name": "<query name>", "params": {optional filters}}',
+}
+
 
 class ToolGateway:
     """The sole authorization chokepoint between an agent and the CEE.
@@ -191,3 +200,76 @@ class ToolGateway:
             content_tag=ContentTag.EXTERNAL_CONTENT,
         )
         return result
+
+
+class StateGateway:
+    """The same chokepoint property as `ToolGateway`, for the CEE's shared
+    `kv` state (the agents' "memory"): `topology.state_auth` decides, the
+    event records the decision, and an unauthorized call never reaches the
+    CEE.
+
+    §8 fixes the event vocabulary at `state_read` / `state_write` with no
+    `state_denied` type, so a refused access is the same event type carrying
+    `authorized=False` — which the evaluator's `authorized` predicate leaf
+    already matches on.
+    """
+
+    def __init__(
+        self,
+        cee: ControlledExecutionEnvironment,
+        topology: Topology,
+        collector: EventCollector,
+    ):
+        self.cee = cee
+        self.topology = topology
+        self.collector = collector
+
+    def read(self, agent_id: str, key: str, *, derived_from: Sequence[int] = ()) -> ToolResult:
+        if not self.topology.state_authorized(agent_id, "read"):
+            self.collector.emit(
+                EventCategory.STATE,
+                EventType.STATE_READ,
+                agent_id=agent_id,
+                arguments={"key": key},
+                authorized=False,
+                derived_from=tuple(derived_from),
+                metadata={"reason": "not_authorized"},
+            )
+            return ToolResult(ok=False, error="not_authorized")
+
+        value = self.cee.get_kv(key)
+        self.collector.emit(
+            EventCategory.STATE,
+            EventType.STATE_READ,
+            agent_id=agent_id,
+            arguments={"key": key},
+            result=value,
+            authorized=True,
+            derived_from=tuple(derived_from),
+            content_tag=ContentTag.EXTERNAL_CONTENT,
+        )
+        return ToolResult(ok=True, value=value)
+
+    def write(self, agent_id: str, key: str, value: Any, *, derived_from: Sequence[int] = ()) -> ToolResult:
+        if not self.topology.state_authorized(agent_id, "write"):
+            self.collector.emit(
+                EventCategory.STATE,
+                EventType.STATE_WRITE,
+                agent_id=agent_id,
+                arguments={"key": key, "value": value},
+                authorized=False,
+                derived_from=tuple(derived_from),
+                metadata={"reason": "not_authorized"},
+            )
+            return ToolResult(ok=False, error="not_authorized")
+
+        self.cee.set_kv(key, value)
+        self.collector.emit(
+            EventCategory.STATE,
+            EventType.STATE_WRITE,
+            agent_id=agent_id,
+            arguments={"key": key, "value": value},
+            authorized=True,
+            derived_from=tuple(derived_from),
+        )
+        return ToolResult(ok=True, value=value)
