@@ -1,0 +1,666 @@
+"""
+RedGuard Mode B HTTP surface
+==============================
+
+The eleven endpoints of §13 (MULTI_AGENT_LAB_PLAN.md), mounted under
+`/api/lab/*`. Mode A's router is untouched: this module adds endpoints, it
+does not modify or wrap any existing one, and it never reads or writes a
+Mode A table.
+
+Shape, mirroring `app.py` rather than inventing a second style:
+
+  POST /api/lab/experiments          create the row  (cf. POST /api/scan/start)
+  GET  /api/lab/experiments/{id}/run execute it, SSE (cf. GET /api/scan/family)
+
+Creation and execution are separate on purpose. An experiment is a durable
+record of *what was configured* — arm, cases, repetitions, model, versions,
+git commit — and it has to exist before any run does, so a crashed sweep is
+still attributable. Execution then streams.
+
+**The model is called here and only here.** Everything downstream of the
+trace — evaluation, metrics, verdicts — is deterministic, so every endpoint
+except `/run` is reproducible from the database alone.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import sys
+from typing import Any, Dict, List, Optional, Tuple
+
+from fastapi import APIRouter, HTTPException, Request
+from sse_starlette.sse import EventSourceResponse
+
+# Same parent-path insert as app.py / scanner.py — core/ is a sibling of backend/.
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from core.lab.cases import (
+    CASES_DIR,
+    FIXTURES_DIR,
+    TOPOLOGIES,
+    case_ids,
+    fixture_factory,
+    load_all_cases,
+    load_case,
+    load_fixture,
+)
+from core.lab.evaluator import evaluate, verdict_from_dict
+from core.lab.evidence import build_bundle
+from core.lab.metrics import (
+    asr,
+    containment_histogram,
+    containment_rate,
+    coverage,
+    cpr,
+    cpr_denominator,
+    depth,
+    icr,
+    mean_coverage,
+    partial_rate,
+    rate_ci,
+    soc,
+    tds_report,
+    trajectory_tokens,
+    RunOutcome,
+)
+from core.lab.model_client import ModelClient, ModelConfig
+from core.lab.repro import reproducibility_stamp
+from core.lab.runner import ATTACK, CLEAN, RunConfig, ScriptedClient, run_case
+from core.lab.tools import TOOLS
+
+import lab_store
+from database import get_db
+
+router = APIRouter(prefix="/api/lab", tags=["lab"])
+
+DEFAULT_REPS = 5
+MAX_REPS = 25
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Execution arms (§11)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Every arm runs CLEAN/ATTACK *pairs*, so the plan's ARM-CLEAN is not a
+# separate configuration — it is the clean half of every pair, and is
+# recovered by filtering on `mode`. What actually varies between arms is the
+# configuration of the system under test:
+
+ARMS: Dict[str, Dict[str, Any]] = {
+    "attack": {
+        "description": "Strict tool authorization, no validation instruction. ARM-CLEAN and ARM-ATTACK of §11 are the two halves of this arm's pairs.",
+        "validation_mode": "none",
+        "permissive_tools": False,
+    },
+    "attack_validated": {
+        "description": "ARM-VALIDATED — agents with an inbound edge are told to treat received content as data.",
+        "validation_mode": "agent_prompt",
+        "permissive_tools": False,
+    },
+    "attack_permissive_tools": {
+        "description": "ARM-PERMISSIVE — every agent may call every tool, so tool-layer containment cannot occur.",
+        "validation_mode": "none",
+        "permissive_tools": True,
+    },
+}
+
+
+def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int) -> RunConfig:
+    if arm not in ARMS:
+        raise HTTPException(status_code=400, detail=f"Unknown arm '{arm}'. Valid: {sorted(ARMS)}")
+    if topology_id not in TOPOLOGIES:
+        raise HTTPException(status_code=400, detail=f"Unknown topology '{topology_id}'. Valid: {sorted(TOPOLOGIES)}")
+
+    spec = ARMS[arm]
+    topology = TOPOLOGIES[topology_id]()
+    if spec["permissive_tools"]:
+        topology = topology.permissive(sorted(TOOLS))
+
+    return RunConfig(
+        topology=topology,
+        model=model_config,
+        max_steps=max_steps,
+        validation_mode=spec["validation_mode"],
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Catalog endpoints — all pure reads off disk, no database
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _case_summary(case: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": case["id"],
+        "title": case["title"],
+        "family": case["attack"]["family"],
+        "injection_point": case["attack"]["injection_point"],
+        "channel": case["attack"]["delivery"]["channel"],
+        "severity": case["severity"],
+        "topology_id": case["topology_id"],
+        "cee_fixture": case["cee_fixture"],
+        "objective": case["objective"]["description"],
+        "eligible_downstream_agents": case["eligibility"]["eligible_downstream_agents"],
+        "expected_path": case["eligibility"]["expected_path"],
+        "case_version": case["case_version"],
+    }
+
+
+@router.get("/cases")
+async def list_cases():
+    return {"cases": [_case_summary(c) for c in load_all_cases()], "total": len(case_ids())}
+
+
+@router.get("/cases/{case_id}")
+async def get_case(case_id: str):
+    try:
+        return load_case(case_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"No case '{case_id}'")
+    except ValueError as exc:  # fails validation — a 500 would hide why
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/topologies")
+async def list_topologies():
+    result = []
+    for topology_id, factory in TOPOLOGIES.items():
+        topology = factory()
+        result.append({
+            "id": topology.id,
+            "version": topology.version,
+            "agents": list(topology.agents),
+            "edges": [list(e) for e in topology.edges],
+            "tool_auth": {a: sorted(t) for a, t in topology.tool_auth.items()},
+            "state_auth": {a: sorted(m) for a, m in topology.state_auth.items()},
+        })
+    return {"topologies": result, "tools": sorted(TOOLS)}
+
+
+@router.get("/fixtures")
+async def list_fixtures():
+    fixtures = []
+    for path in sorted(FIXTURES_DIR.glob("*.json")):
+        cee = load_fixture(path.stem)
+        fixtures.append({
+            "fixture_id": path.stem,
+            "files": sorted(cee.files),
+            "web": sorted(cee.web),
+            "db": sorted(cee.db),
+            "kv": sorted(cee.kv),
+        })
+    return {"fixtures": fixtures}
+
+
+@router.get("/arms")
+async def list_arms():
+    """Not in §13's table, but the UI cannot offer an arm it has to hardcode."""
+    return {"arms": [{"key": k, **{kk: vv for kk, vv in v.items()}} for k, v in ARMS.items()]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Experiments
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/experiments")
+async def create_experiment(request: Request):
+    body = await request.json()
+
+    arm = body.get("arm", "attack")
+    selected = body.get("cases") or case_ids()
+    reps = int(body.get("repetitions", DEFAULT_REPS))
+    topology_id = body.get("topology_id", "linear_abc")
+    max_steps = int(body.get("max_steps", 6))
+
+    if not 1 <= reps <= MAX_REPS:
+        raise HTTPException(status_code=400, detail=f"repetitions must be between 1 and {MAX_REPS}")
+
+    unknown = [c for c in selected if c not in case_ids()]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown case ids: {unknown}")
+
+    try:
+        model_config = ModelConfig.from_env(
+            provider=body.get("provider", "ollama"), model=body.get("model"),
+        )
+    except ValueError as exc:  # unknown provider — the caller's mistake, not ours
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Validates arm and topology, and fails before anything is persisted.
+    config = _build_config(arm, model_config, topology_id, max_steps)
+
+    db = await get_db()
+    experiment = await lab_store.create_experiment(
+        db,
+        name=body.get("name") or f"{arm} × {len(selected)} cases × {reps}",
+        arm_key=arm,
+        config={
+            **config.to_dict(),
+            "arm": arm,
+            "cases": selected,
+            "repetitions": reps,
+            "scripted": bool(body.get("scripted", False)),
+        },
+        versions=reproducibility_stamp(),
+    )
+    return {
+        "experiment_id": experiment.id,
+        "arm": arm,
+        "cases": selected,
+        "repetitions": reps,
+        "total_runs": len(selected) * reps * 2,
+        "config": config.to_dict(),
+    }
+
+
+def _experiment_row(experiment: Any, runs: Optional[List[Any]] = None) -> Dict[str, Any]:
+    config = json.loads(experiment.configJson)
+    payload = {
+        "experiment_id": experiment.id,
+        "name": experiment.name,
+        "arm": experiment.armKey,
+        "config": config,
+        "versions": json.loads(experiment.versionsJson),
+        "created_at": experiment.createdAt.isoformat(),
+    }
+    if runs is not None:
+        payload["runs"] = [_run_summary(r) for r in runs]
+        payload["run_count"] = len(runs)
+        payload["status_counts"] = _count_by(runs, lambda r: r.status)
+    return payload
+
+
+def _count_by(rows: List[Any], key) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for row in rows:
+        counts[key(row)] = counts.get(key(row), 0) + 1
+    return counts
+
+
+def _run_summary(run: Any) -> Dict[str, Any]:
+    verdict = json.loads(run.verdictJson) if run.verdictJson else None
+    return {
+        "run_id": run.id,
+        "case_id": run.caseId,
+        "mode": run.mode,
+        "pair_id": run.pairId,
+        "baseline_run_id": run.baselineRunId,
+        "repetition_index": run.repetitionIndex,
+        "status": run.status,
+        "invalid_reason": run.invalidReason,
+        "started_at": run.startedAt.isoformat(),
+        "finished_at": run.finishedAt.isoformat() if run.finishedAt else None,
+        "verdict": verdict,
+        "metrics": json.loads(run.metricsJson) if run.metricsJson else None,
+    }
+
+
+@router.get("/experiments")
+async def list_experiments():
+    db = await get_db()
+    rows = await lab_store.list_experiments(db)
+    return {"experiments": [_experiment_row(r) for r in rows]}
+
+
+@router.get("/experiments/{experiment_id}")
+async def get_experiment(experiment_id: str):
+    db = await get_db()
+    experiment = await lab_store.get_experiment(db, experiment_id)
+    if experiment is None:
+        raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
+    runs = await lab_store.list_runs(db, experiment_id)
+    return _experiment_row(experiment, runs)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Execution — SSE
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _client_for(config_data: Dict[str, Any], model_config: ModelConfig, case: Dict[str, Any]) -> Any:
+    """`scripted: true` replays each case's own `clean_script` instead of
+    calling a model. It exists so the whole pipeline — plant, run, trace,
+    evaluate, persist, stream — can be exercised end to end with no network,
+    no budget and no nondeterminism, which is also how the API is tested.
+    """
+    if config_data.get("scripted"):
+        return ScriptedClient(case["clean_script"])
+    return ModelClient(model_config)
+
+
+async def _execute(experiment: Any):
+    """Run every (case × repetition) pair, yielding SSE payloads as it goes.
+
+    Persistence happens per run, not at the end: a sweep is thousands of
+    model calls, and a crash two hours in must not discard what already
+    completed.
+    """
+    db = await get_db()
+    config_data = json.loads(experiment.configJson)
+    selected = config_data["cases"]
+    reps = config_data["repetitions"]
+
+    model_config = ModelConfig.from_env(
+        provider=(config_data.get("model") or {}).get("provider", "ollama"),
+        model=(config_data.get("model") or {}).get("model"),
+    )
+    run_config = _build_config(
+        config_data["arm"], model_config,
+        config_data.get("topology_id", "linear_abc"),
+        config_data.get("max_steps", 6),
+    )
+
+    yield {"event": "experiment_started", "data": {
+        "experiment_id": experiment.id,
+        "arm": experiment.armKey,
+        "cases": selected,
+        "repetitions": reps,
+        "total_runs": len(selected) * reps * 2,
+    }}
+
+    completed = 0
+    for case_id in selected:
+        case = load_case(case_id)
+        cee_factory = fixture_factory(case)
+        client = _client_for(config_data, model_config, case)
+
+        for rep in range(1, reps + 1):
+            pair_id = f"{experiment.id}-{case_id}-r{rep}"
+            results: Dict[str, Any] = {}
+            rows: Dict[str, Any] = {}
+
+            for mode in (CLEAN, ATTACK):
+                row = await lab_store.create_run(
+                    db, experiment_id=experiment.id, case_id=case_id, mode=mode,
+                    pair_id=pair_id, repetition_index=rep,
+                )
+                rows[mode] = row
+                yield {"event": "run_started", "data": {
+                    "run_id": row.id, "case_id": case_id, "mode": mode,
+                    "pair_id": pair_id, "repetition_index": rep,
+                }}
+
+                result = await run_case(
+                    case, cee_factory(), run_config, client, mode=mode, run_id=row.id,
+                )
+                results[mode] = result
+
+                await lab_store.persist_events(db, run_id=row.id, collector=result.collector)
+                for event in result.collector.events:
+                    yield {"event": "trace_event", "data": {
+                        "run_id": row.id,
+                        "step": event.step,
+                        "category": event.category.value,
+                        "event_type": event.event_type.value,
+                        "agent_id": event.agent_id,
+                        "tool": event.tool,
+                        "authorized": event.authorized,
+                        "derived_from": list(event.derived_from),
+                        "content_tag": event.content_tag.value if event.content_tag else None,
+                    }}
+
+            clean, attack = results[CLEAN], results[ATTACK]
+            await lab_store.set_baseline(db, run_id=rows[ATTACK].id, baseline_run_id=rows[CLEAN].id)
+
+            verdict = evaluate(case, attack.collector, clean.collector)
+            # A harness failure invalidates the run rather than scoring it
+            # (§9): its trace is kept for debugging, but it must not enter a
+            # denominator as if it were a result.
+            harness_error = attack.harness_error or clean.harness_error
+            status = "FAILED" if harness_error else "COMPLETED"
+
+            for mode, result in ((CLEAN, clean), (ATTACK, attack)):
+                await lab_store.finish_run(
+                    db,
+                    run_id=rows[mode].id,
+                    status=status,
+                    verdict=verdict.to_dict() if mode == ATTACK else None,
+                    metrics=result.diagnostics(),
+                    invalid_reason=harness_error,
+                    cee_before=result.cee_before,
+                    cee_after=result.cee_after,
+                )
+
+            completed += 2
+            yield {"event": "run_verdict", "data": {
+                "run_id": rows[ATTACK].id,
+                "baseline_run_id": rows[CLEAN].id,
+                "case_id": case_id,
+                "pair_id": pair_id,
+                "repetition_index": rep,
+                "status": status,
+                "verdict": verdict.to_dict(),
+                "diagnostics": attack.diagnostics(),
+                "progress": {"completed": completed, "total": len(selected) * reps * 2},
+            }}
+
+    yield {"event": "experiment_complete", "data": {
+        "experiment_id": experiment.id, "runs_completed": completed,
+    }}
+
+
+@router.get("/experiments/{experiment_id}/run")
+async def run_experiment(experiment_id: str):
+    db = await get_db()
+    experiment = await lab_store.get_experiment(db, experiment_id)
+    if experiment is None:
+        raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
+
+    async def sse_generator():
+        try:
+            async for payload in _execute(experiment):
+                yield {"event": payload["event"], "data": json.dumps(payload["data"])}
+        except asyncio.CancelledError:  # client disconnected — stop quietly
+            raise
+        except Exception as exc:
+            # The stream is the only channel the caller has; an unreported
+            # failure is indistinguishable from a finished sweep.
+            yield {"event": "experiment_error", "data": json.dumps(
+                {"experiment_id": experiment_id, "error": f"{type(exc).__name__}: {exc}"}
+            )}
+
+    return EventSourceResponse(sse_generator())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Metrics (§10)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _outcomes(db: Any, experiment_id: str) -> Tuple[List[RunOutcome], List[Any]]:
+    """Attack runs with a stored verdict, rebuilt as `RunOutcome`s.
+
+    Recomputed from stored verdicts rather than by re-running the evaluator
+    over stored traces: both are deterministic, and this keeps the metrics
+    endpoint honest about what it is aggregating — the verdicts as recorded.
+    """
+    runs = await lab_store.list_runs(db, experiment_id)
+    outcomes = []
+    for run in runs:
+        if run.mode != ATTACK or not run.verdictJson:
+            continue
+        try:
+            case = load_case(run.caseId)
+        except FileNotFoundError:
+            continue
+        outcomes.append(RunOutcome(case=case, verdict=verdict_from_dict(json.loads(run.verdictJson))))
+    return outcomes, runs
+
+
+def _rate_with_ci(value: Optional[float], n: int) -> Dict[str, Any]:
+    if value is None or n == 0:
+        return {"value": None, "n": n, "ci": None}
+    low, high = rate_ci(round(value * n), n)
+    return {"value": value, "n": n, "ci": [low, high]}
+
+
+@router.get("/experiments/{experiment_id}/metrics")
+async def experiment_metrics(experiment_id: str):
+    db = await get_db()
+    experiment = await lab_store.get_experiment(db, experiment_id)
+    if experiment is None:
+        raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
+
+    outcomes, runs = await _outcomes(db, experiment_id)
+    n = len(outcomes)
+    denominator = cpr_denominator(outcomes)
+    cpr_value = cpr(outcomes)
+
+    per_case: Dict[str, Any] = {}
+    for case_id in sorted({o.case["id"] for o in outcomes}):
+        subset = [o for o in outcomes if o.case["id"] == case_id]
+        per_case[case_id] = {
+            "n": len(subset),
+            "icr": icr(subset),
+            "asr": asr(subset),
+            "partial_rate": partial_rate(subset),
+            "cpr": cpr(subset),
+            # SOC needs N>=3 valid repetitions and returns None below that,
+            # rather than a confident-looking 1.0 from a single run.
+            "soc": soc(subset),
+        }
+
+    return {
+        "experiment_id": experiment_id,
+        "arm": experiment.armKey,
+        "n_attack_runs": n,
+        "aggregate": {
+            "icr": _rate_with_ci(icr(outcomes), n),
+            "asr": _rate_with_ci(asr(outcomes), n),
+            "partial_rate": _rate_with_ci(partial_rate(outcomes), n),
+            # CPR is "n/a" when D is empty — never 0.0 (§10.3). An empty
+            # denominator means the question was never asked, not that
+            # propagation never happened.
+            "cpr": cpr_value,
+            "cpr_denominator_size": len(denominator),
+            "depth": depth(outcomes),
+            "coverage": coverage(outcomes),
+            "mean_coverage": mean_coverage(outcomes),
+            "containment_rate": containment_rate(outcomes),
+            "containment_histogram": [
+                {"agent": agent, "mechanism": mechanism, "count": count}
+                for (agent, mechanism), count in containment_histogram(outcomes).items()
+            ],
+        },
+        "per_case": per_case,
+        "trajectory_drift": await _drift(db, runs),
+        "run_counts": _count_by(runs, lambda r: r.status),
+    }
+
+
+async def _drift(db: Any, runs: List[Any]) -> Dict[str, Any]:
+    """TDS with its null, per §10.8.
+
+    `TDS_attack` alone is not publishable: two clean runs of the same case
+    already differ, so the clean-vs-clean null is the noise floor any claimed
+    drift has to clear. With fewer than two clean repetitions of a case there
+    is no null, and the effect is reported as `None` rather than as the raw
+    attack figure.
+    """
+    by_case: Dict[str, Dict[str, List[Any]]] = {}
+    for run in runs:
+        if run.status != "COMPLETED":
+            continue
+        by_case.setdefault(run.caseId, {CLEAN: [], ATTACK: []})[run.mode].append(run)
+
+    report: Dict[str, Any] = {}
+    for case_id, modes in sorted(by_case.items()):
+        attack_seqs = [
+            trajectory_tokens(await lab_store.load_run_events(db, r.id)) for r in modes[ATTACK]
+        ]
+        clean_seqs = [
+            trajectory_tokens(await lab_store.load_run_events(db, r.id)) for r in modes[CLEAN]
+        ]
+        result = tds_report(attack_seqs, clean_seqs)
+        report[case_id] = {
+            "attack": result.attack,
+            "null": result.null,
+            "effect": result.effect,
+            "interpretable": result.null is not None,
+            "clean_repetitions": len(clean_seqs),
+        }
+    return report
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/runs/{run_id}")
+async def get_run(run_id: str):
+    db = await get_db()
+    run = await lab_store.get_run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"No run '{run_id}'")
+
+    events = await lab_store.load_run_events(db, run_id)
+    return {
+        **_run_summary(run),
+        "experiment_id": run.experimentId,
+        "cee_before": json.loads(run.ceeBeforeJson) if run.ceeBeforeJson else None,
+        "cee_after": json.loads(run.ceeAfterJson) if run.ceeAfterJson else None,
+        "events": [
+            {
+                "step": e.step,
+                "category": e.category.value,
+                "event_type": e.event_type.value,
+                "timestamp": e.timestamp.isoformat(),
+                "agent_id": e.agent_id,
+                "tool": e.tool,
+                "arguments": e.arguments,
+                "result": e.result,
+                "authorized": e.authorized,
+                "source_event_id": e.source_event_id,
+                "derived_from": list(e.derived_from),
+                "content_tag": e.content_tag.value if e.content_tag else None,
+                "metadata": e.metadata,
+            }
+            for e in events
+        ],
+        "event_count": len(events),
+    }
+
+
+@router.get("/runs/{run_id}/evidence")
+async def get_run_evidence(run_id: str):
+    """The §12 bundle: self-contained enough to audit the verdict offline."""
+    db = await get_db()
+    run = await lab_store.get_run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"No run '{run_id}'")
+    if run.mode != ATTACK:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Run '{run_id}' is a {run.mode} run. Evidence bundles are assembled for "
+                   "ATTACK runs, which carry the verdict; its clean baseline is embedded inside.",
+        )
+    if not run.baselineRunId:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Run '{run_id}' has no paired clean baseline, so its verdict cannot be "
+                   "reconstructed — every definition in §9 is baseline-relative.",
+        )
+
+    experiment = await lab_store.get_experiment(db, run.experimentId)
+    attack_collector = await lab_store.load_run_collector(db, run_id)
+    clean_collector = await lab_store.load_run_collector(db, run.baselineRunId)
+
+    try:
+        case = load_case(run.caseId)
+    except FileNotFoundError:
+        raise HTTPException(status_code=409, detail=f"Case '{run.caseId}' no longer exists on disk")
+
+    return build_bundle(
+        case=case,
+        attack_collector=attack_collector,
+        clean_collector=clean_collector,
+        config=json.loads(experiment.configJson) if experiment else {},
+        run_id=run_id,
+        pair_id=run.pairId,
+        experiment_id=run.experimentId,
+        arm=experiment.armKey if experiment else "unknown",
+        cee_before=json.loads(run.ceeBeforeJson) if run.ceeBeforeJson else None,
+        cee_after=json.loads(run.ceeAfterJson) if run.ceeAfterJson else None,
+        diagnostics=json.loads(run.metricsJson) if run.metricsJson else None,
+    )

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from core.lab.evaluator import evaluate, predicate_matches, PredicateContext
+from core.lab.evaluator import evaluate, predicate_matches, verdict_from_dict, PredicateContext
 from core.lab.trace import EventCollector, TraceEvent
 
 GOLDEN_DIR = Path(__file__).parent / "golden_traces"
@@ -139,6 +139,82 @@ class TestPredicateMatcher:
             attack.events, ctx,
         )
         assert ok
+
+
+class TestContainmentIsConsistentWithDownstreamCompromise:
+    """Regression: the containment walk returned CONTAINED at the first
+    non-COMPROMISED downstream agent without looking further along the path.
+
+    An agent can fail the conjunctive INFLUENCED test for innocent reasons —
+    it did not echo the canary, and its action signature matches its own
+    clean-run behaviour — while still passing the attack along. Execution is
+    sequential, so a later agent can only have been reached *through* it. The
+    old walk then emitted "contained at B" beside "C compromised" in the same
+    verdict, which is the safe/unsafe collapse §9 exists to prevent.
+    """
+
+    def _propagated_with_invisible_middle(self):
+        case, attack, clean, _ = _load("propagated")
+        verdict = evaluate(case, attack, clean)
+        assert verdict.agent_impact["B"].level.value == "COMPROMISED"
+        assert verdict.agent_impact["C"].level.value == "COMPROMISED"
+        return case, attack, clean
+
+    def test_downstream_compromise_outranks_a_local_non_compromise(self):
+        case, attack, clean = self._propagated_with_invisible_middle()
+        # Make B invisible to the compromise predicate without touching what
+        # B actually did, exactly as a canary-free relay would look.
+        case = json.loads(json.dumps(case))
+        case["evaluation"]["compromise_predicate"]["B"] = {
+            "event_type": "state_write", "agent": "B", "arg_contains": "never-happens",
+        }
+        verdict = evaluate(case, attack, clean)
+
+        assert verdict.agent_impact["B"].level.value != "COMPROMISED"
+        assert verdict.agent_impact["C"].level.value == "COMPROMISED"
+        assert verdict.containment.status == "NOT_CONTAINED", (
+            "B cannot have contained an attack that demonstrably reached C"
+        )
+
+    def test_containment_still_reported_when_nothing_downstream_is_compromised(self):
+        """The fix must not swallow real containment."""
+        case, attack, clean, expected = _load("contained_at_b")
+        verdict = evaluate(case, attack, clean)
+        assert verdict.containment.status == "CONTAINED"
+        assert verdict.containment.agent == expected.get("containment_agent")
+
+    def test_architectural_containment_at_the_last_hop_survives(self):
+        """`contained_by_gateway`: C is INFLUENCED but not COMPROMISED and
+        nothing follows it, so the gateway's denial is still the answer."""
+        case, attack, clean, _ = _load("contained_by_gateway")
+        verdict = evaluate(case, attack, clean)
+        assert verdict.containment.status == "CONTAINED"
+        assert verdict.containment.agent == "C"
+        assert verdict.containment.mechanism == "tool_denied"
+
+
+class TestVerdictSerialization:
+    @pytest.mark.parametrize("name", SCENARIOS)
+    def test_round_trips_through_dict(self, name):
+        """Verdicts are persisted as JSON and reloaded to recompute
+        aggregate metrics, so the round trip has to be lossless — including
+        the evidence ids, without which a stored verdict is unauditable.
+        """
+        case, attack, clean, _ = _load(name)
+        verdict = evaluate(case, attack, clean)
+        restored = verdict_from_dict(json.loads(json.dumps(verdict.to_dict())))
+
+        assert restored.objective == verdict.objective
+        assert restored.containment == verdict.containment
+        assert restored.system_outcome == verdict.system_outcome
+        assert restored.agent_impact == verdict.agent_impact
+
+    def test_dict_form_is_json_serializable_and_keeps_evidence(self):
+        case, attack, clean, _ = _load("critical")
+        data = evaluate(case, attack, clean).to_dict()
+        json.dumps(data)
+        assert data["objective"]["evidence"]
+        assert data["containment"]["label"]
 
 
 if __name__ == "__main__":

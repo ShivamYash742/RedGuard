@@ -21,6 +21,7 @@ from inspector import Inspector
 from scanner import init_scan_session, run_family_scan, finalize_scan, _invoke_agent, _classify_probe
 from report_generator import generate_report_for_session
 from agent_loader import list_agents, get_agent, DEFAULT_AGENT_ID
+from lab_api import router as lab_router
 import httpx
 
 
@@ -40,6 +41,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mode B (multi-agent lab). Additive: every /api/lab/* route lives in
+# lab_api.py and no existing route is touched (MULTI_AGENT_LAB_PLAN.md §18).
+app.include_router(lab_router)
+
 
 @app.get("/api/health")
 async def health_check():

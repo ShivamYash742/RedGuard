@@ -152,3 +152,56 @@ async def load_run_events(db: Any, run_id: str) -> List[TraceEvent]:
     """Ordered replay of one run's trace, reconstructed as `TraceEvent`s."""
     rows = await db.traceevent.find_many(where={"runId": run_id}, order={"step": "asc"})
     return [_row_to_event(row) for row in rows]
+
+
+async def load_run_collector(db: Any, run_id: str) -> EventCollector:
+    """One run's trace as an `EventCollector`, ready for `evaluate()`.
+
+    This is what makes offline replay possible (§17): a stored run can be
+    re-evaluated without re-running it, so a metric or verdict change can be
+    checked against past results instead of silently rewriting them.
+    """
+    return EventCollector.from_events(run_id, await load_run_events(db, run_id))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reads for the API surface (§13)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def list_experiments(db: Any, limit: int = 50) -> List[Any]:
+    return await db.experiment.find_many(order={"createdAt": "desc"}, take=limit)
+
+
+async def get_experiment(db: Any, experiment_id: str) -> Optional[Any]:
+    return await db.experiment.find_unique(where={"id": experiment_id})
+
+
+async def list_runs(db: Any, experiment_id: str) -> List[Any]:
+    return await db.labrun.find_many(
+        where={"experimentId": experiment_id},
+        order=[{"repetitionIndex": "asc"}, {"startedAt": "asc"}],
+    )
+
+
+async def get_run(db: Any, run_id: str) -> Optional[Any]:
+    return await db.labrun.find_unique(where={"id": run_id})
+
+
+async def get_pair_runs(db: Any, pair_id: str) -> List[Any]:
+    """Both halves of one repetition. The ATTACK row's verdict is only
+    meaningful beside its CLEAN baseline, so they are fetched together.
+    """
+    return await db.labrun.find_many(where={"pairId": pair_id}, order={"mode": "asc"})
+
+
+async def set_baseline(db: Any, *, run_id: str, baseline_run_id: str) -> Any:
+    """Point an ATTACK run at the CLEAN run it is paired with.
+
+    Recorded on the row rather than inferred from `pairId` at read time
+    because every baseline-relative definition in §9 depends on it, and an
+    inferred pairing would silently pick a wrong baseline if a pair ever
+    ended up with more than two rows.
+    """
+    return await db.labrun.update(
+        where={"id": run_id}, data={"baselineRunId": baseline_run_id}
+    )

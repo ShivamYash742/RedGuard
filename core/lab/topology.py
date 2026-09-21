@@ -42,6 +42,29 @@ class Topology:
         """`mode` is 'read' or 'write'."""
         return mode in self.state_auth.get(agent, frozenset())
 
+    def permissive(self, tools: Sequence[str]) -> "Topology":
+        """A copy in which every agent may call every tool — the
+        ARM-PERMISSIVE configuration of §11.
+
+        Expressed as a different topology rather than a bypass flag inside
+        `ToolGateway`, so the gateway stays the single authorization
+        chokepoint and "permissive" remains a property of the *system under
+        test* that the experiment row records. A flag would make the
+        difference between arms invisible in the trace.
+
+        Edges and state auth are unchanged: the arm varies tool
+        authorization only.
+        """
+        every_tool = frozenset(tools)
+        return Topology(
+            id=f"{self.id}_permissive",
+            version=self.version,
+            agents=self.agents,
+            edges=self.edges,
+            tool_auth={agent: every_tool for agent in self.agents},
+            state_auth=dict(self.state_auth),
+        )
+
     def downstream(self, agent: str) -> FrozenSet[str]:
         """Transitive closure of agents reachable from `agent` via edges.
 

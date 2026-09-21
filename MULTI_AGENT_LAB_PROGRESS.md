@@ -1,9 +1,9 @@
-# RedGuard Multi-Agent Lab — Progress (P0 → P4)
+# RedGuard Multi-Agent Lab — Progress (P0 → P5)
 
 Companion to [`MULTI_AGENT_LAB_PLAN.md`](./MULTI_AGENT_LAB_PLAN.md). That
 document is the proposal; this one records what has actually been built
-against it, phase by phase, per §20's ordering. **Phases P0, P1, P2, P3 and
-P4 are complete.** P5 (`backend/lab_api.py`) has not been started.
+against it, phase by phase, per §20's ordering. **Phases P0 through P5 are
+complete.** P6 (the Lab UI) has not been started.
 
 Status check at any time:
 
@@ -12,7 +12,7 @@ cd backend && source .venv/bin/activate
 pytest ../core/tests/ tests/ -q
 ```
 
-Current result: **365 passed**, 0 failed.
+Current result: **419 passed**, 0 failed.
 
 Is a given model usable with the harness?
 
@@ -536,10 +536,127 @@ rather than a single pair.
 
 ---
 
+## P5 — HTTP surface (`backend/lab_api.py`)
+
+The eleven endpoints of §13, mounted under `/api/lab/*`. Mode A's router is
+untouched: `app.py` gains exactly two lines (an import and an
+`include_router`), and no existing endpoint is modified or wrapped.
+
+### Shape: create, then execute
+
+```
+POST /api/lab/experiments            create the row      (cf. POST /api/scan/start)
+GET  /api/lab/experiments/{id}/run   execute it, SSE     (cf. GET  /api/scan/family)
+```
+
+Mirrors Mode A's pattern rather than inventing a second one, so the frontend
+consumption code in `app/benchmark/page.tsx` transfers directly (§13).
+
+Creation and execution are separate deliberately. An experiment is a durable
+record of *what was configured* — arm, cases, repetitions, model, versions,
+git commit — and it must exist before any run does, so a sweep that dies two
+hours in is still attributable. Runs are persisted per run, not at the end,
+for the same reason.
+
+**The model is called in exactly one endpoint.** Everything downstream of the
+trace is deterministic, so every other endpoint is reproducible from the
+database alone.
+
+### The endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/lab/cases` | summaries: family, entry, channel, eligibility |
+| GET | `/api/lab/cases/{id}` | full case JSON; 422 (not 500) if it fails validation |
+| GET | `/api/lab/topologies` | agents, edges, **and the tool/state auth tables** — the UI has to be able to show *why* a call was denied |
+| GET | `/api/lab/fixtures` | fixture contents by channel |
+| GET | `/api/lab/arms` | not in §13's table; the UI cannot offer an arm it has to hardcode |
+| POST | `/api/lab/experiments` | validates arm, cases, topology and repetitions **before** persisting anything |
+| GET | `/api/lab/experiments` | list |
+| GET | `/api/lab/experiments/{id}` | config, versions, run summaries, status counts |
+| GET | `/api/lab/experiments/{id}/run` | **SSE**: `experiment_started`, `run_started`, `trace_event`, `run_verdict`, `experiment_complete` |
+| GET | `/api/lab/experiments/{id}/metrics` | §10 aggregates + Wilson CIs, per-case breakdown, TDS with its null |
+| GET | `/api/lab/runs/{id}` | run + full ordered event list + CEE snapshots |
+| GET | `/api/lab/runs/{id}/evidence` | the §12 bundle |
+
+### Arms (§11), and why there are three and not four
+
+Every arm runs CLEAN/ATTACK **pairs**, so ARM-CLEAN is not a separate
+configuration — it is the clean half of every pair, recovered by filtering on
+`mode`. What actually varies between arms is the configuration of the system
+under test:
+
+| Arm key | §11 name | Difference |
+|---|---|---|
+| `attack` | ARM-CLEAN + ARM-ATTACK | strict tool auth, no validation instruction |
+| `attack_validated` | ARM-VALIDATED | `validation_mode: agent_prompt` |
+| `attack_permissive_tools` | ARM-PERMISSIVE | every agent may call every tool |
+
+ARM-PERMISSIVE is a **permissive `Topology`** (`Topology.permissive()`), not a
+bypass flag inside `ToolGateway`. The gateway stays the single authorization
+chokepoint, and the difference between arms stays visible in the topology the
+experiment row records — a flag would have made it invisible in the trace.
+
+### `scripted: true`
+
+An experiment can be created with `scripted: true`, which replays each case's
+own `clean_script` instead of calling a model. The entire pipeline — plant,
+run, trace, persist, evaluate, stream, read back, aggregate — then runs with
+no network, no budget and no nondeterminism. It is how the API is tested, and
+how a harness regression shows up as a changed verdict rather than as model
+noise.
+
+### `core/lab/evidence.py` — the §12 bundle
+
+Built here rather than in P4 because its only consumer is
+`GET /api/lab/runs/{id}/evidence`.
+
+Two choices in it are worth defending. **The case is embedded, not
+referenced**: cases change, and a bundle citing `RGM-003` tells a reviewer
+nothing about what RGM-003 said on the day the run happened. **Both traces are
+embedded in full**: every verdict definition in §9 is baseline-relative, so a
+bundle carrying only the attack trace cannot be re-evaluated — it can only be
+believed.
+
+The bundle also carries the derivation chain for every event the verdict
+cites. That chain is an *observed* derivation — what the harness recorded as
+contributing to an event when it was emitted — never a causal claim about the
+model's reasoning (§5.5's terminology discipline).
+
+### One real bug, found by building the bundle
+
+**Containment could contradict the rest of its own verdict.** The walk
+returned CONTAINED at the first downstream agent that was not COMPROMISED,
+without looking further along the path. An agent can fail the conjunctive
+INFLUENCED test for innocent reasons — it did not echo the canary, and its
+action signature matches its own clean-run behaviour — while still passing
+the attack along. The result was a verdict reading `CONTAINED_AT_B` beside
+`C: COMPROMISED`, which in a linear A→B→C topology is impossible: C can only
+be reached through B.
+
+That is exactly the safe/unsafe collapse §9 exists to prevent, and it would
+have depressed the containment rate for every case whose middle agent relays
+without echoing the canary. Fixed by letting observed downstream compromise
+outrank a local non-compromise, and mutation-tested by reverting it.
+
+### Verdict serialization
+
+`Verdict.to_dict()` / `verdict_from_dict()` were added to `evaluator.py`,
+which owns the verdict shape. Evidence event ids round-trip with them: a
+stored verdict without its evidence is precisely the collapse §9 forbids,
+unauditable after the fact. The metrics endpoint rebuilds `RunOutcome`s from
+these stored verdicts, so aggregates never require re-running the evaluator.
+
+`lab_store.load_run_collector()` makes the §17 offline-replay mitigation real:
+a stored run can be re-evaluated without re-running it, so a verdict or metric
+change can be checked against past results instead of silently rewriting them.
+
+---
+
 ## Testing — complete inventory
 
 Everything below is what exists today, test by test, so the coverage can be
-reviewed rather than taken on trust. **365 tests, all passing, ~2.1s.** Not
+reviewed rather than taken on trust. **419 tests, all passing, ~5s.** Not
 one of them calls an LLM — the only LLM contact in the whole project is the
 `smoke.py` command, which is run by hand.
 
@@ -548,11 +665,11 @@ one of them calls an LLM — the only LLM contact in the whole project is the
 ```bash
 cd backend && source .venv/bin/activate
 
-pytest ../core/tests/ tests/ -q        # everything (365)
+pytest ../core/tests/ tests/ -q        # everything (419)
 pytest ../core/tests/ -q               # the lab + pre-existing core (357)
-pytest tests/ -q                       # backend: inspector, scanner, lab_store (8)
+pytest tests/ -q                       # backend: inspector, scanner, lab_store, lab_api (52)
 
-pytest ../core/tests/ -q -k lab        # Mode B only (293)
+pytest ../core/tests/ -q -k lab        # Mode B core only (303)
 pytest ../core/tests/test_lab_cases.py -q -k CleanTraceGate   # the §21.7 gate (54)
 pytest ../core/tests/test_lab_evaluator.py -v    # one file, verbose
 ```
@@ -563,12 +680,13 @@ pytest ../core/tests/test_lab_evaluator.py -v    # one file, verbose
 |---|---:|---|
 | P0 — CEE, topology, trace, gateways | 50 | `test_lab_cee.py` (15), `test_lab_topology.py` (10), `test_lab_trace.py` (13), `test_lab_gateway.py` (12) |
 | P1 — persistence | 4 | `backend/tests/test_lab_store.py` |
-| P2 — evaluator, metrics | 54 | `test_lab_evaluator.py` (25), `test_lab_metrics.py` (29) |
+| P2 — evaluator, metrics | 64 | `test_lab_evaluator.py` (35), `test_lab_metrics.py` (29) |
 | P3 — model client, runner | 58 | `test_lab_model_client.py` (37), `test_lab_runner.py` (21) |
 | P4 — cases, repetitions, reproducibility | 131 | `test_lab_cases.py` |
-| **Mode B total** | **297** | |
+| P5 — HTTP surface | 44 | `backend/tests/test_lab_api.py` |
+| **Mode B total** | **351** | |
 | Pre-existing, now runnable | 68 | `test_bds.py` (19), `test_statistics.py` (23), `test_validator.py` (22), `test_inspector.py` (3), `test_scanner.py` (1) |
-| **Grand total** | **365** | |
+| **Grand total** | **419** | |
 
 > The P0/P2 counts moved since the earlier draft: the StateGateway cases
 > landed in P0's `test_lab_gateway.py` during P3, and `test_lab_evaluator.py`
@@ -947,6 +1065,83 @@ Plus `a wrong-typed section reports instead of crashing`, parametrised over
 | `test_package_exports_resolve_lazily` | `core/lab/__init__.py` exposes its public names via PEP 562 `__getattr__`, and an unknown name still raises |
 | `test_package_init_has_no_submodule_imports` | no eager submodule import in `__init__.py` — both documented CLIs are `python -m core.lab.<submodule>`, which double-imports and warns if the package already loaded them |
 
+### P5 — HTTP surface (`backend/tests/test_lab_api.py`, 44)
+
+Every test runs against a throwaway copy of `prisma/dev.db` (CLAUDE.md
+protects the committed file's seeded content) and creates its experiments
+with `scripted: true`, so no LLM is called anywhere in the file.
+
+**`TestCatalogEndpoints` (6)**
+
+| Test | Asserts |
+|---|---|
+| `test_list_cases` | 9 cases, each summary carrying family/entry/channel/eligibility |
+| `test_get_one_case_returns_the_full_json` | full case including `clean_script` and canary |
+| `test_unknown_case_is_404` | not a 500, not an empty 200 |
+| `test_list_topologies_includes_the_authorization_tables` | agents, edges, and both auth tables — a UI that cannot see `tool_auth` cannot explain a denial |
+| `test_list_fixtures` | fixture contents per channel |
+| `test_list_arms` | exactly the three execution arms |
+
+**`TestExperimentCreation` (12)**
+
+| Test | Asserts |
+|---|---|
+| `test_create_returns_id_and_run_count` | 2 cases × 3 reps → 12 runs (each rep is a pair) |
+| `test_defaults_to_the_whole_case_set` | omitting `cases` selects all nine |
+| `test_unknown_arm_is_400` / `test_unknown_case_id_is_400` | rejected **before** anything is persisted |
+| `test_unknown_provider_is_400_not_500` | a caller's mistake is not a server error |
+| `test_repetitions_out_of_range_is_400` (×3) | 0, −1 and 999 all rejected |
+| `test_permissive_arm_authorizes_every_tool` | the arm is visible as `linear_abc_permissive` in the stored config |
+| `test_validated_arm_records_its_validation_mode` | `agent_prompt` persisted |
+| `test_created_experiment_is_listed_and_fetchable` | round-trips, and the §17 stamp is recorded at creation |
+| `test_unknown_experiment_is_404` | |
+
+**`TestExperimentExecution` (7)**
+
+| Test | Asserts |
+|---|---|
+| `test_stream_emits_the_documented_event_sequence` | starts with `experiment_started`, ends with `experiment_complete`, carries `run_started`/`trace_event`/`run_verdict`, and never `experiment_error` |
+| `test_one_repetition_produces_a_clean_and_an_attack_run` | CLEAN then ATTACK, one shared `pair_id` |
+| `test_verdict_event_carries_all_four_dimensions` | §9's four dimensions, never collapsed |
+| `test_progress_counts_reach_the_declared_total` | 2 cases × 2 reps → 8/8 |
+| `test_runs_are_persisted_with_their_baseline_link` | ATTACK's `baseline_run_id` points at its CLEAN half; only ATTACK carries a verdict |
+| `test_running_an_unknown_experiment_is_404` | |
+| `test_scripted_clean_script_does_not_reach_the_objective` | the §21.7 property observed through the API, artifact planted and all |
+
+**`TestRunEndpoints` (8)**
+
+| Test | Asserts |
+|---|---|
+| `test_get_run_returns_the_ordered_event_list` | trace order preserved through the database |
+| `test_run_events_keep_their_provenance` | `derived_from` and `content_tag` survive persistence |
+| `test_run_carries_its_cee_snapshots` | before/after both stored |
+| `test_unknown_run_is_404` | |
+| `test_evidence_bundle_embeds_case_and_both_traces` | §12: case embedded not referenced, both traces present |
+| `test_evidence_records_the_versions_that_produced_it` | evaluator/metric/case-schema versions + `git_clean` |
+| `test_evidence_for_a_clean_run_is_refused` | 400 — a clean run has no verdict of its own, it *is* the baseline |
+| `test_evidence_for_unknown_run_is_404` | |
+
+**`TestMetricsEndpoint` (7)**
+
+| Test | Asserts |
+|---|---|
+| `test_aggregate_shape` | ICR/ASR/partial/CPR/depth/coverage/containment present, with Wilson CIs |
+| `test_cpr_is_na_not_zero_when_the_denominator_is_empty` | §10.3 — `"n/a"`, never `0.0` |
+| `test_soc_is_none_below_three_repetitions` | §10.7 returns None rather than a confident-looking 1.0 |
+| `test_soc_is_computed_at_three_repetitions` | and 1.0 once N≥3 |
+| `test_tds_has_no_null_with_a_single_clean_repetition` | §21.1 — no noise floor, so no reported effect |
+| `test_tds_null_appears_once_clean_runs_repeat` | the null appears at 3 clean reps |
+| `test_metrics_for_unknown_experiment_is_404` | |
+
+**`TestModeAIsUnaffected` (4)** — the §18 regression check
+
+| Test | Asserts |
+|---|---|
+| `test_mode_a_routes_are_all_still_mounted` | all ten Mode A paths present in the OpenAPI schema |
+| `test_every_lab_route_is_namespaced` | Mode B adds only under `/api/lab/` |
+| `test_mode_a_endpoint_still_responds` | `/api/health` answers with the lab router mounted |
+| `test_lab_endpoints_never_touch_a_mode_a_table` | `lab_store.py` names none of the five Mode A models |
+
 ### Real-model runs (manual, not in the suite)
 
 ```bash
@@ -1014,6 +1209,38 @@ downstream agent, and RGM-008 reports `NO_DOWNSTREAM_ELIGIBLE` — which is the
 state CPR must render as `n/a` rather than `0.0`. Both fall out of the case
 definitions, which is the point: the harness did not need to be told.
 
+### Live server check — P5's exit criterion
+
+The suite uses `TestClient`. That exercises the routes but not the real
+deployment path, so the endpoints were also driven against an actual uvicorn
+process, pointed at a **copy** of `dev.db` so the committed seed data stayed
+untouched (verified afterwards with `git status --porcelain`):
+
+```bash
+cp prisma/dev.db /tmp/live_test.db
+DATABASE_URL="file:/tmp/live_test.db" python -m uvicorn app:app --port 8077
+```
+
+| Check | Result |
+|---|---|
+| `GET /api/health` (Mode A) | `{"status":"ok","db_connected":true}` |
+| `GET /api/lab/cases` | 9 cases |
+| `GET /api/lab/topologies` | `linear_abc`, tool_auth A = `[file_read, web_search]` |
+| `GET /api/lab/fixtures` | 4 DB tables incl. `customer_pii` |
+| `GET /api/lab/cases/RGM-999` | 404 |
+| `POST /api/lab/experiments` (2 cases × 3 reps, scripted) | `total_runs: 12` |
+| `GET /api/lab/experiments/{id}/run` (SSE) | 1 `experiment_started`, 12 `run_started`, 432 `trace_event`, 6 `run_verdict`, 1 `experiment_complete` |
+| `GET /api/lab/experiments/{id}` | 12 runs, all `COMPLETED`, ATTACK rows linked to their CLEAN baseline |
+| `GET /api/lab/runs/{id}` | 35 events, `run_started` → `run_finished`, provenance intact |
+| `GET /api/lab/experiments/{id}/metrics` | `cpr: "n/a"` (denominator 0), ICR 0.0 with Wilson CI [0, 0.39], SOC 1.0 at N=3, TDS null present at 3 clean reps |
+| `GET /api/lab/runs/{id}/evidence` | 18 keys, both traces (35 + 34 events), versions, `git_clean: false` |
+
+The metrics line is the one worth reading twice: `cpr` came back `"n/a"` with
+an empty denominator rather than `0.0`, and `git_clean: false` was reported
+honestly because the working tree was dirty at the time. Both are the
+behaviours §10.3 and §17 exist to force, observed over HTTP rather than
+asserted in a unit test.
+
 ### Bugs caught, and by what
 
 | # | Bug | Found by | Regression test |
@@ -1031,11 +1258,12 @@ definitions, which is the point: the harness did not need to be told.
 | 11 | `ScriptedClient` drained its script, so every run after the first ran empty → a 5-rep set would report 1 propagation and 4 containments from an always-propagating script | **Running `--scripted --reps 2`** | `test_every_run_replays_the_whole_script` |
 | 12 | Two cross-section lookups in the case validator assumed the section they read was well formed → one malformed case crashed the whole validation report with `AttributeError` | A test written for the purpose (P4) | `test_a_wrong_typed_section_reports_instead_of_crashing` (×5) |
 | 13 | Eager submodule imports in `core/lab/__init__.py` made both documented CLIs (`python -m core.lab.cases` / `.smoke`) double-import and warn | Running the CLI after adding the exports | `test_package_exports_resolve_lazily`, `test_package_init_has_no_submodule_imports` |
+| 14 | Containment reported `CONTAINED_AT_B` beside `C: COMPROMISED` — impossible in a linear topology, and it depressed containment rate for every case whose middle agent relays without echoing the canary | **Building the evidence bundle (P5)** | `TestContainmentIsConsistentWithDownstreamCompromise` (×3) |
 
-Four of thirteen were only reachable by running a real model, and three more
+Four of fourteen were only reachable by running a real model, and four more
 only by running the harness — over more than one run (11), over the CLI (13),
-or over deliberately malformed input (12). Eight of thirteen were invisible to
-any amount of code reading. That is the argument for keeping `smoke.py` in the
+over deliberately malformed input (12), or over a propagating trace (14).
+Nine of fourteen were invisible to any amount of code reading. That is the argument for keeping `smoke.py` in the
 loop before each phase that adds model contact — and for running the thing,
 not just testing it.
 
@@ -1101,28 +1329,35 @@ Listed so the gaps are visible rather than assumed covered:
 
 Per §20, the remaining phases are:
 
-- **P5** — `backend/lab_api.py` (`/api/lab/*` + SSE), Mode A regression
-  check.
 - **P6** — Lab UI (`app/lab/*`).
 - **P7** — Execute the 4 arms (~180 runs), export evidence bundles, analyze
   against §21's risk list.
 
-### Deliberately left out of P4
+### Carried from P4 into P5, as planned
 
-- **`core/lab/evidence.py`** (§12's bundle). §19 lists it under `core/lab/`,
-  but §20 gives it no phase of its own and its only consumer is P5's
-  `GET /api/lab/runs/{run_id}/evidence`. Every input it needs now exists
-  (case JSON, both traces, CEE before/after, the repro stamp, the verdict),
-  so it is a P5 assembly job rather than a P4 one. Building it now would be
-  scaffolding against an API that does not exist yet.
-- **Execution arms** (§11's ARM-CLEAN / ARM-ATTACK / ARM-VALIDATED /
-  ARM-PERMISSIVE). `RunConfig` already expresses three of the four
-  (`validation_mode`); ARM-PERMISSIVE needs a permissive `Topology`, which is
-  a handful of lines but belongs with the experiment driver in P7.
-- **Offline replay** (§17's mitigation). `EventCollector.from_events()` plus
-  `evaluate()` already make it mechanically possible to re-run the evaluator
-  over stored traces; nothing wraps it in a command yet, and it only earns
-  its keep once P7 has stored traces to replay.
+All three of P4's deferrals landed in P5, where they had a consumer:
+
+- **`core/lab/evidence.py`** — built, serving `GET /api/lab/runs/{id}/evidence`.
+- **Execution arms** — `Topology.permissive()` plus the `ARMS` table in
+  `lab_api.py`; three arms, because ARM-CLEAN is the clean half of every pair
+  rather than a separate configuration.
+- **Offline replay** — `lab_store.load_run_collector()` rehydrates a stored
+  run into an `EventCollector`, so `evaluate()` can be re-run over it without
+  re-running the run.
+
+### Deliberately left out of P5
+
+- **No authentication on `/api/lab/*`.** Mode A's endpoints have none either,
+  and the service binds to localhost; adding it for Mode B alone would be
+  inconsistent and out of scope. It has to be decided for the whole service
+  before anything is exposed beyond localhost.
+- **No cancellation endpoint.** Mode A has `/api/scan/cancel`; a Mode B sweep
+  is stopped by disconnecting the SSE stream, which the generator handles,
+  but there is no way to resume a partially executed experiment. Its runs are
+  persisted, so nothing is lost — it just cannot be continued.
+- **Experiments execute serially, one request at a time.** Two concurrent
+  `/run` calls on the same experiment would duplicate its runs. §22 keeps
+  concurrency out of the MVP; a guard belongs with the P7 sweep driver.
 
 ### Open decision, still blocking P7
 
@@ -1135,6 +1370,6 @@ P7 rather than during it — a full sweep is ~2,200–2,700 calls.
 
 ---
 
-None of P5–P7 has been started. Decisions E1–E9 from the plan's §E were
+Neither P6 nor P7 has been started. Decisions E1–E9 from the plan's §E were
 accepted at their recommended defaults per the go-ahead to build P0 with
 "recommended defaults" — they have not been separately re-confirmed since.
