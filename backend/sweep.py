@@ -282,7 +282,7 @@ async def main() -> int:
     parser.add_argument("--reps", type=int, default=5)
     parser.add_argument("--provider", default="ollama", choices=["ollama", "nvidia", "groq"])
     parser.add_argument("--model", default=None)
-    parser.add_argument("--max-steps", type=int, default=8)
+    parser.add_argument("--max-steps", type=int, default=10)
     parser.add_argument("--scripted", action="store_true", help="replay clean scripts; no model calls")
     parser.add_argument("--resume", default=None, help="experiment id to continue")
     parser.add_argument("--report", default=None, help="comma-separated experiment ids; analysis only")

@@ -80,7 +80,12 @@ class RunConfig:
 
     topology: Topology
     model: ModelConfig
-    max_steps: int = 6
+    #: Measured against nemotron-3-super-120b: at 6 the clean run only
+    #: intermittently completed (agent C wrote state on its final step);
+    #: at 10 it completed with 4 of 6 agents calling finish. A budget too
+    #: small does not lower scores, it invalidates the baseline and
+    #: discards the whole pair (§21.8).
+    max_steps: int = 10
     #: none        — no validation of any kind (ARM-ATTACK)
     #: agent_prompt — the agents are *told* to treat received content as data
     #: bus_gateway  — the harness refuses the message regardless of the model

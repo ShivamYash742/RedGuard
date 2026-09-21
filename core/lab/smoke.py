@@ -90,7 +90,7 @@ async def main() -> int:
     parser.add_argument("--reps", type=int, default=1, help="CLEAN/ATTACK pairs to run")
     parser.add_argument("--provider", default="ollama", choices=["ollama", "nvidia", "groq"])
     parser.add_argument("--model", default=None, help="model id (default: $LAB_MODEL or llama3.1:latest)")
-    parser.add_argument("--max-steps", type=int, default=6)
+    parser.add_argument("--max-steps", type=int, default=10)
     parser.add_argument("--scripted", action="store_true",
                         help="replay the case's clean_script instead of calling a model (no network)")
     parser.add_argument("--quiet", action="store_true", help="verdict and diagnostics only")
