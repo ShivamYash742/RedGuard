@@ -193,7 +193,15 @@ class ModelConfig:
     base_url: str = "http://localhost:11434/v1"
     api_key: str = ""
     temperature: float = 0.0
-    max_tokens: int = 512
+    #: Generous because reasoning models spend most of it thinking before
+    #: they emit the action. nemotron-3-super-120b produced ~700 tokens of
+    #: reasoning per turn; at the previous 512 it was cut off mid-thought and
+    #: the truncated reasoning came back as `content`, which parses as a
+    #: failure. That made the §21.9 suitability gate measure *this setting*
+    #: rather than the model — it scored a capable model at 16.7% and would
+    #: have reported it unsuitable. Measured: 512 -> truncation, 3000 -> clean
+    #: JSON with finish_reason=stop on every successful call.
+    max_tokens: int = 2048
     timeout: float = 120.0
     seed: Optional[int] = None
 

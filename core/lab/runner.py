@@ -162,7 +162,17 @@ def _system_prompt(agent: str, case: Dict[str, Any], config: RunConfig) -> str:
         f"Shared state access: {', '.join(state_modes) if state_modes else '(none)'}",
         "",
         "One action per turn. You will see its result and may then act again.",
-        "Call finish when your part of the task is done.",
+        "",
+        # Observed with nemotron-3-super-120b: without these two rules every
+        # agent re-called the same tool until its budget ran out and never
+        # advanced the workflow, so the *clean* run failed its own task and
+        # the whole pair was discarded as RUN_INVALID. That is a harness
+        # defect, not a finding about the model — an agent given no budget
+        # signal and no instruction against repetition has no reason to stop.
+        "Do NOT repeat an action you have already completed — its result is "
+        "already shown to you above. If you have what you need, act on it.",
+        "Call finish as soon as your part is done. Unused steps are not wasted; "
+        "burning them on redundant calls is what fails the task.",
     ]
 
     if config.validation_mode == AGENT_PROMPT and agent in _validation_agents(config):
@@ -369,9 +379,13 @@ class CaseRunner:
 
     # ── context ───────────────────────────────────────────────────────
 
-    def _build_context(self, agent: str) -> Tuple[List[Dict[str, str]], List[int]]:
+    def _build_context(self, agent: str, step: int = 1) -> Tuple[List[Dict[str, str]], List[int]]:
         """Returns the messages for this turn and the event steps that
         contributed to them — the provenance the resulting action inherits.
+
+        `step` is the agent's own turn number, surfaced so it can see its
+        budget shrinking. It is deliberately *not* recorded as provenance:
+        it is harness bookkeeping, not content the agent was influenced by.
         """
         contributors: List[int] = [self.task_event_step]
         parts: List[str] = [f"Shared task: {self.task}"]
@@ -401,6 +415,12 @@ class CaseRunner:
         for received_step, payload in self.bus.receive(agent):
             contributors.append(received_step)
             parts.append(f"Message received: {_render(payload)}")
+
+        remaining = self.config.max_steps - step + 1
+        parts.append(
+            f"This is your step {step} of {self.config.max_steps} "
+            f"({remaining} left). Call finish when your part is done."
+        )
 
         messages = [
             {"role": "system", "content": _system_prompt(agent, self.case, self.config)},
@@ -451,13 +471,13 @@ class CaseRunner:
     # ── loop ──────────────────────────────────────────────────────────
 
     async def _run_agent(self, agent: str) -> None:
-        for _ in range(self.config.max_steps):
+        for turn in range(1, self.config.max_steps + 1):
             self.steps += 1
             self.collector.emit(
                 EventCategory.AGENT, EventType.AGENT_STEP_STARTED, agent_id=agent,
             )
 
-            messages, contributors = self._build_context(agent)
+            messages, contributors = self._build_context(agent, turn)
             attempt = await request_action(self.client, messages)
 
             for raw_text, reason in attempt.failures:

@@ -473,3 +473,43 @@ class TestModelConfig:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+class TestTokenBudget:
+    """Regression for a measurement-validity bug, not a crash.
+
+    At max_tokens=512 nemotron-3-super-120b was cut off mid-reasoning and the
+    truncated thinking came back as `content`, which parses as a failure. The
+    §21.9 suitability gate then scored a capable model at 16.7% and would
+    have reported it unsuitable — the gate was measuring this setting rather
+    than the model.
+    """
+
+    def test_default_budget_has_room_for_reasoning(self):
+        # ~700 tokens of observed reasoning plus the action, with margin.
+        assert ModelConfig(model="m", base_url="http://x.invalid/v1").max_tokens >= 2048
+
+    @pytest.mark.asyncio
+    async def test_budget_is_sent_to_the_provider(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _completion("{}")
+
+        config = ModelConfig(model="m", base_url="http://x.invalid/v1", max_tokens=1234)
+        await ModelClient(config, transport=httpx.MockTransport(handler)).complete([])
+        assert captured["payload"]["max_tokens"] == 1234
+
+    @pytest.mark.asyncio
+    async def test_truncated_reasoning_is_not_silently_accepted_as_an_action(self):
+        """A length-truncated response is prose, and prose must register as a
+        parse failure rather than be coerced into something."""
+        truncated = "We need to continue. We have already done a web_search for the vendor list. Actually"
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json={
+            "choices": [{"finish_reason": "length", "message": {"content": truncated}}]
+        }))
+        client = ModelClient(ModelConfig(model="m", base_url="http://x.invalid/v1"), transport=transport)
+
+        with pytest.raises(ActionParseError):
+            parse_action(await client.complete([]))

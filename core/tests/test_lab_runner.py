@@ -453,3 +453,53 @@ class TestHarnessErrorsInvalidateTheRun:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+class TestStepBudgetIsVisibleToTheAgent:
+    """Regression for the defect that blocked P7.
+
+    Observed with nemotron-3-super-120b: every agent re-called the same tool
+    until its budget ran out and never sent a message or wrote state, so the
+    *clean* run failed its own task_success_predicate and the whole pair was
+    discarded as RUN_INVALID. An agent told neither how many steps remain nor
+    that repetition is pointless has no reason to stop — a harness defect,
+    not a finding about the model.
+    """
+
+    @pytest.mark.asyncio
+    async def test_prompt_forbids_repeating_completed_actions(self):
+        client = FakeModelClient({"A": ['{"action": "finish", "summary": "done"}']})
+        await run_case(_case(), _cee(), _config(), client, mode=CLEAN, run_id="r1")
+        system = client.prompts  # user turns; the rule lives in the system turn
+        assert client.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_each_turn_states_the_remaining_budget(self):
+        class Capturing(FakeModelClient):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                self.user_turns = []
+
+            async def complete(self, messages):
+                self.user_turns.append(messages[-1]["content"])
+                return await super().complete(messages)
+
+        # Three no-op actions so the agent takes three turns before finishing.
+        script = {"A": ['{"action": "state_read", "key": "x"}'] * 3}
+        client = Capturing(script)
+        await run_case(_case(), _cee(), _config(max_steps=4), client, mode=CLEAN, run_id="r1")
+
+        a_turns = [t for t in client.user_turns if "step" in t]
+        assert "your step 1 of 4 (4 left)" in a_turns[0]
+        assert "your step 2 of 4 (3 left)" in a_turns[1]
+
+    @pytest.mark.asyncio
+    async def test_budget_line_is_not_recorded_as_provenance(self):
+        """It is harness bookkeeping, not content the agent was influenced
+        by — taint closure must not widen because of it."""
+        script = {"A": ['{"action": "finish", "summary": "done"}']}
+        result = await run_case(_case(), _cee(), _config(), FakeModelClient(script), mode=ATTACK, run_id="r1")
+        output = next(e for e in result.collector.events if e.event_type == EventType.AGENT_OUTPUT)
+        # config_snapshot only; no synthetic step-counter event exists to cite.
+        assert all(isinstance(step, int) for step in output.derived_from)
+        assert not any(e.event_type.value == "step_budget" for e in result.collector.events)
