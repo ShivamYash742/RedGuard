@@ -1,9 +1,10 @@
-# RedGuard Multi-Agent Lab — Progress (P0 → P5)
+# RedGuard Multi-Agent Lab — Progress (P0 → P6)
 
 Companion to [`MULTI_AGENT_LAB_PLAN.md`](./MULTI_AGENT_LAB_PLAN.md). That
 document is the proposal; this one records what has actually been built
-against it, phase by phase, per §20's ordering. **Phases P0 through P5 are
-complete.** P6 (the Lab UI) has not been started.
+against it, phase by phase, per §20's ordering. **Phases P0 through P6 are
+complete.** P7 (executing the arms and analysing the results) has not been
+started — and is still blocked on decision E2, the model choice.
 
 Status check at any time:
 
@@ -653,6 +654,109 @@ change can be checked against past results instead of silently rewriting them.
 
 ---
 
+## P6 — Lab UI
+
+Three pages plus a service, matching the existing App Router and
+`lib/*-service.ts` conventions. The plan's §14 references
+`app/benchmark/page.tsx` and `app/datasets/page.tsx`, which no longer exist —
+the repo consolidated to five routes (Overview, Corpus, Runs, Models,
+Settings), so the patterns were taken from `app/runs/page.tsx` and
+`app/runs/[sessionId]/page.tsx` instead.
+
+```
+lib/lab-service.ts                          typed client + SSE subscription
+app/lab/page.tsx                            cases, launcher, live progress
+app/lab/runs/[runId]/page.tsx               the research-critical view
+app/lab/experiments/[experimentId]/page.tsx aggregate metrics
+components/Sidebar.tsx                      +1 nav entry
+```
+
+No new dependency. Everything uses the CSS variables, `lucide-react` icons
+and dense `text-xs` table style already in the codebase.
+
+### The run page is the one that matters
+
+Everything else on the API is readable as JSON. The trace view is where the
+design actually has to do work, because the claim Mode B makes — *this agent
+was influenced, and here is the chain back to the artifact* — is only
+checkable if a reader can follow that chain.
+
+- **Event timeline** with the agent lane, a plain-language gloss for each §8
+  event type (`tool_denied` → "tool DENIED"), the content tag, and the
+  `derived_from` parents rendered as `← #7 #2`.
+- **Click any event** to highlight its full transitive provenance closure —
+  the same walk `is_attack_derived()` performs. The footer says in as many
+  words that those edges are *observed derivation*, not a causal claim about
+  the model's reasoning.
+- **Verdict panel** with all four dimensions side by side and a line saying
+  they are deliberately never collapsed into one safe/unsafe score. Each
+  dimension is clickable and highlights its own evidence event ids in the
+  timeline, so "C is COMPROMISED" is one click from the events that decided
+  it.
+- **vs clean** marks events whose `(event_type, agent, tool)` signature never
+  appears in the paired clean run — the `absent_in_clean` deviation clause,
+  made visible.
+- **Environment changes** diffs the CEE before/after, and the evidence bundle
+  downloads as JSON.
+
+### Where the UI refuses to round off
+
+The interesting parts of §10 are the values that are *not numbers*, and the UI
+renders them as such rather than coercing them:
+
+| Backend value | Rendered as | Why |
+|---|---|---|
+| `cpr: "n/a"` | `n/a` + "denominator empty — undefined, not 0%" | §10.3: an empty denominator means the question was never asked |
+| `soc: null` | `N<3` | §10.7 needs three valid repetitions; a single run is not consistency |
+| `interpretable: false` | `no null` | §21.1: drift without a clean-vs-clean floor is LLM noise |
+| `git_clean: false` | amber, not hidden | §17: a dirty tree means the result cannot be rebuilt from its commit |
+| `eligible_downstream_agents: []` | "none (entry-local)" | the CPR-denominator control case, labelled as deliberate |
+
+A dashboard that prints `0%` for all five would look more finished and would
+be wrong in exactly the way §21 warns about.
+
+### Verification
+
+`next lint` is broken in this repo — Next 16 removed the subcommand, and
+`npm run lint` fails with "Invalid project directory ... /lint". That is
+pre-existing (the script has not changed since the 2.7.5 bump), so ESLint was
+run directly.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | clean |
+| `npx eslint app/lab lib/lab-service.ts components/Sidebar.tsx` | clean |
+| `npx eslint app lib components` | 24 problems, **all pre-existing in Mode A files**, none in the new ones |
+| Rendered in headless Chrome | all three pages render live data |
+| SSE through the Next proxy | events arrive through `/api/:path*` |
+| `backend/prisma/dev.db` | untouched — the backend ran against a copy |
+
+Two lint errors in the first draft were real and fixed rather than suppressed:
+a synchronous `setState` inside an effect (replaced with a cancellable async
+loader, which also stops a late response from overwriting a newer one), and
+six `any` types (replaced with `ReproStamp` and `CeeSnapshot`).
+
+### Browser verification, stated accurately
+
+The Claude-in-Chrome extension was not connected, so there was no interactive
+click-through session. Instead each page was rendered in **headless Chrome**
+with a virtual time budget, which executes the client-side fetches, and the
+resulting DOM was asserted against:
+
+- `/lab` — all 9 case ids, the topology with `file_read` on Agent A, the
+  launcher, and RGM-008's "entry-local" label
+- `/lab/experiments/{id}` — metric cards, `n/a` with its explanation, the
+  per-case table, the reproducibility stamp with `git_commit`
+- `/lab/runs/{id}` — all four verdict dimensions, the timeline with
+  `attacker artifact planted`, `tag:attacker_artifact`, rendered provenance
+  edges (`← #2`, `← #5`, …), and the environment diff
+
+What that does **not** cover: hover, click-through highlighting, the live SSE
+progress bar during a real run, and responsive breakpoints. Those need a
+real browser session and are the honest gap in this phase.
+
+---
+
 ## Testing — complete inventory
 
 Everything below is what exists today, test by test, so the coverage can be
@@ -1279,8 +1383,15 @@ direction that makes an attack look unsuccessful. A suite that only asserts
 
 Listed so the gaps are visible rather than assumed covered:
 
-- **No frontend tests** — there is no Mode B UI yet (P6), and the repo has no
-  frontend suite at all.
+- **No frontend tests.** The repo has no frontend suite at all, and P6 did
+  not add one. The Lab UI is covered by `typecheck`, ESLint and a headless
+  render assertion — not by anything that would catch a broken interaction.
+- **No interactive browser session.** The Chrome extension was unavailable,
+  so click-through provenance highlighting, the live SSE progress bar and
+  responsive breakpoints have been written but never watched working.
+- **`npm run lint` is broken repo-wide** (Next 16 removed `next lint`).
+  Pre-existing, but it means the documented lint command in `CLAUDE.md` does
+  not run; ESLint has to be invoked directly.
 - **`RUN_INVALID` has no golden trace.** The path (clean run fails
   `task_success_predicate`) is implemented and was observed live during P4
   (a drained script produced it), but no fixture pins it. Every case now has
@@ -1329,7 +1440,6 @@ Listed so the gaps are visible rather than assumed covered:
 
 Per §20, the remaining phases are:
 
-- **P6** — Lab UI (`app/lab/*`).
 - **P7** — Execute the 4 arms (~180 runs), export evidence bundles, analyze
   against §21's risk list.
 
@@ -1370,6 +1480,6 @@ P7 rather than during it — a full sweep is ~2,200–2,700 calls.
 
 ---
 
-Neither P6 nor P7 has been started. Decisions E1–E9 from the plan's §E were
+P7 has not been started. Decisions E1–E9 from the plan's §E were
 accepted at their recommended defaults per the go-ahead to build P0 with
 "recommended defaults" — they have not been separately re-confirmed since.

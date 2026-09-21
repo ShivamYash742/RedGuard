@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Boxes,
   PlayCircle,
+  FlaskConical,
   Award,
   Settings,
   X,
@@ -30,6 +31,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { name: 'Overview', path: '/', icon: LayoutDashboard },
     { name: 'Corpus', path: '/corpus', icon: Boxes, count: String(probeCount) },
     { name: 'Runs', path: '/runs', icon: PlayCircle },
+    { name: 'Lab', path: '/lab', icon: FlaskConical, count: 'β' },
     { name: 'Models', path: '/models', icon: Award },
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
