@@ -19,6 +19,9 @@ interface LiveRun {
   events: number
   verdict?: Verdict
   status?: string
+  /** A clean run finishes without a verdict of its own — it *is* the
+   *  baseline. Tracked separately so it can stop showing as in-progress. */
+  done?: boolean
 }
 
 const FAMILY_LABELS: Record<string, string> = {
@@ -100,12 +103,20 @@ export default function LabPage() {
         break
       case 'run_verdict':
         setProgress(event.data.progress)
+        // One verdict event closes out *both* halves of the pair: the attack
+        // run carries the verdict, and its clean baseline is finished too —
+        // without this the clean rows spin forever, which reads as a stalled
+        // run rather than a completed baseline.
         setLiveRuns((prev) =>
-          prev.map((r) =>
-            r.runId === event.data.run_id
-              ? { ...r, verdict: event.data.verdict, status: event.data.status }
-              : r,
-          ),
+          prev.map((r) => {
+            if (r.runId === event.data.run_id) {
+              return { ...r, verdict: event.data.verdict, status: event.data.status, done: true }
+            }
+            if (r.runId === event.data.baseline_run_id) {
+              return { ...r, status: event.data.status, done: true }
+            }
+            return r
+          }),
         )
         break
       case 'experiment_complete':
@@ -343,7 +354,7 @@ export default function LabPage() {
           <div className="max-h-80 overflow-y-auto divide-y divide-[var(--border-subtle)]">
             {liveRuns.map((run) => (
               <div key={run.runId} className="flex items-center gap-3 px-4 py-2 text-xs">
-                {run.verdict ? (
+                {run.done ? (
                   <CheckCircle2 className="h-3.5 w-3.5 text-[var(--success)] shrink-0" />
                 ) : (
                   <Loader2 className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0 animate-spin" />
@@ -353,9 +364,13 @@ export default function LabPage() {
                   {run.mode} · rep {run.repetition}
                 </span>
                 <span className="font-mono text-[10px] text-[var(--text-muted)]">{run.events} events</span>
-                {run.verdict && (
+                {run.verdict ? (
                   <span className={`ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] ${OBJECTIVE_STYLES[run.verdict.objective.level]}`}>
                     {run.verdict.objective.level}
+                  </span>
+                ) : (
+                  <span className="ml-auto font-mono text-[10px] text-[var(--text-muted)]">
+                    {run.done ? 'baseline' : ''}
                   </span>
                 )}
                 <Link
