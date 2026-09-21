@@ -38,6 +38,7 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
+from core.lab.analysis import ARMS, arm_summary, compare_standard
 from core.lab.cases import (
     CASES_DIR,
     FIXTURES_DIR,
@@ -59,6 +60,7 @@ from core.lab.metrics import (
     cpr_denominator,
     depth,
     icr,
+    macro_average,
     mean_coverage,
     partial_rate,
     rate_ci,
@@ -79,34 +81,6 @@ router = APIRouter(prefix="/api/lab", tags=["lab"])
 
 DEFAULT_REPS = 5
 MAX_REPS = 25
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Execution arms (§11)
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# Every arm runs CLEAN/ATTACK *pairs*, so the plan's ARM-CLEAN is not a
-# separate configuration — it is the clean half of every pair, and is
-# recovered by filtering on `mode`. What actually varies between arms is the
-# configuration of the system under test:
-
-ARMS: Dict[str, Dict[str, Any]] = {
-    "attack": {
-        "description": "Strict tool authorization, no validation instruction. ARM-CLEAN and ARM-ATTACK of §11 are the two halves of this arm's pairs.",
-        "validation_mode": "none",
-        "permissive_tools": False,
-    },
-    "attack_validated": {
-        "description": "ARM-VALIDATED — agents with an inbound edge are told to treat received content as data.",
-        "validation_mode": "agent_prompt",
-        "permissive_tools": False,
-    },
-    "attack_permissive_tools": {
-        "description": "ARM-PERMISSIVE — every agent may call every tool, so tool-layer containment cannot occur.",
-        "validation_mode": "none",
-        "permissive_tools": True,
-    },
-}
 
 
 def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int) -> RunConfig:
@@ -544,6 +518,14 @@ async def experiment_metrics(experiment_id: str):
             ],
         },
         "per_case": per_case,
+        # Macro average weights every case equally. The micro figures above
+        # weight by run count, so a case that happened to run more often
+        # would otherwise dominate the headline (§10's aggregation note).
+        "macro": {
+            "icr": macro_average([c["icr"] for c in per_case.values()]),
+            "asr": macro_average([c["asr"] for c in per_case.values()]),
+            "partial_rate": macro_average([c["partial_rate"] for c in per_case.values()]),
+        },
         "trajectory_drift": await _drift(db, runs),
         "run_counts": _count_by(runs, lambda r: r.status),
     }
@@ -577,10 +559,52 @@ async def _drift(db: Any, runs: List[Any]) -> Dict[str, Any]:
             "attack": result.attack,
             "null": result.null,
             "effect": result.effect,
+            "attack_ci": list(result.attack_ci) if result.attack_ci else None,
+            "null_ci": list(result.null_ci) if result.null_ci else None,
+            # None means "cannot tell", which is not the same as "no effect"
+            # — the distinction §10.8 insists on.
+            "separated": result.separated,
+            "n_attack_pairs": result.n_attack_pairs,
+            "n_null_pairs": result.n_null_pairs,
             "interpretable": result.null is not None,
             "clean_repetitions": len(clean_seqs),
         }
     return report
+
+
+@router.get("/compare")
+async def compare_experiments(experiments: str):
+    """Cross-arm comparison — §11's EXP-4 and EXP-6, the research output.
+
+    `experiments` is a comma-separated list of ids. Runs are pooled by the
+    arm their experiment recorded, so a sweep split across several
+    experiments (a resumed run, or one arm per invocation) still compares
+    correctly.
+    """
+    ids = [e.strip() for e in experiments.split(",") if e.strip()]
+    if len(ids) < 2:
+        raise HTTPException(status_code=400, detail="Pass at least two experiment ids to compare")
+
+    db = await get_db()
+    by_arm: Dict[str, List[RunOutcome]] = {}
+    for experiment_id in ids:
+        experiment = await lab_store.get_experiment(db, experiment_id)
+        if experiment is None:
+            raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
+        outcomes, _ = await _outcomes(db, experiment_id)
+        by_arm.setdefault(experiment.armKey, []).extend(outcomes)
+
+    if len(by_arm) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"All given experiments share the arm '{next(iter(by_arm))}'. "
+                   "A comparison needs two different arms.",
+        )
+
+    return {
+        "arms": {arm: arm_summary(outcomes) for arm, outcomes in by_arm.items()},
+        "comparisons": compare_standard(by_arm),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

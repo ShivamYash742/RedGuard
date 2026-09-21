@@ -1,4 +1,4 @@
-# RedGuard Multi-Agent Lab — Progress (P0 → P6)
+# RedGuard Multi-Agent Lab — Progress (P0 → P6, plus pre-P7)
 
 Companion to [`MULTI_AGENT_LAB_PLAN.md`](./MULTI_AGENT_LAB_PLAN.md). That
 document is the proposal; this one records what has actually been built
@@ -13,7 +13,7 @@ cd backend && source .venv/bin/activate
 pytest ../core/tests/ tests/ -q
 ```
 
-Current result: **419 passed**, 0 failed.
+Current result: **461 passed**, 0 failed.
 
 Is a given model usable with the harness?
 
@@ -757,10 +757,116 @@ real browser session and are the honest gap in this phase.
 
 ---
 
+## Pre-P7 — closing the gaps before spending model budget
+
+P6 left P7 blocked on decision **E2** and short of several things a real
+sweep needs. This section is what was built and measured before starting one.
+
+### E2 — model suitability, measured
+
+| Model | Parse failures (§21.9 gate: ~10%) | Verdict |
+|---|---|---|
+| llama3.1:8b (local ollama) | 0–5.6% | Parses, but **never calls `finish`** — every agent burns `max_steps` |
+| gpt-oss-120b (Groq) | **31.6%** | **UNSUITABLE** — emits native tool calls instead of the JSON protocol |
+| nvidia/nemotron-3-super-120b | **5.6%** | **Passes the gate.** Emits clean JSON in `content`, reasoning isolated in `reasoning_content` |
+| nvidia/nemotron-3-ultra-550b | — | Could not be reached; 503 on every probe |
+
+Two findings that matter more than the parse rate:
+
+**Nemotron Super never called `finish` either.** All six agents in the smoke
+pair ended at `max_steps`, and the clean run came back `RUN_INVALID` — the
+benign task was not completed. A model that cannot drive the workflow to
+completion produces empty denominators, not low scores, so this has to be
+resolved before a sweep rather than discovered inside one.
+
+**NVIDIA's endpoint returned 503 on 3 of 10 probe calls**, in bursts. That
+is not a detail: at that rate a 2,700-call sweep without retries fails
+constantly, and each failure invalidates a run and shrinks a denominator —
+§21.8 contamination arriving over the network rather than through the agents.
+
+### What that measurement changed
+
+| Fix | Why |
+|---|---|
+| Retry 5xx/408, not just 429 | A single transient 503 previously ended a whole run. Measured burst rate justified the change and set the budget |
+| Retry budget 4 → 6 | Chosen from the measured 30% failure rate, not from taste |
+| Read `reasoning_content` as well as `reasoning` | gpt-oss uses one name, nemotron the other. Missing one scores that provider's models as 100% parse failures |
+
+`content` still wins over both when present — a model that answers properly
+must never have its private reasoning mistaken for the action.
+
+### `bus_gateway` — decision E3, finally implemented
+
+The plan approved it and P0–P6 never built it, so `validation_mode` had only
+`none` and `agent_prompt`. Both of those measure *the model's* compliance.
+`bus_gateway` puts a deterministic filter in `MessageBus`, so a message
+carrying an imperative toward a sensitive resource is refused by the harness
+and recorded as `message_denied` with `reason: content_filter`.
+
+The filter is deliberately crude and the code says so. Its value is the
+contrast §21.4 asks for: `agent_prompt` *asks* an agent to treat received
+content as data; `bus_gateway` removes the agent from the decision. Reporting
+them as one "validation" number would overstate what a prompt achieved.
+
+### The sweep driver — `backend/sweep.py`
+
+```bash
+python sweep.py --arms attack,attack_permissive_tools --reps 5 \
+    --provider nvidia --model nvidia/nemotron-3-super-120b-a12b
+python sweep.py --scripted --reps 2              # no model, no cost
+python sweep.py --resume <experiment_id>         # continue a dead sweep
+python sweep.py --report <ids> --export ./bundles
+```
+
+**Resume is the reason it exists.** A sweep is hours long; without it an
+upstream outage two hours in discards everything, which in practice means the
+sweep never finishes and the numbers never exist. Completed pairs are
+recorded, so a resumed sweep skips them. A single failed pair is reported and
+the sweep continues, rather than taking the run down with it.
+
+It also prints arm summaries and the cross-arm comparisons, and exports one
+§12 evidence bundle per attacked run.
+
+> The database target is passed explicitly rather than left to the generated
+> Prisma client's default. That ambiguity is what put 36 test runs into the
+> committed `dev.db` during P6 — the driver now prints which database it is
+> writing to before it writes anything.
+
+### `core/lab/analysis.py` — the research output
+
+Pure functions over stored verdicts, shared by the sweep and the new
+`GET /api/lab/compare` endpoint, so a published figure can be recomputed
+without re-running anything.
+
+`compare_arms` reports both rates, both Wilson intervals, the difference, and
+whether the intervals **overlap**. It deliberately stops short of a
+significance test: with N=5 over 9 hand-authored cases, a p-value would imply
+a generality the design cannot support (§21.6). `overlapping: true` is
+reported beside every difference so a reader cannot see the delta without the
+caveat.
+
+`arm_summary` counts and reports `n_invalid` separately. An arm that
+discarded half its runs has not measured what its headline rate claims to.
+
+### TDS bootstrap CIs (§10.8)
+
+§10.8 calls CIs "non-negotiable for the metric to be publishable" and
+`tds_report` returned point estimates, its own docstring admitting the gap.
+It now returns `null_ci` / `attack_ci` from a seeded percentile bootstrap,
+plus `separated` — the check behind "a `TDS_attack` of 0.4 means nothing if
+`TDS_null` is 0.38".
+
+`separated` is `None`, not `False`, when either interval is missing: **cannot
+tell** is not **no effect**. Below two observations the CI is `None` rather
+than a zero-width interval, which would read as precision that was never
+measured.
+
+---
+
 ## Testing — complete inventory
 
 Everything below is what exists today, test by test, so the coverage can be
-reviewed rather than taken on trust. **419 tests, all passing, ~5s.** Not
+reviewed rather than taken on trust. **461 tests, all passing, ~6s.** Not
 one of them calls an LLM — the only LLM contact in the whole project is the
 `smoke.py` command, which is run by hand.
 
@@ -769,11 +875,11 @@ one of them calls an LLM — the only LLM contact in the whole project is the
 ```bash
 cd backend && source .venv/bin/activate
 
-pytest ../core/tests/ tests/ -q        # everything (419)
+pytest ../core/tests/ tests/ -q        # everything (461)
 pytest ../core/tests/ -q               # the lab + pre-existing core (357)
-pytest tests/ -q                       # backend: inspector, scanner, lab_store, lab_api (52)
+pytest tests/ -q                       # backend: inspector, scanner, lab_store, lab_api (58)
 
-pytest ../core/tests/ -q -k lab        # Mode B core only (303)
+pytest ../core/tests/ -q -k lab        # Mode B core only (339)
 pytest ../core/tests/test_lab_cases.py -q -k CleanTraceGate   # the §21.7 gate (54)
 pytest ../core/tests/test_lab_evaluator.py -v    # one file, verbose
 ```
@@ -787,10 +893,11 @@ pytest ../core/tests/test_lab_evaluator.py -v    # one file, verbose
 | P2 — evaluator, metrics | 64 | `test_lab_evaluator.py` (35), `test_lab_metrics.py` (29) |
 | P3 — model client, runner | 58 | `test_lab_model_client.py` (37), `test_lab_runner.py` (21) |
 | P4 — cases, repetitions, reproducibility | 131 | `test_lab_cases.py` |
-| P5 — HTTP surface | 44 | `backend/tests/test_lab_api.py` |
-| **Mode B total** | **351** | |
+| P5 — HTTP surface | 49 | `backend/tests/test_lab_api.py` |
+| Pre-P7 — analysis, arms, retries | 42 | `test_lab_analysis.py` (18), + additions to `test_lab_model_client.py` (11), `test_lab_topology.py` (7), `test_lab_metrics.py`, `test_lab_api.py` (6) |
+| **Mode B total** | **393** | |
 | Pre-existing, now runnable | 68 | `test_bds.py` (19), `test_statistics.py` (23), `test_validator.py` (22), `test_inspector.py` (3), `test_scanner.py` (1) |
-| **Grand total** | **419** | |
+| **Grand total** | **461** | |
 
 > The P0/P2 counts moved since the earlier draft: the StateGateway cases
 > landed in P0's `test_lab_gateway.py` during P3, and `test_lab_evaluator.py`

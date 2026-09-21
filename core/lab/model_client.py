@@ -167,6 +167,12 @@ def parse_action(text: str) -> Action:
 # Client
 # ─────────────────────────────────────────────────────────────────────────────
 
+#: Upstream statuses worth retrying. 5xx and 408 are the provider failing or
+#: timing out, not the request being wrong — retrying is correct. 4xx other
+#: than 408/429 means the request itself is bad, and retrying just wastes the
+#: rate limit.
+_TRANSIENT_STATUS = frozenset({408, 500, 502, 503, 504, 529})
+
 _PROVIDERS: Dict[str, Tuple[str, str]] = {
     # provider -> (default base url, env var holding the api key)
     "ollama": ("http://localhost:11434/v1", ""),
@@ -278,13 +284,18 @@ class ModelClient:
         self,
         config: ModelConfig,
         transport: Optional[httpx.AsyncBaseTransport] = None,
-        max_rate_limit_retries: int = 4,
+        # Six, not four, because it was measured: NVIDIA's hosted endpoint
+        # returned 503 on 3 of 10 probe calls, in bursts rather than evenly.
+        # Four retries leaves roughly one hard failure per 400 calls at that
+        # rate; a full sweep is ~2,700.
+        max_rate_limit_retries: int = 6,
     ):
         self.config = config
         self._transport = transport
         self.max_rate_limit_retries = max_rate_limit_retries
         self.call_count = 0
         self.rate_limit_waits = 0
+        self.transient_retries = 0
 
     @property
     def endpoint(self) -> str:
@@ -314,6 +325,17 @@ class ModelClient:
                     await asyncio.sleep(_retry_delay(response, attempt))
                     continue
 
+                # Transient upstream failures ("503 Service temporarily
+                # overloaded" is routine on hosted inference) must not end a
+                # run. A full sweep is thousands of calls over hours, so a
+                # single blip would otherwise invalidate a run and silently
+                # shrink a denominator — the §21.8 contamination problem
+                # arriving through the network instead of through the agents.
+                if response.status_code in _TRANSIENT_STATUS and attempt < self.max_rate_limit_retries:
+                    self.transient_retries += 1
+                    await asyncio.sleep(_retry_delay(response, attempt))
+                    continue
+
                 if response.status_code >= 400:
                     recovered = _recover_failed_generation(response)
                     if recovered is not None:
@@ -338,7 +360,15 @@ class ModelClient:
         # `content` and put everything, including the action JSON, in a separate
         # `reasoning` field. Reading only `content` would score those models as
         # 100% parse failures when they had in fact answered.
-        return ((message.get("content") or "") or (message.get("reasoning") or "")).strip()
+        # Reasoning models differ on the field name: gpt-oss uses `reasoning`,
+        # NVIDIA's nemotron uses `reasoning_content`. Both are only consulted
+        # when `content` is empty — when a model answers properly in `content`
+        # its private reasoning must never be mistaken for the action.
+        return (
+            (message.get("content") or "")
+            or (message.get("reasoning") or "")
+            or (message.get("reasoning_content") or "")
+        ).strip()
 
 
 @dataclass(frozen=True)

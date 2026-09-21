@@ -123,7 +123,18 @@ class TestCatalogEndpoints:
 
     def test_list_arms(self, client):
         keys = {a["key"] for a in client.get("/api/lab/arms").json()["arms"]}
-        assert keys == {"attack", "attack_validated", "attack_permissive_tools"}
+        assert keys == {
+            "attack", "attack_validated", "attack_permissive_tools", "attack_bus_gateway",
+        }
+
+    def test_bus_gateway_arm_is_an_architectural_control(self, client):
+        """Decision E3. `agent_prompt` asks the model to be careful and
+        measures compliance; `bus_gateway` removes the model from the
+        decision. Conflating them overstates what validation achieved
+        (§21.4), so they are separate arms."""
+        arms = {a["key"]: a for a in client.get("/api/lab/arms").json()["arms"]}
+        assert arms["attack_bus_gateway"]["validation_mode"] == "bus_gateway"
+        assert arms["attack_validated"]["validation_mode"] == "agent_prompt"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -415,3 +426,46 @@ class TestModeAIsUnaffected:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+class TestCompareEndpoint:
+    """§11's EXP-4/EXP-6 over HTTP. Runs pool by the arm their experiment
+    recorded, so a sweep split across several experiments still compares."""
+
+    def _two_arms(self, client):
+        a = _run_to_completion(client, arm="attack", cases=["RGM-001"], repetitions=2)
+        b = _run_to_completion(client, arm="attack_bus_gateway", cases=["RGM-001"], repetitions=2)
+        return a["experiment"]["experiment_id"], b["experiment"]["experiment_id"]
+
+    def test_compares_two_arms(self, client):
+        first, second = self._two_arms(client)
+        body = client.get(f"/api/lab/compare?experiments={first},{second}").json()
+
+        assert set(body["arms"]) == {"attack", "attack_bus_gateway"}
+        assert "EXP-6b" in body["comparisons"]
+        metrics = body["comparisons"]["EXP-6b"]["metrics"]
+        assert "difference" in metrics["asr"]
+        assert "overlapping" in metrics["asr"]
+
+    def test_comparison_carries_the_caveat(self, client):
+        first, second = self._two_arms(client)
+        body = client.get(f"/api/lab/compare?experiments={first},{second}").json()
+        assert "significance test" in body["comparisons"]["EXP-6b"]["caveat"]
+
+    def test_one_experiment_is_400(self, client):
+        experiment = _create_experiment(client)
+        response = client.get(f"/api/lab/compare?experiments={experiment['experiment_id']}")
+        assert response.status_code == 400
+
+    def test_same_arm_twice_is_400(self, client):
+        """Two experiments of the same arm is not a comparison — saying so
+        beats returning an empty result that reads as 'no difference'."""
+        first = _create_experiment(client)["experiment_id"]
+        second = _create_experiment(client)["experiment_id"]
+        response = client.get(f"/api/lab/compare?experiments={first},{second}")
+        assert response.status_code == 400
+        assert "two different arms" in response.json()["detail"]
+
+    def test_unknown_experiment_is_404(self, client):
+        experiment = _create_experiment(client)["experiment_id"]
+        assert client.get(f"/api/lab/compare?experiments={experiment},nope").status_code == 404

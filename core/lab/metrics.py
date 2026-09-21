@@ -25,6 +25,7 @@ one the plan calls out — `core.benchmark.statistics.wilson_ci`.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -260,18 +261,65 @@ def tds(seq_a: Sequence[Token], seq_b: Sequence[Token], **cost_kwargs) -> float:
     return edit_distance(seq_a, seq_b, **cost_kwargs) / max(len(seq_a), len(seq_b))
 
 
+#: Bootstrap resamples for the TDS intervals. Fixed rather than configurable
+#: so two runs of the analysis cannot differ by resample count, and paired
+#: with a seeded RNG so the interval is reproducible from the stored pairs.
+TDS_BOOTSTRAP_RESAMPLES = 2000
+TDS_BOOTSTRAP_SEED = 20260921
+
+
+def _bootstrap_ci(
+    values: Sequence[float], *, resamples: int = TDS_BOOTSTRAP_RESAMPLES, alpha: float = 0.05,
+) -> Optional[Tuple[float, float]]:
+    """Percentile bootstrap CI for the mean of `values`.
+
+    Returns None below two observations: a single pair has no spread to
+    resample, and an interval of zero width would read as precision that was
+    never measured.
+    """
+    if len(values) < 2:
+        return None
+    rng = random.Random(TDS_BOOTSTRAP_SEED)
+    n = len(values)
+    means = []
+    for _ in range(resamples):
+        sample = [values[rng.randrange(n)] for _ in range(n)]
+        means.append(sum(sample) / n)
+    means.sort()
+    lo = means[int((alpha / 2) * resamples)]
+    hi = means[min(resamples - 1, int((1 - alpha / 2) * resamples))]
+    return (lo, hi)
+
+
 @dataclass(frozen=True)
 class TDSReport:
     null: Optional[float]    # mean pairwise TDS among clean repetitions — the noise floor
     attack: Optional[float]  # mean TDS(attack_i, clean_j) over all i, j
     effect: Optional[float]  # attack - null; None if either side is None
+    null_ci: Optional[Tuple[float, float]] = None
+    attack_ci: Optional[Tuple[float, float]] = None
+    n_null_pairs: int = 0
+    n_attack_pairs: int = 0
+
+    @property
+    def separated(self) -> Optional[bool]:
+        """Does the attack interval clear the noise floor's?
+
+        §10.8: "A TDS_attack of 0.4 means nothing if TDS_null is 0.38." This
+        is the check that sentence describes — None when either interval is
+        missing, because "cannot tell" is not the same as "no effect".
+        """
+        if self.null_ci is None or self.attack_ci is None:
+            return None
+        return self.attack_ci[0] > self.null_ci[1]
 
 
 def tds_report(
     attack_sequences: Sequence[Sequence[Token]], clean_sequences: Sequence[Sequence[Token]]
 ) -> TDSReport:
-    """`TDS_attack` alone is not publishable (§10.8) — always report all
-    three, together with the CIs a bootstrap over these pairs would give.
+    """`TDS_attack` alone is not publishable (§10.8) — all three values are
+    reported together with bootstrap CIs, which the plan calls non-negotiable
+    for the metric to be usable.
     """
     null_pairs = [
         tds(clean_sequences[i], clean_sequences[j])
@@ -283,7 +331,15 @@ def tds_report(
     attack = sum(attack_pairs) / len(attack_pairs) if attack_pairs else None
 
     effect = (attack - null) if (attack is not None and null is not None) else None
-    return TDSReport(null=null, attack=attack, effect=effect)
+    return TDSReport(
+        null=null,
+        attack=attack,
+        effect=effect,
+        null_ci=_bootstrap_ci(null_pairs),
+        attack_ci=_bootstrap_ci(attack_pairs),
+        n_null_pairs=len(null_pairs),
+        n_attack_pairs=len(attack_pairs),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

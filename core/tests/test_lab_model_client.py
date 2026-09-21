@@ -8,6 +8,7 @@ Nothing here touches the network.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -20,6 +21,10 @@ from core.lab.model_client import (
     parse_action,
     request_action,
 )
+
+
+async def _no_sleep(_seconds: float) -> None:
+    """Retry tests assert the retry logic, not the wall-clock backoff."""
 
 
 def _completion(content: str) -> httpx.Response:
@@ -233,10 +238,117 @@ class TestModelClientHTTP:
 
     @pytest.mark.asyncio
     async def test_http_error_propagates(self):
+        """A 500 is retried first, so retries are disabled here to assert the
+        giving-up path rather than sit through the backoff."""
         transport = httpx.MockTransport(lambda request: httpx.Response(500, json={"error": "boom"}))
-        client = ModelClient(ModelConfig(model="m", base_url="http://x.invalid/v1"), transport=transport)
+        client = ModelClient(
+            ModelConfig(model="m", base_url="http://x.invalid/v1"),
+            transport=transport, max_rate_limit_retries=0,
+        )
         with pytest.raises(httpx.HTTPStatusError):
             await client.complete([])
+
+    @pytest.mark.asyncio
+    async def test_transient_5xx_is_retried_then_succeeds(self):
+        """A sweep is thousands of calls over hours, and hosted inference
+        returns "503 Service temporarily overloaded" routinely. Without this
+        one blip invalidates a run and silently shrinks a denominator — §21.8
+        contamination arriving over the network instead of via the agents.
+        """
+        attempts = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                return httpx.Response(503, json={"error": {"message": "Service temporarily overloaded"}})
+            return _completion('{"action": "finish", "summary": "ok"}')
+
+        client = ModelClient(
+            ModelConfig(model="m", base_url="http://x.invalid/v1"),
+            transport=httpx.MockTransport(handler),
+        )
+        with patch("core.lab.model_client.asyncio.sleep", new=_no_sleep):
+            text = await client.complete([])
+
+        assert parse_action(text).kind == "finish"
+        assert attempts["n"] == 3
+        assert client.transient_retries == 2
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [408, 500, 502, 503, 504, 529])
+    async def test_every_transient_status_is_retried(self, status):
+        attempts = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                return httpx.Response(status, json={"error": "transient"})
+            return _completion("{}")
+
+        client = ModelClient(
+            ModelConfig(model="m", base_url="http://x.invalid/v1"),
+            transport=httpx.MockTransport(handler),
+        )
+        with patch("core.lab.model_client.asyncio.sleep", new=_no_sleep):
+            await client.complete([])
+        assert attempts["n"] == 2
+
+    @pytest.mark.asyncio
+    async def test_client_error_is_not_retried(self):
+        """A 4xx other than 408/429 means the request is wrong. Retrying it
+        just burns the rate limit and delays the real error."""
+        attempts = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts["n"] += 1
+            return httpx.Response(401, json={"error": {"message": "invalid api key"}})
+
+        client = ModelClient(
+            ModelConfig(model="m", base_url="http://x.invalid/v1"),
+            transport=httpx.MockTransport(handler),
+        )
+        with pytest.raises(httpx.HTTPStatusError, match="invalid api key"):
+            await client.complete([])
+        assert attempts["n"] == 1
+
+    @pytest.mark.asyncio
+    async def test_transient_retries_give_up_and_raise(self):
+        transport = httpx.MockTransport(lambda request: httpx.Response(503, text="overloaded"))
+        client = ModelClient(
+            ModelConfig(model="m", base_url="http://x.invalid/v1"),
+            transport=transport, max_rate_limit_retries=2,
+        )
+        with patch("core.lab.model_client.asyncio.sleep", new=_no_sleep):
+            with pytest.raises(httpx.HTTPStatusError, match="503"):
+                await client.complete([])
+        assert client.transient_retries == 2
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_reasoning_content_for_nvidia(self):
+        """NVIDIA's nemotron names the field `reasoning_content`; gpt-oss
+        names it `reasoning`. Both must be read, or one provider's models
+        score as 100% parse failures."""
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json={
+            "choices": [{"message": {
+                "content": "",
+                "reasoning_content": '{"action": "finish", "summary": "ok"}',
+            }}]
+        }))
+        client = ModelClient(ModelConfig(model="m", base_url="http://x.invalid/v1"), transport=transport)
+        assert parse_action(await client.complete([])).kind == "finish"
+
+    @pytest.mark.asyncio
+    async def test_content_wins_over_reasoning_content(self):
+        """A model that answers in `content` must never have its private
+        reasoning mistaken for the action."""
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json={
+            "choices": [{"message": {
+                "content": '{"action": "finish", "summary": "real"}',
+                "reasoning_content": '{"action": "tool_call", "tool": "db_query", "args": {}}',
+            }}]
+        }))
+        client = ModelClient(ModelConfig(model="m", base_url="http://x.invalid/v1"), transport=transport)
+        assert parse_action(await client.complete([])).summary == "real"
 
     @pytest.mark.asyncio
     async def test_error_carries_the_provider_message(self):

@@ -47,12 +47,15 @@ from .model_client import (
     request_action,
 )
 from .repro import reproducibility_stamp
-from .topology import MessageBus, Topology
+from .topology import MessageBus, Topology, default_content_filter
 from .tools import TOOL_SIGNATURES, StateGateway, ToolGateway
 from .trace import ContentTag, EventCategory, EventCollector, EventType
 
 CLEAN = "CLEAN"
 ATTACK = "ATTACK"
+
+AGENT_PROMPT = "agent_prompt"
+BUS_GATEWAY = "bus_gateway"
 
 #: Default role blurbs for the MVP topology (§4). A case may override any of
 #: them via a top-level "roles" mapping.
@@ -78,7 +81,14 @@ class RunConfig:
     topology: Topology
     model: ModelConfig
     max_steps: int = 6
-    validation_mode: str = "none"  # none | agent_prompt   (bus_gateway is a bus concern)
+    #: none        — no validation of any kind (ARM-ATTACK)
+    #: agent_prompt — the agents are *told* to treat received content as data
+    #: bus_gateway  — the harness refuses the message regardless of the model
+    #:
+    #: The last two are the contrast §21.4 asks for: a prompt-level
+    #: suggestion is not an architectural control, and conflating them
+    #: overstates what "validation" achieved.
+    validation_mode: str = "none"  # none | agent_prompt | bus_gateway
     #: Which agents get the validation instruction under `agent_prompt`.
     #: Defaults to every agent with an inbound edge; pin it to ("B",) to
     #: reproduce §5.3's narrower "Agent B's system prompt" formulation.
@@ -155,7 +165,7 @@ def _system_prompt(agent: str, case: Dict[str, Any], config: RunConfig) -> str:
         "Call finish when your part of the task is done.",
     ]
 
-    if config.validation_mode == "agent_prompt" and agent in _validation_agents(config):
+    if config.validation_mode == AGENT_PROMPT and agent in _validation_agents(config):
         lines += ["", VALIDATION_INSTRUCTION]
 
     return "\n".join(lines)
@@ -287,7 +297,11 @@ class CaseRunner:
         self.run_id = run_id
 
         self.collector = EventCollector(run_id=run_id)
-        self.bus = MessageBus(config.topology, self.collector)
+        self.bus = MessageBus(
+            config.topology,
+            self.collector,
+            content_filter=default_content_filter if config.validation_mode == BUS_GATEWAY else None,
+        )
         # Both gateways are built in `run()`, after the artifact is planted:
         # they need its event step to link observed content back to it.
         self.state: Optional[StateGateway] = None
