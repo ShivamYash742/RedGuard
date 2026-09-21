@@ -31,10 +31,11 @@ concurrent execution out of the MVP; the trace schema already accommodates it.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from .cee import NO_RESULTS, ControlledExecutionEnvironment
+from .cee import ControlledExecutionEnvironment
 from .model_client import (
     FINISH,
     SEND_MESSAGE,
@@ -45,6 +46,7 @@ from .model_client import (
     ModelConfig,
     request_action,
 )
+from .repro import reproducibility_stamp
 from .topology import MessageBus, Topology
 from .tools import TOOL_SIGNATURES, StateGateway, ToolGateway
 from .trace import ContentTag, EventCategory, EventCollector, EventType
@@ -201,6 +203,66 @@ def _format_history(event) -> Optional[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Scripted client — the no-LLM stand-in
+# ─────────────────────────────────────────────────────────────────────────────
+
+_AGENT_RE = re.compile(r"You are Agent (\w+)\.")
+
+
+class ScriptedClient:
+    """Replays a fixed per-agent action script instead of calling a model.
+
+    This is harness infrastructure, not a test fixture. Every case ships a
+    `clean_script` and the §21.7 validity gate replays it to prove two things
+    about the case itself: its benign task really is completable in its
+    fixture, and its objective predicates are *not* satisfiable by ordinary
+    task completion. A case that fails the second check measures task
+    behaviour, not attack effect — and that has to be caught in CI, without
+    spending a model budget to find out.
+
+    It reads the agent out of the system prompt rather than being told, so it
+    exercises the same prompt the model sees. Anything unscripted falls
+    through to `finish`, so a short script ends its agent cleanly rather than
+    burning the step budget.
+    """
+
+    def __init__(self, script: Dict[str, Sequence[Any]]):
+        self.script = {
+            agent: [a if isinstance(a, str) else json.dumps(a) for a in actions]
+            for agent, actions in script.items()
+        }
+        self.call_count = 0
+        self.prompts: List[str] = []
+        self._cursor: Dict[str, int] = {}
+
+    def reset(self) -> None:
+        """Rewind the script for a new run.
+
+        `CaseRunner` calls this at the start of every run. It matters because
+        one client instance serves a whole repetition set: without it the
+        first run drains the script and every later run — including the
+        ATTACK half of the very first pair — sees an agent with nothing to
+        do, which silently reads as a compliant refusal rather than as an
+        exhausted fixture. A real `ModelClient` has no per-run state and so
+        does not define this.
+        """
+        self._cursor = {}
+
+    async def complete(self, messages: Sequence[Dict[str, str]]) -> str:
+        self.call_count += 1
+        self.prompts.append(messages[-1]["content"])
+        match = _AGENT_RE.search(messages[0]["content"])
+        agent = match.group(1) if match else "?"
+
+        actions = self.script.get(agent) or []
+        i = self._cursor.get(agent, 0)
+        if i < len(actions):
+            self._cursor[agent] = i + 1
+            return actions[i]
+        return json.dumps({"action": "finish", "summary": "nothing further to do"})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Runner
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -226,7 +288,9 @@ class CaseRunner:
 
         self.collector = EventCollector(run_id=run_id)
         self.bus = MessageBus(config.topology, self.collector)
-        self.state = StateGateway(cee, config.topology, self.collector)
+        # Both gateways are built in `run()`, after the artifact is planted:
+        # they need its event step to link observed content back to it.
+        self.state: Optional[StateGateway] = None
         self.gateway: Optional[ToolGateway] = None
 
         self.task: str = case.get("task", "")
@@ -259,6 +323,7 @@ class CaseRunner:
             EventCategory.SYSTEM, EventType.CONFIG_SNAPSHOT,
             arguments={"task": self.task, **self.config.to_dict()},
             content_tag=ContentTag.ORIGINAL_TASK,
+            metadata=reproducibility_stamp(),
         )
         self.task_event_step = task_event.step
 
@@ -420,14 +485,25 @@ class CaseRunner:
         calls_before = getattr(self.client, "call_count", 0)
         cee_before = self.cee.to_json()
 
+        # One client instance serves every run of an experiment, so anything
+        # it carries between runs is cross-run contamination. A real
+        # ModelClient has nothing to rewind and does not define this.
+        reset = getattr(self.client, "reset", None)
+        if callable(reset):
+            reset()
+
         self._open_run()
         if self.mode == ATTACK:
             self._plant_artifact()
 
+        canary = (self.case.get("attack") or {}).get("canary")
         self.gateway = ToolGateway(
             self.cee, self.config.topology, self.collector,
-            artifact_step=self.artifact_step,
-            artifact_marker=(self.case.get("attack") or {}).get("canary"),
+            artifact_step=self.artifact_step, artifact_marker=canary,
+        )
+        self.state = StateGateway(
+            self.cee, self.config.topology, self.collector,
+            artifact_step=self.artifact_step, artifact_marker=canary,
         )
 
         harness_error: Optional[str] = None
@@ -490,3 +566,30 @@ async def run_pair(
     clean = await run_case(case, cee_factory(), config, client, mode=CLEAN, run_id=f"{pair_id}-clean")
     attack = await run_case(case, cee_factory(), config, client, mode=ATTACK, run_id=f"{pair_id}-attack")
     return clean, attack
+
+
+async def run_repetitions(
+    case: Dict[str, Any],
+    cee_factory: Callable[[], ControlledExecutionEnvironment],
+    config: RunConfig,
+    client: Any,
+    *,
+    reps: int,
+    experiment_id: str,
+) -> List[Tuple[RunResult, RunResult]]:
+    """`reps` CLEAN/ATTACK pairs of one case, run sequentially.
+
+    Repetitions are the only handle on LLM nondeterminism the design has: SOC
+    (§10.7) is computed *across* them, and TDS is only interpretable against
+    the clean-vs-clean null that repeated clean runs provide (§21.1). A single
+    repetition yields neither, so N is a research parameter, not a knob.
+
+    Pairs are numbered from 1 and carry the experiment id, so `pair_id` is the
+    join key between a repetition's two runs everywhere downstream.
+    """
+    if reps < 1:
+        raise ValueError(f"reps must be >= 1, got {reps}")
+    return [
+        await run_pair(case, cee_factory, config, client, pair_id=f"{experiment_id}-{case.get('id', 'case')}-r{n}")
+        for n in range(1, reps + 1)
+    ]

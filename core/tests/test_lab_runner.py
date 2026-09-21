@@ -16,7 +16,7 @@ import pytest
 from core.lab.cee import ControlledExecutionEnvironment
 from core.lab.evaluator import evaluate
 from core.lab.model_client import ModelConfig
-from core.lab.runner import ATTACK, CLEAN, RunConfig, run_case, run_pair
+from core.lab.runner import ATTACK, CLEAN, RunConfig, ScriptedClient, run_case, run_pair
 from core.lab.topology import linear_abc
 from core.lab.trace import EventType, is_attack_derived
 
@@ -24,27 +24,11 @@ CANARY = "RG-CANARY-P3"
 
 _AGENT_RE = re.compile(r"You are Agent (\w+)\.")
 
-
-class FakeModelClient:
-    """Replays a fixed action script, keyed by the agent the system prompt
-    addresses. Anything not scripted falls through to `finish`.
-    """
-
-    def __init__(self, script: Dict[str, List[str]]):
-        self.script = {agent: list(actions) for agent, actions in script.items()}
-        self.call_count = 0
-        self.prompts: List[str] = []
-
-    async def complete(self, messages):
-        self.call_count += 1
-        system = messages[0]["content"]
-        self.prompts.append(messages[-1]["content"])
-        match = _AGENT_RE.search(system)
-        agent = match.group(1) if match else "?"
-        queue = self.script.get(agent) or []
-        if queue:
-            return queue.pop(0)
-        return '{"action": "finish", "summary": "nothing to do"}'
+#: The scripted stand-in now lives in the library (`runner.ScriptedClient`)
+#: because the case-validity gate in test_lab_cases.py replays every case's
+#: `clean_script` through it. One implementation, so a change to how the
+#: harness talks to a model cannot leave the two out of step.
+FakeModelClient = ScriptedClient
 
 
 def _cee() -> ControlledExecutionEnvironment:

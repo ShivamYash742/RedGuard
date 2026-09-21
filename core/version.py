@@ -39,6 +39,44 @@ PROBE_SCHEMA_VERSION: str = "2.7.5"
 #: Minimum number of runs per probe required for statistical metrics (BDS, CI).
 MIN_RUNS_FOR_STATISTICS: int = 3
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mode B (Multi-Agent Lab) Versions
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Mode B answers a different question from different evidence, so it versions
+# separately (MULTI_AGENT_LAB_PLAN.md §17). Every experiment row and evidence
+# bundle embeds all six, so a published verdict can be traced to the exact
+# definitions that produced it. Bump the one whose meaning changed:
+#
+#   LAB_SCHEMA_VERSION  trace event schema (§8) or the lab_* Prisma models
+#   CASE_SCHEMA_VERSION core/lab/cases/case_schema.json
+#   CEE_VERSION         CEE semantics (resource lookup, snapshot, planting)
+#   TOPOLOGY_VERSION    topology definitions or authorization tables
+#   EVALUATOR_VERSION   verdict definitions or the predicate DSL
+#   METRIC_VERSION      any metric formula in §10
+#
+# A METRIC_VERSION bump means previously published numbers are not comparable
+# to new ones — that is the point of keeping it separate from the others.
+
+#: Version of the Mode B trace/event schema and its persistence models.
+LAB_SCHEMA_VERSION: str = "1.0.0"
+
+#: Version of the Mode B security test case schema.
+CASE_SCHEMA_VERSION: str = "1.0.0"
+
+#: Version of the Controlled Execution Environment semantics.
+CEE_VERSION: str = "1.0.0"
+
+#: Version of the topology definitions and authorization tables.
+TOPOLOGY_VERSION: str = "1.0.0"
+
+#: Version of the verdict definitions and predicate DSL.
+EVALUATOR_VERSION: str = "1.0.0"
+
+#: Version of the Mode B metric formulas.
+METRIC_VERSION: str = "1.0.0"
+
 #: Human-readable release name.
 RELEASE_NAME: str = "RedGuard Benchmark v2.7.5"
 
@@ -66,6 +104,23 @@ def get_version_info() -> dict:
         "min_runs_for_statistics": MIN_RUNS_FOR_STATISTICS,
         "release_name": RELEASE_NAME,
         "citation_key": CITATION_KEY,
+    }
+
+
+def get_lab_version_info() -> dict:
+    """Return the Mode B version constants.
+
+    Kept separate from `get_version_info()` so Mode A consumers
+    (`reproducibility.py`, the datasets page) see no new keys.
+    """
+    return {
+        "benchmark_version": BENCHMARK_VERSION,
+        "lab_schema_version": LAB_SCHEMA_VERSION,
+        "case_schema_version": CASE_SCHEMA_VERSION,
+        "cee_version": CEE_VERSION,
+        "topology_version": TOPOLOGY_VERSION,
+        "evaluator_version": EVALUATOR_VERSION,
+        "metric_version": METRIC_VERSION,
     }
 
 
@@ -121,7 +176,14 @@ __all__ = [
     "MIN_RUNS_FOR_STATISTICS",
     "RELEASE_NAME",
     "CITATION_KEY",
+    "LAB_SCHEMA_VERSION",
+    "CASE_SCHEMA_VERSION",
+    "CEE_VERSION",
+    "TOPOLOGY_VERSION",
+    "EVALUATOR_VERSION",
+    "METRIC_VERSION",
     "get_version_info",
+    "get_lab_version_info",
     "parse_version",
     "is_compatible",
 ]
