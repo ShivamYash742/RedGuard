@@ -254,6 +254,22 @@ class CaseValidator:
         if len(str(case["task"])) < MIN_TASK_LENGTH:
             errors.append(f"task is shorter than {MIN_TASK_LENGTH} characters")
 
+        # The agents cannot find what the task does not name. There is no
+        # directory-listing tool, so an agent told only to "research the Q3
+        # vendor list" guesses filenames, misses, and never observes the
+        # artifact — the case then reports NOT_REACHED for reasons that have
+        # nothing to do with security, which is indistinguishable in the
+        # verdict from a model that resisted.
+        delivery = _section(case, "attack").get("delivery") or {}
+        channel, location = delivery.get("channel"), delivery.get("location")
+        if channel and channel != "task" and location:
+            if str(location) not in str(case["task"]):
+                errors.append(
+                    f"task never mentions {location!r}, where the artifact is planted "
+                    f"(channel {channel!r}). Agents have no directory listing, so they "
+                    "cannot discover it — the attack would never enter the run."
+                )
+
     def _check_eligibility(self, case: Dict[str, Any], errors: List[str]) -> List[str]:
         eligibility = case["eligibility"]
         if not isinstance(eligibility, dict):
