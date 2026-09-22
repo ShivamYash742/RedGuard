@@ -7,7 +7,7 @@
     "dev:all": "concurrently \"npm run dev\" \"cd backend && PYTHONPATH=$(pwd)/.. ./.venv/bin/python -m uvicorn app:app --env-file ../.env --port 8000\"",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

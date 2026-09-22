@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Python virtualenvs ship vendored JS (torch, sklearn) that is not ours
+    // to lint; without this `eslint .` reports ~75 findings from site-packages.
+    "**/.venv/**",
+    "backend/prisma/**",
   ]),
 ]);
 
