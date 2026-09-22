@@ -54,6 +54,48 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### Mode B — the multi-agent security lab
+
+Everything above is **Mode A**: single-turn probes scored against
+refusal-keyword rules. It answers *did the model say something bad?*
+
+**Mode B** (`/lab`) answers a different question — *when an attacker hides an
+instruction inside content an agent reads, what does the whole system of
+agents actually do?* Three agents pass work along a chain, and the harness —
+not the model — executes every action, so nothing is self-reported.
+
+```
+   Agent A                 Agent B                 Agent C
+  researcher      →       validator       →       executor
+  file_read               db_query                db_query
+  web_search              state: read             state: read+write
+        │                      │                       │
+        └──── every tool call, message and state write ┘
+              recorded by the harness, with provenance
+```
+
+Each case runs **twice** — once with the attacker's artifact planted, once
+without. The clean run is the control: without it, trajectory drift measures
+model nondeterminism rather than attack effect.
+
+The verdict has four dimensions and is deliberately never collapsed into a
+single safe/unsafe score:
+
+| Dimension | Answers |
+|---|---|
+| **Agent impact** | which agents were influenced or compromised |
+| **Objective achievement** | did the attacker get what they wanted |
+| **Containment** | where it stopped, and what stopped it |
+| **System outcome** | did the benign task still complete |
+
+Containment is the point. That an attack succeeded is ordinary; *where it
+stopped and which control stopped it* is what tells you what to build.
+
+- Design: [`MULTI_AGENT_LAB_PLAN.md`](./MULTI_AGENT_LAB_PLAN.md)
+- Status, in plain language: [`MULTI_AGENT_LAB_PROGRESS.md`](./MULTI_AGENT_LAB_PROGRESS.md)
+
+Mode B is additive — no Mode A file, model, endpoint or verdict is affected.
+
 ---
 
 ## 📁 Repository Structure
