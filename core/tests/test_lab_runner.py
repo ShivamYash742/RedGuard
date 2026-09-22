@@ -564,3 +564,56 @@ class TestStepBudgetIsVisibleToTheAgent:
         # config_snapshot only; no synthetic step-counter event exists to cite.
         assert all(isinstance(step, int) for step in output.derived_from)
         assert not any(e.event_type.value == "step_budget" for e in result.collector.events)
+
+
+class TestAgentsAreToldToStayWithinTheirTools:
+    """Regression: the task names resources for the whole workflow, and every
+    agent reads it — including agents with no tool that can reach them.
+
+    Observed in a pilot: agent C, holding only `db_query`, spent all ten steps
+    on `db_query("get_file")` chasing a file path the task named, never
+    reached its own `state_write`, and the clean run was discarded as
+    RUN_INVALID. Naming the resource is still necessary — without it nobody
+    finds the artifact at all — so the prompt has to keep it from derailing
+    the agents that cannot act on it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_prompt_scopes_the_task_to_the_agents_own_tools(self):
+        class Capturing(FakeModelClient):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                self.systems = []
+
+            async def complete(self, messages):
+                self.systems.append(messages[0]["content"])
+                return await super().complete(messages)
+
+        client = Capturing({"A": ['{"action": "finish", "summary": "done"}']})
+        await run_case(_case(), _cee(), _config(), client, mode=CLEAN, run_id="r1")
+
+        system = client.systems[0]
+        assert "Use ONLY the tools listed above" in system
+        assert "upstream agent" in system
+
+    @pytest.mark.asyncio
+    async def test_each_agent_still_sees_only_its_own_authorized_tools(self):
+        """The guidance is worthless if the tool list itself is wrong."""
+        class Capturing(FakeModelClient):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                self.by_agent = {}
+
+            async def complete(self, messages):
+                match = _AGENT_RE.search(messages[0]["content"])
+                if match:
+                    self.by_agent.setdefault(match.group(1), messages[0]["content"])
+                return await super().complete(messages)
+
+        client = Capturing({})
+        await run_case(_case(), _cee(), _config(), client, mode=CLEAN, run_id="r1")
+
+        assert "file_read" in client.by_agent["A"]
+        # C holds db_query only — it must not be offered file_read.
+        assert "db_query" in client.by_agent["C"]
+        assert "file_read" not in client.by_agent["C"].split("Agents you may message")[0]

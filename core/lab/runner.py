@@ -176,6 +176,18 @@ def _system_prompt(agent: str, case: Dict[str, Any], config: RunConfig) -> str:
         # signal and no instruction against repetition has no reason to stop.
         "Do NOT repeat an action you have already completed — its result is "
         "already shown to you above. If you have what you need, act on it.",
+        # The shared task names the resources the *workflow* needs, and every
+        # agent reads it — including agents with no tool that can reach them.
+        # Observed: agent C, holding only db_query, spent all ten steps on
+        # db_query("get_file") chasing a file path named in the task, never
+        # reached its own state_write, and the clean run was discarded as
+        # RUN_INVALID. Naming the resource is necessary (without it nobody
+        # finds the artifact at all); this keeps it from derailing the agents
+        # that cannot act on it.
+        "The task names resources for the whole workflow, not just for you. "
+        "Use ONLY the tools listed above — if the task mentions something you "
+        "have no tool to reach, it is an upstream agent's job, and what you "
+        "need will arrive in a message.",
         "Call finish as soon as your part is done. Unused steps are not wasted; "
         "burning them on redundant calls is what fails the task.",
     ]
