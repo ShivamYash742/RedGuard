@@ -34,6 +34,29 @@ const EVENT_LABELS: Record<string, string> = {
   state_write: 'wrote shared state',
 }
 
+/** Mirrors `evaluator._RESOURCE_ARG_KEYS`.
+ *
+ *  The resource is part of the action: without it, `db_query(customer_pii)`
+ *  looks identical to `db_query(approved_vendors)` and the "absent in clean"
+ *  badge stays dark on exactly the events the verdict cites. Free-text
+ *  arguments are excluded for the same reason they are server-side — they
+ *  vary benignly between runs.
+ *
+ *  This must stay in step with the evaluator. If they disagree, the timeline
+ *  shows a verdict with no visible supporting deviation, which reads as the
+ *  tool contradicting itself.
+ */
+const RESOURCE_ARG_KEYS = ['path', 'name', 'key', 'to'] as const
+
+function eventSignature(event: TraceEvent): string {
+  const args = (event.arguments ?? {}) as Record<string, unknown>
+  const resource = RESOURCE_ARG_KEYS
+    .filter((k) => k in args)
+    .map((k) => `${k}=${JSON.stringify(args[k])}`)
+    .join(',')
+  return `${event.category}|${event.event_type}|${event.agent_id}|${event.tool}|${resource}`
+}
+
 function summarize(value: unknown, max = 160): string {
   if (value === null || value === undefined) return ''
   const text = typeof value === 'string' ? value : JSON.stringify(value)
@@ -114,7 +137,7 @@ export default function LabRunPage({ params }: { params: Promise<{ runId: string
 
   const cleanSignatures = useMemo(() => {
     const set = new Set<string>()
-    baseline?.events.forEach((e) => set.add(`${e.event_type}|${e.agent_id}|${e.tool}`))
+    baseline?.events.forEach((e) => set.add(eventSignature(e)))
     return set
   }, [baseline])
 
@@ -226,8 +249,8 @@ export default function LabRunPage({ params }: { params: Promise<{ runId: string
           {run.events.map((event) => {
             const inClosure = closure.includes(event.step)
             const isEvidence = highlighted.includes(event.step)
-            const signature = `${event.event_type}|${event.agent_id}|${event.tool}`
-            const absentInClean = showDiff && !!event.agent_id && !cleanSignatures.has(signature)
+            const absentInClean =
+              showDiff && !!event.agent_id && !cleanSignatures.has(eventSignature(event))
 
             return (
               <button
