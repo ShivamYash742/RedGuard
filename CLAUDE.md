@@ -103,10 +103,17 @@ There is no frontend test suite currently — verify UI changes by running
 - **`policy.yaml`** (`backend/policy.yaml`) drives the inspector's rule-based
   detection layer, separate from the ML classifier (`CLASSIFIER_URL`). Treat
   changes to it as changes to detection behavior, not just config.
-- **Version numbers are centralized** in `core/version.py`
-  (`BENCHMARK_VERSION`, `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`). The README
-  badges and `app/datasets/page.tsx` read from the same source of truth —
-  bump there, not by hand-editing badges. Mode B adds six of its own
+- **Version numbers are canonical in `core/version.py`**
+  (`BENCHMARK_VERSION`, `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`) but there is
+  no runtime wiring from there into the Next.js frontend (Python can't be
+  imported client-side, and there is no `/api/version` endpoint) — bump
+  `core/version.py` first, then hand-sync the same string into `README.md`
+  (title, 3 badges, repo-structure comments), `package.json`, and the
+  hardcoded literals in `app/layout.tsx`, `app/corpus/page.tsx`,
+  `app/runs/page.tsx`, `components/Header.tsx`, and `components/Sidebar.tsx`.
+  Regenerate `docs/benchmark_spec.md` via `python docs/spec_generator.py`
+  rather than hand-editing it — it reads `core/version.py` directly. Mode B
+  adds six of its own
   (`LAB_SCHEMA_VERSION`, `CASE_SCHEMA_VERSION`, `CEE_VERSION`,
   `TOPOLOGY_VERSION`, `EVALUATOR_VERSION`, `METRIC_VERSION`) exposed through a
   *separate* `get_lab_version_info()`, so Mode A consumers see no new keys.

@@ -1899,11 +1899,6 @@ Listed so the gaps are visible rather than assumed covered:
   *baseline of record*, not a claim about what models typically do — the
   §21.7 gate proves the objective is not task-reachable along that path, not
   along every benign path.
-- **`bus_gateway` validation mode is not implemented** (decision E3 still
-  open), so nothing tests it. Only `none` and `agent_prompt` exist.
-- **ARM-PERMISSIVE is not implemented.** The plan expresses it as tool auth
-  disabled; the intended approach is a permissive Topology rather than a flag
-  in the gateway, but neither exists yet.
 - **No schema-vs-code drift test.** Bug #9 (`traceevent`) was caught by a
   round-trip test, but nothing asserts that `lab_store.py`'s field names match
   `schema.prisma` in general.
@@ -1918,10 +1913,13 @@ Listed so the gaps are visible rather than assumed covered:
 
 ## What's next
 
-Per §20, the remaining phases are:
+Per §20, the remaining phase is:
 
-- **P7** — Execute the 4 arms (~180 runs), export evidence bundles, analyze
-  against §21's risk list.
+- **P7** — Execute the 3 execution arms (§11's ARM-CLEAN is the clean half of
+  every pair, not a separate arm), export evidence bundles, analyze against
+  §21's risk list. Two pilots have run against `nvidia/nemotron-3-super-120b`
+  and found three defects (see the **P7 — execution** section above); the
+  full sweep has not started.
 
 ### Carried from P4 into P5, as planned
 
@@ -1968,10 +1966,14 @@ when it was built — it should have been.
 
 **Recommended first step:** one arm, 3 cases, 2 repetitions (~350 calls,
 ~20 minutes) to confirm the fixed evaluator produces coherent verdicts on
-real data before committing to hours of sweep.
+real data before committing to hours of sweep. *(Done twice — see the
+**P7 — execution** section above. A third, post-fix pilot is the next step
+before the full sweep.)*
 
 ---
 
-P7 has not been started. Decisions E1–E9 from the plan's §E were
-accepted at their recommended defaults per the go-ahead to build P0 with
-"recommended defaults" — they have not been separately re-confirmed since.
+Decisions E1–E9 from the plan's §E were accepted at their recommended
+defaults per the go-ahead to build P0 with "recommended defaults", except
+E2 (model choice) which required real measurement to resolve — see
+**E2 — resolved** above. None have been separately re-confirmed with the
+user since the original go-ahead.

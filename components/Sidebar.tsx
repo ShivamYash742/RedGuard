@@ -88,7 +88,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Bottom build tag */}
         <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--surface-base)] text-[11px] text-[var(--text-muted)] font-mono">
-          RedGuard v2.7.5
+          RedGuard v3.0.0
         </div>
       </aside>
     </>

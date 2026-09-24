@@ -61,7 +61,7 @@ function CorpusContent() {
         </div>
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Dataset Version</span>
-          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">2.7.5</div>
+          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">3.0.0</div>
         </div>
       </div>
 
@@ -224,7 +224,7 @@ function CorpusContent() {
             <FileJson className="h-4 w-4 text-[var(--primary)]" /> Dataset File Inventory
           </h2>
           <span className="badge-semantic badge-success">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Schema v2.7.5 Passed
+            <CheckCircle2 className="h-3.5 w-3.5" /> Schema v3.0.0 Passed
           </span>
         </div>
         <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">

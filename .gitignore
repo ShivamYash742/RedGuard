@@ -16,5 +16,6 @@ node_modules/
 venv/
 *.db
 !backend/prisma/dev.db
+graphify-out/
 
 

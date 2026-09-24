@@ -1,8 +1,8 @@
-# RedGuard v2.7.5 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v3.0.0 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-2.7.5-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
-[![Benchmark](https://img.shields.io/badge/benchmark-v2.7.5-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
-[![Dataset](https://img.shields.io/badge/dataset-v2.7.5-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Benchmark](https://img.shields.io/badge/benchmark-v3.0.0-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Dataset](https://img.shields.io/badge/dataset-v3.0.0-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
 
@@ -10,13 +10,13 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ---
 
-## ✨ Key Features (v2.7.5)
+## ✨ Key Features (v3.0.0)
 
 | Feature | Description |
 |---|---|
 | **Academic Leaderboard & Ranking** | Multi-model ranking across Attack Success Rate (ASR), Behaviour Drift Score (BDS), Security Score, & Tool Resistance |
 | **Research Visualizations** | Recharts Radar Charts (Attack family comparison) and Stacked Outcome Distribution Bars (comparison page) |
-| **10 Navigation Hubs** | Dedicated sections for Dashboard, Benchmark Execution, Attack Families, Probes, Scenarios, Models & Ranking, Reports & Results, Datasets, Documentation, & Settings |
+| **6 Navigation Hubs** | Overview, Corpus (families/probes/scenarios), Runs (live execution & history), Models & Ranking, Lab (Mode B), & Settings — v3 consolidated the original 14 routes into 5, plus Mode B's own `/lab` |
 | **Global Search (`⌘K`)** | Fast client-side fuzzy search overlay (`lib/search-index.ts`) matching Probe IDs, Titles, Attack Families, Scenarios, Models, and Reports |
 | **8 Attack Families Taxonomy** | Direct Injection, Content Injection, Data Exfiltration, Goal Diversion, Memory Poisoning, Autonomous Actions, Planning Manipulation, & Tool Manipulation |
 | **50 Empirical Probes** | Auditable JSON dataset entries with research paper citations (arXiv IDs, venues, authors), difficulty levels, & threat models |
@@ -30,27 +30,29 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v2.7.5 Platform
+                        RedGuard v3.0.0 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                          │
-│ ├── Dashboard (6 Stat Scorecards)    ├── Probes Directory & Drawer  │
-│ ├── Live SSE Benchmark Executor      ├── 12 Scenario Contexts       │
-│ ├── 8 Attack Family Taxonomy Pages   ├── Leaderboard & Radar Charts  │
-│ └── Global Search Modal (⌘K)         └── Reports Export (MD/CSV)    │
-│                      (10 Navigation Hubs · 50 Empirical Probes)     │
+│ ├── Overview (6 Stat Scorecards)     ├── Corpus (Probes/Families/   │
+│ ├── Runs (Live SSE Execution +          Scenarios/Datasets)          │
+│ │      History)                      ├── Models & Ranking (Radar)   │
+│ ├── Lab — Mode B launcher & traces   ├── Settings (System/Policy/   │
+│ └── Global Search Modal (⌘K)             Audit tabs)                │
+│                 (6 Navigation Hubs · 50 Probes · 9 Mode B Cases)    │
 └──────────────────────────────────┬──────────────────────────────────┘
                                    │ HTTP / SSE Stream
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      FastAPI Backend Engine                          │
-│ ├── Inspector (Deep Packet Inspection & YAML policy engine)         │
-│ ├── ML Classifier (Intent detection & adversarial verdict)           │
-│ ├── Agent Loader (Discovers *.py modules in backend/agents/)        │
-│ │      ├── Nemotron-3 Ultra (550B)   ├── DeepSeek V4 Flash         │
-│ │      ├── Nemotron-3 Super (120B)   ├── Ollama Local Agent        │
-│ │      ├── Llama 3.3 70B Instruct    └── Custom Agent Template     │
+│ Mode A                                Mode B                        │
+│ ├── Inspector (YAML policy engine)   ├── CEE + ToolGateway           │
+│ ├── ML Classifier (adversarial       ├── Topology / MessageBus      │
+│ │      verdict)                      ├── CaseRunner (harness-owned  │
+│ ├── Agent Loader (backend/agents/)   │      agent loop)             │
+│ │  Nemotron-3 Ultra/Super, Llama     ├── Evaluator (4-dim verdict)  │
+│ │  3.3 70B, DeepSeek V4, Ollama      └── lab_api.py (SSE, /api/lab) │
 │ ├── Scanner & Report Generator                                       │
-│ └── Prisma ORM → Local SQLite Database                               │
+│ └── Prisma ORM → Local SQLite Database (5 Mode A + 3 Mode B models)  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -102,42 +104,39 @@ Mode B is additive — no Mode A file, model, endpoint or verdict is affected.
 
 ```
 RedGuard/
-├── app/                               # Next.js App Router pages (v2.7.5)
-│   ├── page.tsx                       # Dashboard (6 Research Cards + Taxonomy Grid)
-│   ├── benchmark/page.tsx             # Live Execution Suite (SSE Progress Tracker)
-│   ├── attack-families/               # Attack Family Index & Detail Pages
-│   │   └── [familyId]/page.tsx
-│   ├── probes/                        # Probes Inventory & Canonical Probe Page
-│   │   └── [probeId]/page.tsx
-│   ├── scenarios/page.tsx             # 12 Application Scenario Cards
-│   ├── comparison/page.tsx            # Model Leaderboard, Radar Chart & Matrix
-│   ├── reports/page.tsx               # Security Scorecards & Export (MD / CSV)
-│   ├── history/page.tsx               # Execution Run Timeline Log
-│   ├── datasets/page.tsx              # Dataset Version 2.7.5 & Schema Status
-│   ├── policy/page.tsx                # Policy Editor & BibTeX Citation Generator
-│   ├── audit/page.tsx                 # Audit Event Log Viewer
-│   ├── settings/page.tsx              # FastAPI & Database Health Monitor
+├── app/                               # Next.js App Router pages (v3.0.0)
+│   │                                  # v3 IA: 14 routes consolidated into 5 hubs
+│   │                                  # + Mode B's own /lab section (old routes 301-redirect, see next.config.js)
+│   ├── page.tsx                       # Overview — Dashboard (6 Research Cards + Taxonomy Grid)
+│   ├── corpus/page.tsx                # Corpus — Probes, Attack Families & Scenarios (was /probes, /attack-families, /scenarios, /datasets)
+│   │   ├── families/[familyId]/page.tsx
+│   │   └── probes/[probeId]/page.tsx
+│   ├── runs/page.tsx                  # Runs — Live SSE Execution Suite + History (was /benchmark, /history)
+│   │   └── [sessionId]/page.tsx       # Run/session report (was /reports?session=)
+│   ├── models/page.tsx                # Models & Ranking — Leaderboard, Radar Chart & Matrix (was /comparison)
+│   ├── settings/page.tsx              # Settings — System Health, Policy & Citation, Audit Log tabs (was /policy, /audit)
+│   ├── lab/page.tsx                   # Mode B — case launcher & live runs
+│   │   ├── experiments/[experimentId]/page.tsx
+│   │   └── runs/[runId]/page.tsx      # Per-run trace viewer
 │   ├── globals.css                    # Academic surface tokens & badges
 │   └── layout.tsx                     # Root layout with Header & Sidebar
 │
 ├── components/                        # Shared UI components
 │   ├── Header.tsx                     # Top Bar (Version badges, ⌘K Search, Theme)
-│   ├── Sidebar.tsx                    # 10 Research Navigation Items
+│   ├── Sidebar.tsx                    # Nav: Overview, Corpus, Runs, Models, Lab, Settings
 │   ├── ClientLayout.tsx               # Client-side layout wrapper
 │   ├── GlobalSearchModal.tsx          # ⌘K Keyboard-Navigable Search Overlay
 │   ├── ProbeDrawer.tsx                # Slide-over Metadata Inspection Drawer
-│   ├── StatCard.tsx                   # Dashboard stat card component
 │   ├── Skeletons.tsx                  # Table, Card & Chart Skeleton Loaders
-│   ├── EmptyState.tsx                 # Zero-data UI states
-│   └── ui/                            # Shared UI primitives (button, card, badge…)
+│   └── EmptyState.tsx                 # Zero-data UI states
 │
 ├── lib/                               # Frontend data services
-│   ├── data-service.ts                # Singleton BenchmarkDataService & Cache
-│   ├── search-index.ts                # Client-side Search Index Engine
-│   └── utils.ts                       # Shared utility functions
+│   ├── data-service.ts                # Singleton BenchmarkDataService & Cache (Mode A)
+│   ├── lab-service.ts                 # Mode B API client & SSE stream (/lab)
+│   └── search-index.ts                # Client-side Search Index Engine
 │
 ├── core/                              # Shared Python research library (importable by backend)
-│   ├── datasets/                      # 8 JSON Attack Family Datasets (50 Probes total)
+│   ├── datasets/                      # 8 JSON Attack Family Datasets (50 Probes total) — Mode A
 │   │   ├── direct_injection.json      # 8 probes
 │   │   ├── content_injection.json     # 9 probes
 │   │   ├── exfiltration.json          # 6 probes
@@ -149,33 +148,49 @@ RedGuard/
 │   │   ├── schema.json                # Probe JSON schema definition
 │   │   ├── loader.py                  # Dataset loader (used by FastAPI backend)
 │   │   └── validator.py               # Schema validation utilities
-│   ├── probes/                        # Probe class definitions per family
-│   ├── scenarios/                     # 12 scenario context classes
-│   ├── version.py                     # Canonical Version Constants (v2.7.5)
+│   ├── probes/                        # Probe class definitions per family — Mode A
+│   ├── scenarios/                     # 12 scenario context classes — Mode A
+│   ├── benchmark/                     # Metrics, BDS, statistics, reproducibility — Mode A
+│   ├── compat/                        # Backwards-compat adapters for the legacy scanner/probe API
+│   ├── lab/                           # Multi-agent harness — Mode B (frozen boundary: never imports backend/)
+│   │   ├── cases/                     # 9 security test cases (JSON) + case_schema.json
+│   │   ├── cee.py                     # Controlled Execution Environment
+│   │   ├── topology.py                # Agent graph + MessageBus
+│   │   ├── tools.py                   # ToolGateway (agent↔CEE authorization chokepoint)
+│   │   ├── model_client.py            # The only network-touching module in core/lab/
+│   │   ├── runner.py                  # Harness-owned agent loop (CaseRunner)
+│   │   ├── trace.py                   # EventCollector, provenance/taint closure
+│   │   ├── evaluator.py               # 4-dimension verdict (impact/objective/containment/outcome)
+│   │   ├── metrics.py / analysis.py   # Cross-run metrics & aggregation
+│   │   ├── evidence.py                # Evidence bundle builder
+│   │   ├── repro.py                   # Reproducibility stamp
+│   │   └── smoke.py                   # No-DB model-suitability smoke test
+│   ├── version.py                     # Canonical Version Constants (v3.0.0)
 │   └── __init__.py
 │
 ├── backend/                           # FastAPI Service (:8000)
-│   ├── app.py                         # FastAPI endpoints & CORS configuration
-│   ├── scanner.py                     # Scanner orchestration & SSE streams
-│   ├── inspector.py                   # Regex & YAML policy rules engine
-│   ├── agent_loader.py                # Plugin agent auto-discovery
+│   ├── app.py                         # FastAPI endpoints & CORS configuration — Mode A
+│   ├── scanner.py                     # Scanner orchestration & SSE streams — Mode A
+│   ├── inspector.py                   # Regex & YAML policy rules engine — Mode A
+│   ├── agent_loader.py                # Plugin agent auto-discovery — Mode A
 │   ├── database.py                    # Prisma ORM connection
 │   ├── schema.py                      # Pydantic request/response schemas
-│   ├── report_generator.py            # Evaluation report generation
-│   ├── target_agent.py                # Target agent wrapper
-│   ├── policy.yaml                    # YAML security policy rules
-│   ├── agents/                        # Configured Model Agents
+│   ├── report_generator.py            # Evaluation report generation — Mode A
+│   ├── target_agent.py                # Target agent wrapper — Mode A
+│   ├── policy.yaml                    # YAML security policy rules — Mode A
+│   ├── lab_api.py                     # Mode B HTTP surface (/api/lab/*, SSE experiment stream)
+│   ├── lab_store.py                   # Mode B persistence (Experiment/LabRun/TraceEvent)
+│   ├── sweep.py                       # Mode B batch experiment CLI driver
+│   ├── agents/                        # Configured Model Agents — Mode A
 │   │   ├── nemotron_3_ultra.py        # Nemotron-3 Ultra (550B)
 │   │   ├── nemotron_super_agent.py    # Nemotron-3 Super (120B)
 │   │   ├── llama3_3_70b_agent.py      # Llama 3.3 70B Instruct
 │   │   ├── deepseek_flash_agent.py    # DeepSeek V4 Flash
 │   │   ├── ollama_local_agent.py      # Ollama Local Agent
 │   │   └── example_custom_agent.py    # Custom Template Agent
-│   ├── tests/                         # Backend unit tests
-│   │   ├── test_inspector.py
-│   │   └── test_scanner.py
-│   ├── prisma/schema.prisma           # Database schema (SQLite)
-│   ├── prisma/dev.db                  # Local SQLite database
+│   ├── tests/                         # Backend unit tests (inspector, scanner, lab_store, lab_api)
+│   ├── prisma/schema.prisma           # Database schema (SQLite) — 5 Mode A models + 3 Mode B models
+│   ├── prisma/dev.db                  # Local SQLite database (seeded demo data — see note below)
 │   └── requirements.txt
 │
 ├── docs/                              # Project documentation & research specs
