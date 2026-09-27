@@ -10,6 +10,9 @@
  * and proxied through next.config's /api/:path* rewrite.
  */
 
+/** Mirrors `core/lab/runner.DEFAULT_MAX_STEPS` — the budget E2 measured. */
+export const DEFAULT_MAX_STEPS = 10
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Verdict model (§9) — four orthogonal dimensions, never collapsed
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,6 +187,8 @@ export interface ExperimentMetrics {
   experiment_id: string
   arm: string
   n_attack_runs: number
+  /** Pairs left out of every rate: a run hit a harness error or never finished. */
+  n_failed_pairs: number
   aggregate: {
     icr: RateWithCI
     asr: RateWithCI
@@ -234,7 +239,7 @@ export interface CreateExperimentRequest {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type LabStreamEvent =
-  | { event: 'experiment_started'; data: { experiment_id: string; arm: string; cases: string[]; repetitions: number; total_runs: number } }
+  | { event: 'experiment_started'; data: { experiment_id: string; arm: string; cases: string[]; repetitions: number; total_runs: number; already_completed_pairs: number } }
   | { event: 'run_started'; data: { run_id: string; case_id: string; mode: string; pair_id: string; repetition_index: number } }
   | { event: 'trace_event'; data: { run_id: string; step: number; category: EventCategory; event_type: string; agent_id: string | null; tool: string | null; authorized: boolean | null; derived_from: number[]; content_tag: ContentTag | null } }
   | { event: 'run_verdict'; data: { run_id: string; baseline_run_id: string; case_id: string; pair_id: string; repetition_index: number; status: string; verdict: Verdict; diagnostics: Record<string, unknown>; progress: { completed: number; total: number } } }

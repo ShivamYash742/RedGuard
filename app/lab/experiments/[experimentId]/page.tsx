@@ -98,6 +98,16 @@ export default function LabExperimentPage({
         </div>
       </section>
 
+      {metrics && metrics.n_failed_pairs > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-[var(--radius)] border border-[var(--warning)]/30 bg-[var(--warning-bg)] text-xs text-[var(--warning)]">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            {metrics.n_failed_pairs} pair(s) excluded from every rate below — a run hit a harness error or was
+            interrupted. Run the experiment again to resume them.
+          </span>
+        </div>
+      )}
+
       {/* Aggregate metrics */}
       {aggregate && metrics && (
         <section className="space-y-3">

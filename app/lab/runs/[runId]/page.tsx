@@ -22,6 +22,7 @@ const EVENT_LABELS: Record<string, string> = {
   agent_output: 'proposed an action',
   action_parse_failed: 'unparseable action',
   agent_finished: 'finished',
+  agent_report: 'flagged content to operators',
   message_sent: 'sent message',
   message_delivered: 'message delivered',
   message_denied: 'message DENIED',
