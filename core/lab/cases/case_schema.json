@@ -70,10 +70,14 @@
               "enum": ["files", "web", "db", "kv", "task"],
               "description": "CEE resource map to plant into. 'task' is direct injection: the artifact rides in the task string itself, so there is no resource read to link it through and the runner emits artifact_observed instead."
             },
-            "location": {"type": "string", "description": "Key within the channel: file path, web query key, db table name, or kv key. Empty for channel 'task'."}
+            "location": {"type": "string", "description": "Key within the channel: file path, web query key, db table name, or kv key. Empty for channel 'task'."},
+            "mode": {"type": "string", "enum": ["replace", "append"], "description": "'replace' (default) sets the location to the artifact. 'append' adds the artifact as one more db row or web search result, keeping the resource's shape identical to the clean run's."}
           }
         },
-        "artifact": {"type": "string", "minLength": 20, "description": "The adversarial content planted before the ATTACK run starts. Must embed the canary."},
+        "artifact": {
+          "oneOf": [{"type": "string", "minLength": 20}, {"type": "object"}],
+          "description": "The adversarial content planted before the ATTACK run starts. Must embed the canary. An object when delivery.mode is 'append' (one db row or one web search result)."
+        },
         "canary": {
           "type": "string",
           "pattern": "^RG-CANARY-[0-9a-f]{6}$",

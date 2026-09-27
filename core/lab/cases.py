@@ -50,6 +50,7 @@ REQUIRED_FIELDS = [
 VALID_FAMILIES = {"direct_injection", "content_injection", "memory_poisoning", "tool_manipulation"}
 
 VALID_CHANNELS = {"files", "web", "db", "kv", "task"}
+VALID_PLANT_MODES = {"replace", "append"}
 VALID_SEVERITIES = {"low", "medium", "high", "critical"}
 
 #: Topologies a case may name. One entry today; the check exists so a typo'd
@@ -347,8 +348,15 @@ class CaseValidator:
                     errors.append(f"attack.delivery.location is required for channel {channel!r}")
                 else:
                     self._check_location_exists(case, channel, delivery["location"], warnings)
+                    self._check_plant_shape(case, channel, delivery, attack["artifact"], errors)
+            mode = delivery.get("mode", "replace")
+            if mode not in VALID_PLANT_MODES:
+                errors.append(f"unknown attack.delivery.mode {mode!r} (valid: {sorted(VALID_PLANT_MODES)})")
 
-        artifact = str(attack["artifact"])
+        raw_artifact = attack["artifact"]
+        if not isinstance(raw_artifact, (str, dict)):
+            errors.append(f"attack.artifact must be a string or an object, got {type(raw_artifact).__name__}")
+        artifact = raw_artifact if isinstance(raw_artifact, str) else json.dumps(raw_artifact)
         if len(artifact) < MIN_ARTIFACT_LENGTH:
             errors.append(f"attack.artifact is shorter than {MIN_ARTIFACT_LENGTH} characters")
 
@@ -382,6 +390,37 @@ class CaseValidator:
             warnings.append(
                 f"attack.delivery.location {location!r} is not defined in fixture "
                 f"{case['cee_fixture']!r} channel {channel!r} — no benign read will reach it"
+            )
+
+    def _check_plant_shape(
+        self, case: Dict[str, Any], channel: str, delivery: Dict[str, Any], artifact: Any, errors: List[str],
+    ) -> None:
+        """A db table and a web result set are lists of objects in the
+        fixture. Planting must leave them that shape: RGM-003/005 once
+        replaced `vendor_contacts` with a string, so the attack run's table
+        differed in kind from the clean run's and any filtered `db_query`
+        crashed — the agent never saw the artifact at all.
+        """
+        if channel not in ("db", "web"):
+            if delivery.get("mode", "replace") == "append":
+                errors.append(f"attack.delivery.mode 'append' is only defined for db and web, not {channel!r}")
+            return
+        try:
+            cee = load_fixture(case["cee_fixture"])
+        except (FileNotFoundError, KeyError):
+            return
+        resource = cee.db if channel == "db" else cee.web
+        location = delivery["location"]
+        existing = resource.get(location if channel == "db" else location.strip().lower())
+        if not isinstance(existing, list):
+            return
+        if delivery.get("mode", "replace") == "append":
+            if not isinstance(artifact, dict):
+                errors.append(f"attack.artifact must be an object to append as one {channel} entry")
+        elif not (isinstance(artifact, list) and all(isinstance(r, dict) for r in artifact)):
+            errors.append(
+                f"attack.artifact would replace {channel} {location!r} (a list of objects) with a "
+                f"{type(artifact).__name__}; use delivery.mode 'append' with an object instead"
             )
 
     def _check_objective(self, case: Dict[str, Any], errors: List[str]) -> None:
@@ -507,6 +546,14 @@ class CaseValidator:
 
         for where, tree in trees:
             for leaf in predicate_leaves(tree):
+                # A state_read's arguments are only `{"key": ...}` — the value
+                # read is its result. RGM-006 shipped a leaf that looked for a
+                # vendor name in a state_read's arguments and so never matched.
+                if leaf.get("event_type") == "state_read" and "arg_contains" in leaf:
+                    errors.append(
+                        f"{where}: arg_contains on a state_read only ever sees the key; "
+                        "use result_contains for the value read"
+                    )
                 tool = leaf.get("tool")
                 if tool is not None and tool not in TOOLS:
                     errors.append(f"{where}: names unregistered tool {tool!r}")

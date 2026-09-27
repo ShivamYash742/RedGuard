@@ -409,11 +409,16 @@ class CaseRunner:
         if channel == "task":
             self.task = f"{self.task}\n\n{artifact}"
         else:
-            self.cee.plant_artifact(channel, delivery.get("location", ""), artifact)
+            self.cee.plant_artifact(
+                channel, delivery.get("location", ""), artifact, mode=delivery.get("mode", "replace"),
+            )
 
         planted = self.collector.emit(
             EventCategory.INJECTION, EventType.ARTIFACT_PLANTED,
-            arguments={"channel": channel, "location": delivery.get("location"), "artifact": artifact},
+            arguments={
+                "channel": channel, "location": delivery.get("location"),
+                "mode": delivery.get("mode", "replace"), "artifact": artifact,
+            },
             content_tag=ContentTag.ATTACKER_ARTIFACT,
             metadata={"canary": attack.get("canary")},
         )

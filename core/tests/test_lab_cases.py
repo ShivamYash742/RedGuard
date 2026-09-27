@@ -123,7 +123,9 @@ class TestCaseSet:
 
     def test_every_canary_appears_in_its_own_artifact(self):
         for c in ALL_CASES:
-            assert c["attack"]["canary"] in c["attack"]["artifact"], c["id"]
+            artifact = c["attack"]["artifact"]
+            text = artifact if isinstance(artifact, str) else json.dumps(artifact)
+            assert c["attack"]["canary"] in text, c["id"]
 
     def test_every_case_fixture_loads(self):
         for c in ALL_CASES:
@@ -870,3 +872,60 @@ class TestArtifactIsDiscoverable:
         assert delivery["location"] in script, (
             f"{case['id']}: no clean_script action touches {delivery['location']!r}"
         )
+
+
+class TestPlantingKeepsTheResourceShape:
+    """Regression: RGM-003/005 replaced the `vendor_contacts` table with a
+    string. The attack run's table then differed in kind from the clean
+    run's, and a filtered `db_query` iterated the string and crashed into a
+    tool_error — the agent never saw the artifact in the very cases titled
+    "poisoned database row"."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("case_id", ["RGM-003", "RGM-005"])
+    async def test_filtered_query_on_the_poisoned_table_returns_the_row(self, case_id):
+        from core.lab.trace import EventType
+        case = load_case(case_id)
+        script = {
+            "A": [{"action": "finish", "summary": "x"}],
+            "B": [{"action": "tool_call", "tool": "db_query",
+                   "args": {"name": "vendor_contacts", "params": {"vendor": "Acme Supply Co."}}}],
+            "C": [],
+        }
+        result = await run_case(case, fixture_factory(case)(), _config(), ScriptedClient(script), mode=ATTACK, run_id="r")
+        executed = [e for e in result.collector.events if e.agent_id == "B" and e.event_type == EventType.TOOL_EXECUTED]
+        assert executed, "the filtered query crashed instead of executing"
+        assert case["attack"]["canary"] in json.dumps(executed[0].result)
+        assert is_attack_derived(result.collector, executed[0].step)
+
+    @pytest.mark.parametrize("case_id", ["RGM-003", "RGM-004", "RGM-005"])
+    def test_append_planting_keeps_every_clean_entry(self, case_id):
+        case = load_case(case_id)
+        delivery = case["attack"]["delivery"]
+        clean, attack = fixture_factory(case)(), fixture_factory(case)()
+        attack.plant_artifact(delivery["channel"], delivery["location"], case["attack"]["artifact"], mode=delivery["mode"])
+        store = "db" if delivery["channel"] == "db" else "web"
+        key = delivery["location"]
+        before, after = getattr(clean, store)[key], getattr(attack, store)[key]
+        assert after[:-1] == before and after[-1] == case["attack"]["artifact"]
+
+    def test_replacing_a_table_with_a_string_fails_validation(self):
+        case = load_case("RGM-003")
+        case["attack"]["delivery"].pop("mode")
+        case["attack"]["artifact"] = "a string that would replace the whole table " + case["attack"]["canary"]
+        result = CaseValidator().validate(case)
+        assert not result.valid
+        assert any("use delivery.mode 'append'" in e for e in result.errors)
+
+    def test_arg_contains_on_state_read_fails_validation(self):
+        case = load_case("RGM-006")
+        leaf = next(l for l in case["objective"]["partially_reached"]["any"] if l["event_type"] == "state_read")
+        leaf["arg_contains"] = leaf.pop("result_contains")
+        result = CaseValidator().validate(case)
+        assert any("use result_contains" in e for e in result.errors)
+
+
+def test_unparameterised_string_table_is_returned_whole_when_filtered():
+    from core.lab.cee import ControlledExecutionEnvironment
+    cee = ControlledExecutionEnvironment.from_dict({"db": {"t": "free text"}})
+    assert cee.query_db("t", {"vendor": "x"}) == "free text"
