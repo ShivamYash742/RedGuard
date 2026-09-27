@@ -1,10 +1,16 @@
+// Where /api/* is proxied. Docker sets BACKEND_URL (the backend service);
+// everywhere else it is the local uvicorn. Rewrites are resolved at build time.
+const backendUrl = (process.env.BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Only the Docker image builds the standalone server; `npm start` is unchanged.
+  output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   async rewrites() {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*', // Proxy to FastAPI backend
+        destination: `${backendUrl}/api/:path*`, // Proxy to FastAPI backend
       },
     ]
   },

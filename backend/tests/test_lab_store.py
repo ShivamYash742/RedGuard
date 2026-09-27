@@ -1,8 +1,9 @@
 """Tests for lab_store.py: Experiment / LabRun / TraceEvent persistence.
 
-Runs against a throwaway copy of prisma/dev.db (already has the lab tables
-from `prisma db push`), never the committed file itself — CLAUDE.md protects
-its seeded content, so nothing here may write to it.
+Runs against a throwaway copy of prisma/dev.db brought up to the current
+schema by the `migrated_db_template` fixture (tests/conftest.py), never the
+committed file itself — CLAUDE.md protects its seeded content, so nothing here
+may write to it.
 """
 
 from __future__ import annotations
@@ -20,13 +21,12 @@ from core.lab.topology import linear_abc
 from core.lab.tools import ToolGateway
 from core.lab.trace import EventCategory, EventCollector, EventType
 
-DEV_DB = Path(__file__).parent.parent / "prisma" / "dev.db"
 
 
 @pytest_asyncio.fixture
-async def db(tmp_path):
+async def db(tmp_path, migrated_db_template):
     test_db_path = tmp_path / "test_lab_store.db"
-    shutil.copyfile(DEV_DB, test_db_path)
+    shutil.copyfile(migrated_db_template, test_db_path)
     client = Prisma(datasource={"url": f"file:{test_db_path}"})
     await client.connect()
     yield client
@@ -130,3 +130,66 @@ class TestPersistenceRoundTrip:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+class TestWhichRunsCount:
+    """`completed_attack_runs` is the single definition of "a result" that
+    both the API and the sweep aggregate."""
+
+    @staticmethod
+    def _row(pair, status, minute, mode="ATTACK", verdict='{"x": 1}'):
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+        at = datetime(2026, 9, 27, 12, minute, tzinfo=timezone.utc)
+        return SimpleNamespace(
+            pairId=pair, mode=mode, status=status, verdictJson=verdict, caseId="RGM-001",
+            repetitionIndex=1, startedAt=at, finishedAt=at,
+        )
+
+    def test_failed_rows_do_not_count_even_with_a_verdict(self):
+        runs = [self._row("p1", "FAILED", 0)]
+        assert lab_store.completed_attack_runs(runs) == []
+        assert lab_store.failed_pair_ids(runs) == ["p1"]
+
+    def test_a_resumed_pair_counts_once(self):
+        """Resume re-runs a FAILED pair under the same pair_id; the pair must
+        contribute exactly one result — its completed one."""
+        failed, retried = self._row("p1", "FAILED", 0), self._row("p1", "COMPLETED", 5)
+        assert lab_store.completed_attack_runs([failed, retried]) == [retried]
+        assert lab_store.failed_pair_ids([failed, retried]) == []
+
+    def test_clean_rows_never_count(self):
+        assert lab_store.completed_attack_runs([self._row("p1", "COMPLETED", 0, mode="CLEAN")]) == []
+
+
+class TestSweepResumeUsesTheStoredExperiment:
+    """Regression: `sweep.py --resume <id>` rebuilt the model and step budget
+    from the CLI flags. The documented command carries none, so a nemotron
+    sweep resumed on the ollama default inside the same experiment."""
+
+    @pytest.mark.asyncio
+    async def test_resume_ignores_cli_model_and_steps(self, db, monkeypatch):
+        import sweep
+        from core.lab.model_client import ModelConfig
+
+        experiment = await lab_store.create_experiment(
+            db, name="stored", arm_key="attack",
+            config={"arm": "attack", "cases": ["RGM-001"], "repetitions": 1, "scripted": True,
+                    "max_steps": 7, "model": {"provider": "nvidia", "model": "stored-model"}},
+            versions={},
+        )
+        seen = {}
+        original = sweep._run_pair
+
+        async def spy(db_, **kwargs):
+            seen["max_steps"] = kwargs["run_config"].max_steps
+            seen["model"] = kwargs["run_config"].model.model
+            seen["client"] = type(kwargs["client"]).__name__
+            return await original(db_, **kwargs)
+
+        monkeypatch.setattr(sweep, "_run_pair", spy)
+        await sweep.run_arm(
+            db, arm="attack", cases=["RGM-002"], reps=3, quiet=True, scripted=False,
+            model_config=ModelConfig(model="cli-model"), max_steps=99, experiment_id=experiment.id,
+        )
+        assert seen == {"max_steps": 7, "model": "stored-model", "client": "ScriptedClient"}

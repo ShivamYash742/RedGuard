@@ -1,0 +1,58 @@
+# RedGuard — run everything with no local Python or Node install.
+#
+#   docker compose up --build                  # UI on :3000, API on :8000
+#   docker compose run --rm backend python -m pytest ../core/tests tests -q
+#
+# For live-reload development add the override:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# API keys come from .env (optional). The database is a copy of the demo data
+# on the `redguard-data` volume; the committed backend/prisma/dev.db is never
+# written. `docker compose down -v` resets it.
+name: redguard
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        # GIT_COMMIT=$(git rev-parse HEAD) docker compose build
+        GIT_COMMIT: ${GIT_COMMIT:-}
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Overrides .env: .env.example's file:./dev.db would target the
+      # committed demo database.
+      DATABASE_URL: file:/data/redguard.db
+      # "localhost" inside the container is the container. Reach an ollama
+      # running on the host machine instead.
+      OLLAMA_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - redguard-data:/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        BACKEND_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  redguard-data:

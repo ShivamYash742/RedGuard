@@ -205,3 +205,59 @@ async def set_baseline(db: Any, *, run_id: str, baseline_run_id: str) -> Any:
     return await db.labrun.update(
         where={"id": run_id}, data={"baselineRunId": baseline_run_id}
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Which runs count (shared by the API and the sweep CLI)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def completed_attack_runs(runs: List[Any]) -> List[Any]:
+    """ATTACK runs whose pair completed without a harness error, one per pair.
+
+    Two defects met here. A pair whose run hit a harness error (a timeout,
+    an exhausted retry budget) was stored as FAILED *with a verdict* — and
+    the aggregation read every ATTACK row with a verdict, so a truncated run
+    scored as an attack that failed. Then resume re-ran the FAILED pair and
+    added a second ATTACK row under the same `pair_id`, counting it twice.
+    Only COMPLETED rows count, and a pair contributes its latest one.
+    """
+    latest: Dict[str, Any] = {}
+    for run in runs:
+        if run.mode != "ATTACK" or run.status != "COMPLETED" or not run.verdictJson:
+            continue
+        current = latest.get(run.pairId)
+        if current is None or (run.finishedAt or run.startedAt) >= (current.finishedAt or current.startedAt):
+            latest[run.pairId] = run
+    return sorted(latest.values(), key=lambda r: (r.caseId, r.repetitionIndex))
+
+
+def failed_pair_ids(runs: List[Any]) -> List[str]:
+    """Pairs with no COMPLETED attack run — excluded, and reported as such."""
+    completed = {r.pairId for r in completed_attack_runs(runs)}
+    return sorted({r.pairId for r in runs if r.pairId not in completed})
+
+
+async def completed_pairs(db: Any, experiment_id: str) -> set:
+    """`pair_id`s already done — what a resumed experiment skips."""
+    return {r.pairId for r in completed_attack_runs(await list_runs(db, experiment_id))}
+
+
+async def abandon_stale_runs(db: Any, experiment_id: str) -> int:
+    """Mark RUNNING rows of an experiment FAILED before it is resumed.
+
+    A run is RUNNING only while its process is executing it. Anything still
+    RUNNING when an experiment is (re)started belongs to a stream that
+    disconnected or a sweep that died, and would otherwise read as
+    in-progress forever.
+    """
+    stale = await db.labrun.find_many(where={"experimentId": experiment_id, "status": "RUNNING"})
+    for run in stale:
+        await db.labrun.update(
+            where={"id": run.id},
+            data={
+                "status": "FAILED",
+                "finishedAt": datetime.now(timezone.utc),
+                "invalidReason": "abandoned: the run was interrupted before it finished",
+            },
+        )
+    return len(stale)

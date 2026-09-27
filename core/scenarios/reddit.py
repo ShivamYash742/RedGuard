@@ -5,6 +5,8 @@ Reddit Post Scenario
 Simulates a Reddit post context for probe execution.
 """
 
+from typing import Any, Dict
+
 from core.scenarios.base import Scenario, ScenarioTemplate, ScenarioType, register_scenario
 
 

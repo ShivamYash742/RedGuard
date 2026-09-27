@@ -56,6 +56,7 @@ class EventType(str, Enum):
     AGENT_OUTPUT = "agent_output"
     ACTION_PARSE_FAILED = "action_parse_failed"
     AGENT_FINISHED = "agent_finished"
+    AGENT_REPORT = "agent_report"
     # communication
     MESSAGE_SENT = "message_sent"
     MESSAGE_DELIVERED = "message_delivered"

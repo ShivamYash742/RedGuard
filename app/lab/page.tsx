@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   labService, Arm, CaseSummary, Experiment, LabStreamEvent, Topology, Verdict,
-  OBJECTIVE_STYLES,
+  DEFAULT_MAX_STEPS, OBJECTIVE_STYLES,
 } from '@/lib/lab-service'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/Skeletons'
@@ -44,6 +44,7 @@ export default function LabPage() {
   const [provider, setProvider] = useState('ollama')
   const [model, setModel] = useState('')
   const [scripted, setScripted] = useState(true)
+  const [maxSteps, setMaxSteps] = useState(DEFAULT_MAX_STEPS)
 
   const [running, setRunning] = useState(false)
   const [experimentId, setExperimentId] = useState<string | null>(null)
@@ -51,6 +52,7 @@ export default function LabPage() {
   const [liveRuns, setLiveRuns] = useState<LiveRun[]>([])
   const [error, setError] = useState<string | null>(null)
   const sourceRef = useRef<EventSource | null>(null)
+  const completedRef = useRef(false)
 
   useEffect(() => {
     Promise.all([
@@ -82,7 +84,7 @@ export default function LabPage() {
   const handleStreamEvent = (event: LabStreamEvent) => {
     switch (event.event) {
       case 'experiment_started':
-        setProgress({ completed: 0, total: event.data.total_runs })
+        setProgress({ completed: 2 * (event.data.already_completed_pairs ?? 0), total: event.data.total_runs })
         break
       case 'run_started':
         setLiveRuns((prev) => [
@@ -120,11 +122,13 @@ export default function LabPage() {
         )
         break
       case 'experiment_complete':
+        completedRef.current = true
         setRunning(false)
         sourceRef.current?.close()
         labService.fetchExperiments().then(setExperiments).catch(() => undefined)
         break
       case 'experiment_error':
+        completedRef.current = true
         setError(event.data.error)
         setRunning(false)
         sourceRef.current?.close()
@@ -137,6 +141,7 @@ export default function LabPage() {
     setLiveRuns([])
     setProgress({ completed: 0, total: 0 })
     setRunning(true)
+    completedRef.current = false
     try {
       const created = await labService.createExperiment({
         arm,
@@ -145,12 +150,17 @@ export default function LabPage() {
         provider,
         model: model || undefined,
         scripted,
+        max_steps: maxSteps,
       })
       setExperimentId(created.experiment_id)
       sourceRef.current = labService.streamExperiment(created.experiment_id, handleStreamEvent, () => {
-        // EventSource fires onerror on normal stream end too, so this only
-        // reports when nothing has completed — otherwise it is just the close.
+        // Closing is what matters: an EventSource left open reconnects on its
+        // own, and every reconnect used to re-execute the whole experiment.
+        sourceRef.current?.close()
         setRunning(false)
+        if (!completedRef.current) {
+          setError('Stream disconnected before the experiment finished. Completed pairs are saved — run the experiment again to resume it.')
+        }
       })
     } catch (err) {
       setError(String(err))
@@ -229,7 +239,7 @@ export default function LabPage() {
 
       {/* Launcher */}
       <section className="rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-4 space-y-4">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <label className="block">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Arm</span>
             <select
@@ -252,6 +262,19 @@ export default function LabPage() {
               max={25}
               value={repetitions}
               onChange={(e) => setRepetitions(Math.max(1, Math.min(25, Number(e.target.value))))}
+              disabled={running}
+              className="mt-1 w-full rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Max steps / agent</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={maxSteps}
+              onChange={(e) => setMaxSteps(Math.max(1, Math.min(50, Number(e.target.value))))}
               disabled={running}
               className="mt-1 w-full rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
             />

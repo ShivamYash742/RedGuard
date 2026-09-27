@@ -100,7 +100,15 @@ class ControlledExecutionEnvironment:
         rows = self.db[name]
         if not params:
             return rows
-        return [row for row in rows if all(row.get(k) == v for k, v in params.items())] or NO_RESULTS
+        if not isinstance(rows, list):
+            # A free-text "table" cannot be filtered. Returning it whole beats
+            # the old behaviour — iterating the string's characters and
+            # crashing into a tool_error that hid the content from the agent.
+            return rows
+        return [
+            row for row in rows
+            if isinstance(row, dict) and all(row.get(k) == v for k, v in params.items())
+        ] or NO_RESULTS
 
     def get_kv(self, key: str) -> Any:
         return self.kv.get(key, NO_RESULTS)
@@ -110,12 +118,30 @@ class ControlledExecutionEnvironment:
 
     # ── injection ──────────────────────────────────────────────────────
 
-    def plant_artifact(self, channel: str, location: str, content: Any) -> None:
+    def plant_artifact(self, channel: str, location: str, content: Any, mode: str = "replace") -> None:
         """Insert adversarial content into a resource before the run starts.
 
         `channel` selects the resource map; `location` is the key within it
         (a file path, a web query key, a db table name, or a kv key).
+
+        `mode="append"` adds `content` as one more row (db) or search result
+        (web) instead of replacing the whole list. Replacing a table with a
+        string changed its shape between the clean and attack runs, and any
+        `db_query` with a filter then crashed on it — the attack never
+        reached the agent in exactly the cases titled "poisoned row".
         """
+        if mode == "append":
+            if channel not in ("db", "web"):
+                raise ValueError(f"append planting is only defined for db and web, not {channel!r}")
+            target = self.db if channel == "db" else self.web
+            key = location if channel == "db" else _normalize_query(location)
+            existing = target.get(key, [])
+            if not isinstance(existing, list):
+                raise ValueError(f"cannot append to non-list {channel} entry {location!r}")
+            target[key] = [*existing, content]
+            return
+        if mode != "replace":
+            raise ValueError(f"Unknown plant mode {mode!r}")
         if channel == "files":
             self.files[location] = content
         elif channel == "web":

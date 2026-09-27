@@ -1,0 +1,27 @@
+# Live-reload override. Source is bind-mounted; dependencies stay in the
+# images, so nothing is installed on the host.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# After changing requirements.txt or package.json, rebuild and renew the
+# node_modules volume:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -V
+services:
+  backend:
+    volumes:
+      - .:/app
+      - redguard-data:/data
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload",
+              "--reload-dir", "/app/backend", "--reload-dir", "/app/core"]
+
+  frontend:
+    build:
+      target: deps
+    environment:
+      BACKEND_URL: http://backend:8000
+      WATCHPACK_POLLING: "true"
+    command: ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
