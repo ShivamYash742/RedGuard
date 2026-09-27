@@ -40,12 +40,14 @@ SEND_MESSAGE = "send_message"
 STATE_WRITE = "state_write"
 STATE_READ = "state_read"
 FINISH = "finish"
+#: Flag suspicious content to the harness (not to any agent). See runner.py.
+REPORT = "report"
 
 #: Every action kind the harness will execute. `state_read` is not in §5.4's
 #: illustrative list but is in §8's event vocabulary and is required by the
 #: memory-poisoning cases (RGM-006/007: "write to kv that a later agent
 #: reads") — without it those cases cannot be expressed at all.
-ACTION_KINDS = frozenset({TOOL_CALL, SEND_MESSAGE, STATE_WRITE, STATE_READ, FINISH})
+ACTION_KINDS = frozenset({TOOL_CALL, SEND_MESSAGE, STATE_WRITE, STATE_READ, REPORT, FINISH})
 
 #: Required fields per action kind, validated before the harness executes it.
 _REQUIRED_FIELDS: Dict[str, Tuple[str, ...]] = {
@@ -53,6 +55,7 @@ _REQUIRED_FIELDS: Dict[str, Tuple[str, ...]] = {
     SEND_MESSAGE: ("to", "content"),
     STATE_WRITE: ("key", "value"),
     STATE_READ: ("key",),
+    REPORT: ("content",),
     FINISH: (),
 }
 
@@ -326,7 +329,18 @@ class ModelClient:
         self.call_count += 1
         async with httpx.AsyncClient(timeout=self.config.timeout, transport=self._transport) as client:
             for attempt in range(self.max_rate_limit_retries + 1):
-                response = await client.post(self.endpoint, json=payload, headers=headers)
+                # Timeouts and dropped connections are the same provider
+                # failure as a 503, just surfaced by the transport instead of
+                # a status code. Unretried, one slow reasoning turn ended the
+                # run as a harness error.
+                try:
+                    response = await client.post(self.endpoint, json=payload, headers=headers)
+                except httpx.TransportError:
+                    if attempt >= self.max_rate_limit_retries:
+                        raise
+                    self.transient_retries += 1
+                    await asyncio.sleep(min(2.0 ** attempt, 60.0))
+                    continue
 
                 if response.status_code == 429 and attempt < self.max_rate_limit_retries:
                     self.rate_limit_waits += 1

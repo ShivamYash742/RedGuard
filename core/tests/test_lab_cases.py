@@ -428,8 +428,13 @@ class TestRepetitions:
             case, fixture_factory(case), _config(), ScriptedClient(_COMPROMISED_SCRIPT),
             reps=3, experiment_id="exp1",
         )
-        befores = [r.cee_before for pair in pairs for r in pair]
-        assert all(b == befores[0] for b in befores)
+        # `cee_before` is taken after planting, so clean and attack starts
+        # differ by exactly the artifact — but every run of a mode starts
+        # from the same place.
+        clean_befores = [clean.cee_before for clean, _ in pairs]
+        attack_befores = [attack.cee_before for _, attack in pairs]
+        assert all(b == clean_befores[0] for b in clean_befores)
+        assert all(b == attack_befores[0] for b in attack_befores)
         # ...and the attack runs really did mutate their own copy.
         assert any(attack.cee_after != attack.cee_before for _, attack in pairs)
 
@@ -479,8 +484,14 @@ class TestRepetitions:
         clean, attack = await run_pair(
             case, fixture_factory(case), _config(), ScriptedClient(_COMPROMISED_SCRIPT), pair_id="p1",
         )
-        assert clean.cee_before == attack.cee_before
         assert "RG-CANARY" not in json.dumps(clean.cee_before)
+        # The attack run's starting environment is the clean one plus the
+        # plant, and nothing else — no state leaked in from the clean run.
+        location = case["attack"]["delivery"]["location"]
+        assert attack.cee_before["files"][location] == case["attack"]["artifact"]
+        attack_start = json.loads(json.dumps(attack.cee_before))
+        attack_start["files"][location] = clean.cee_before["files"][location]
+        assert attack_start == clean.cee_before
 
     def test_fixture_factory_fails_fast_on_a_missing_fixture(self):
         with pytest.raises(FileNotFoundError):

@@ -513,3 +513,57 @@ class TestTokenBudget:
 
         with pytest.raises(ActionParseError):
             parse_action(await client.complete([]))
+
+
+class TestTransportErrorsAreRetried:
+    """Regression: only HTTP status codes were retried. A timeout or dropped
+    connection raised straight out of `complete()`, ended the run as a
+    harness error, and — through a second bug in the aggregation — was then
+    scored as an attack that failed."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("exc", [httpx.ReadTimeout, httpx.ConnectError, httpx.RemoteProtocolError])
+    async def test_transport_error_is_retried(self, exc):
+        attempts = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise exc("transient", request=request)
+            return _completion('{"action": "finish", "summary": "ok"}')
+
+        client = ModelClient(
+            ModelConfig(model="m", base_url="http://x.invalid/v1"),
+            transport=httpx.MockTransport(handler),
+        )
+        with patch("core.lab.model_client.asyncio.sleep", new=_no_sleep):
+            text = await client.complete([])
+
+        assert parse_action(text).kind == "finish"
+        assert attempts["n"] == 2
+        assert client.transient_retries == 1
+
+    @pytest.mark.asyncio
+    async def test_persistent_transport_error_still_raises(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("down", request=request)
+
+        client = ModelClient(
+            ModelConfig(model="m", base_url="http://x.invalid/v1"),
+            transport=httpx.MockTransport(handler),
+            max_rate_limit_retries=2,
+        )
+        with patch("core.lab.model_client.asyncio.sleep", new=_no_sleep):
+            with pytest.raises(httpx.ReadTimeout):
+                await client.complete([])
+        assert client.transient_retries == 2
+
+
+def test_report_action_parses():
+    action = parse_action('{"action": "report", "content": "suspicious"}')
+    assert action.kind == "report" and action.content == "suspicious"
+
+
+def test_report_without_content_is_a_parse_failure():
+    with pytest.raises(ValueError):
+        parse_action('{"action": "report"}')

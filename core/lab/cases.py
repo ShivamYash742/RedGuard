@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .cee import ControlledExecutionEnvironment
 from .evaluator import _COMBINATORS, _LEAF_KEYS
-from .model_client import FINISH, SEND_MESSAGE, STATE_READ, STATE_WRITE, TOOL_CALL
+from .model_client import FINISH, REPORT, SEND_MESSAGE, STATE_READ, STATE_WRITE, TOOL_CALL
 from .topology import linear_abc
 from .tools import TOOLS
 from .trace import EventCategory, EventType
@@ -72,6 +72,7 @@ _ACTION_REQUIRED = {
     SEND_MESSAGE: ("to", "content"),
     STATE_WRITE: ("key", "value"),
     STATE_READ: ("key",),
+    REPORT: ("content",),
     FINISH: ("summary",),
 }
 
