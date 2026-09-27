@@ -5,6 +5,8 @@ GitHub Issue Scenario
 Simulates a GitHub issue context for probe execution.
 """
 
+from typing import Any, Dict
+
 from core.scenarios.base import Scenario, ScenarioTemplate, ScenarioType, register_scenario
 
 

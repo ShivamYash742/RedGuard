@@ -26,11 +26,10 @@ from prisma import Prisma
 import database
 from app import app
 
-DEV_DB = Path(__file__).parent.parent / "prisma" / "dev.db"
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, migrated_db_template):
     """A TestClient whose lab endpoints talk to a disposable database copy.
 
     Deliberately synchronous. The Prisma client has to be *connected on the
@@ -44,7 +43,7 @@ def client(tmp_path, monkeypatch):
     that global at call time, which is what makes the substitution work.
     """
     test_db = tmp_path / "test_lab_api.db"
-    shutil.copyfile(DEV_DB, test_db)
+    shutil.copyfile(migrated_db_template, test_db)
 
     monkeypatch.setenv("DATABASE_URL", f"file:{test_db}")
     monkeypatch.setattr(database, "prisma", Prisma(datasource={"url": f"file:{test_db}"}))

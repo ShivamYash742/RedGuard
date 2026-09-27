@@ -1,8 +1,9 @@
 """Tests for lab_store.py: Experiment / LabRun / TraceEvent persistence.
 
-Runs against a throwaway copy of prisma/dev.db (already has the lab tables
-from `prisma db push`), never the committed file itself — CLAUDE.md protects
-its seeded content, so nothing here may write to it.
+Runs against a throwaway copy of prisma/dev.db brought up to the current
+schema by the `migrated_db_template` fixture (tests/conftest.py), never the
+committed file itself — CLAUDE.md protects its seeded content, so nothing here
+may write to it.
 """
 
 from __future__ import annotations
@@ -20,13 +21,12 @@ from core.lab.topology import linear_abc
 from core.lab.tools import ToolGateway
 from core.lab.trace import EventCategory, EventCollector, EventType
 
-DEV_DB = Path(__file__).parent.parent / "prisma" / "dev.db"
 
 
 @pytest_asyncio.fixture
-async def db(tmp_path):
+async def db(tmp_path, migrated_db_template):
     test_db_path = tmp_path / "test_lab_store.db"
-    shutil.copyfile(DEV_DB, test_db_path)
+    shutil.copyfile(migrated_db_template, test_db_path)
     client = Prisma(datasource={"url": f"file:{test_db_path}"})
     await client.connect()
     yield client

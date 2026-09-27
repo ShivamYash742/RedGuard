@@ -5,6 +5,8 @@ Forum Discussion Scenario
 Simulates a forum discussion context for probe execution.
 """
 
+from typing import Any, Dict
+
 from core.scenarios.base import Scenario, ScenarioTemplate, ScenarioType, register_scenario
 
 
