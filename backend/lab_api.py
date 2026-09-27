@@ -38,7 +38,7 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-from core.lab.analysis import ARMS, arm_summary, compare_standard
+from core.lab.analysis import ARMS, arm_summary, comparability_problems, compare_standard
 from core.lab.cases import (
     CASES_DIR,
     FIXTURES_DIR,
@@ -71,7 +71,7 @@ from core.lab.metrics import (
 )
 from core.lab.model_client import ModelClient, ModelConfig
 from core.lab.repro import reproducibility_stamp
-from core.lab.runner import ATTACK, CLEAN, RunConfig, ScriptedClient, run_case
+from core.lab.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, run_case
 from core.lab.tools import TOOLS
 
 import lab_store
@@ -81,6 +81,11 @@ router = APIRouter(prefix="/api/lab", tags=["lab"])
 
 DEFAULT_REPS = 5
 MAX_REPS = 25
+
+#: Experiments currently being executed by this process. `/run` is a GET
+#: that an EventSource re-issues on its own after any disconnect; without a
+#: guard a reconnect started a second execution beside the first.
+_RUNNING_EXPERIMENTS: set = set()
 
 
 def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int) -> RunConfig:
@@ -187,7 +192,7 @@ async def create_experiment(request: Request):
     selected = body.get("cases") or case_ids()
     reps = int(body.get("repetitions", DEFAULT_REPS))
     topology_id = body.get("topology_id", "linear_abc")
-    max_steps = int(body.get("max_steps", 6))
+    max_steps = int(body.get("max_steps", DEFAULT_MAX_STEPS))
 
     if not 1 <= reps <= MAX_REPS:
         raise HTTPException(status_code=400, detail=f"repetitions must be between 1 and {MAX_REPS}")
@@ -310,8 +315,16 @@ async def _execute(experiment: Any):
     Persistence happens per run, not at the end: a sweep is thousands of
     model calls, and a crash two hours in must not discard what already
     completed.
+
+    Re-running an experiment resumes it: pairs that already completed are
+    skipped, and runs left RUNNING by an interrupted stream are marked
+    FAILED. It used to start again from pair 1 — and the browser re-issues
+    this request by itself after a dropped connection, so one blip meant a
+    second, duplicate execution of the whole experiment.
     """
     db = await get_db()
+    await lab_store.abandon_stale_runs(db, experiment.id)
+    done = await lab_store.completed_pairs(db, experiment.id)
     config_data = json.loads(experiment.configJson)
     selected = config_data["cases"]
     reps = config_data["repetitions"]
@@ -323,7 +336,7 @@ async def _execute(experiment: Any):
     run_config = _build_config(
         config_data["arm"], model_config,
         config_data.get("topology_id", "linear_abc"),
-        config_data.get("max_steps", 6),
+        config_data.get("max_steps", DEFAULT_MAX_STEPS),
     )
 
     yield {"event": "experiment_started", "data": {
@@ -332,9 +345,10 @@ async def _execute(experiment: Any):
         "cases": selected,
         "repetitions": reps,
         "total_runs": len(selected) * reps * 2,
+        "already_completed_pairs": len(done),
     }}
 
-    completed = 0
+    completed = 2 * len(done)
     for case_id in selected:
         case = load_case(case_id)
         cee_factory = fixture_factory(case)
@@ -342,6 +356,8 @@ async def _execute(experiment: Any):
 
         for rep in range(1, reps + 1):
             pair_id = f"{experiment.id}-{case_id}-r{rep}"
+            if pair_id in done:
+                continue
             results: Dict[str, Any] = {}
             rows: Dict[str, Any] = {}
 
@@ -422,6 +438,13 @@ async def run_experiment(experiment_id: str):
     if experiment is None:
         raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
 
+    if experiment_id in _RUNNING_EXPERIMENTS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Experiment '{experiment_id}' is already running. Reopen it once it finishes to resume.",
+        )
+    _RUNNING_EXPERIMENTS.add(experiment_id)
+
     async def sse_generator():
         try:
             async for payload in _execute(experiment):
@@ -434,6 +457,8 @@ async def run_experiment(experiment_id: str):
             yield {"event": "experiment_error", "data": json.dumps(
                 {"experiment_id": experiment_id, "error": f"{type(exc).__name__}: {exc}"}
             )}
+        finally:
+            _RUNNING_EXPERIMENTS.discard(experiment_id)
 
     return EventSourceResponse(sse_generator())
 
@@ -443,17 +468,20 @@ async def run_experiment(experiment_id: str):
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _outcomes(db: Any, experiment_id: str) -> Tuple[List[RunOutcome], List[Any]]:
-    """Attack runs with a stored verdict, rebuilt as `RunOutcome`s.
+    """Completed attack runs, one per pair, rebuilt as `RunOutcome`s.
 
     Recomputed from stored verdicts rather than by re-running the evaluator
     over stored traces: both are deterministic, and this keeps the metrics
     endpoint honest about what it is aggregating — the verdicts as recorded.
+
+    Harness-failed pairs are excluded (`lab_store.completed_attack_runs`):
+    their verdict is computed over a truncated trace and used to be scored
+    as an attack that did not succeed. The sweep CLI reads outcomes through
+    this same function so the two can never disagree about what counts.
     """
     runs = await lab_store.list_runs(db, experiment_id)
     outcomes = []
-    for run in runs:
-        if run.mode != ATTACK or not run.verdictJson:
-            continue
+    for run in lab_store.completed_attack_runs(runs):
         try:
             case = load_case(run.caseId)
         except FileNotFoundError:
@@ -499,6 +527,9 @@ async def experiment_metrics(experiment_id: str):
         "experiment_id": experiment_id,
         "arm": experiment.armKey,
         "n_attack_runs": n,
+        # Pairs left out because a run hit a harness error or never finished.
+        # Visible, never silently absorbed (§21.8).
+        "n_failed_pairs": len(lab_store.failed_pair_ids(runs)),
         "aggregate": {
             "icr": _rate_with_ci(icr(outcomes), n),
             "asr": _rate_with_ci(asr(outcomes), n),
@@ -587,12 +618,22 @@ async def compare_experiments(experiments: str):
 
     db = await get_db()
     by_arm: Dict[str, List[RunOutcome]] = {}
+    configs: Dict[str, Dict[str, Any]] = {}
     for experiment_id in ids:
         experiment = await lab_store.get_experiment(db, experiment_id)
         if experiment is None:
             raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
+        configs[experiment_id] = json.loads(experiment.configJson)
         outcomes, _ = await _outcomes(db, experiment_id)
         by_arm.setdefault(experiment.armKey, []).extend(outcomes)
+
+    errors, warnings = comparability_problems(configs)
+    if errors:
+        raise HTTPException(
+            status_code=400,
+            detail="These experiments differ in more than their arm, so a difference between them "
+                   "could not be attributed to the arm: " + "; ".join(errors),
+        )
 
     if len(by_arm) < 2:
         raise HTTPException(
@@ -604,6 +645,7 @@ async def compare_experiments(experiments: str):
     return {
         "arms": {arm: arm_summary(outcomes) for arm, outcomes in by_arm.items()},
         "comparisons": compare_standard(by_arm),
+        "warnings": warnings,
     }
 
 

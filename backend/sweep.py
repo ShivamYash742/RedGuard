@@ -41,29 +41,20 @@ if _PARENT_DIR not in sys.path:
 from prisma import Prisma
 
 import lab_store
-from lab_api import ARMS, _build_config
-from core.lab.analysis import arm_summary, compare_standard, compromise_by_agent
+from lab_api import ARMS, _build_config, _outcomes
+from core.lab.analysis import arm_summary, comparability_problems, compare_standard, compromise_by_agent
 from core.lab.cases import case_ids, fixture_factory, load_case
-from core.lab.evaluator import evaluate, verdict_from_dict
+from core.lab.evaluator import evaluate
 from core.lab.evidence import build_bundle
 from core.lab.metrics import RunOutcome
 from core.lab.model_client import ModelClient, ModelConfig
 from core.lab.repro import reproducibility_stamp
-from core.lab.runner import ATTACK, CLEAN, ScriptedClient, run_case
+from core.lab.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, ScriptedClient, run_case
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Execution
 # ─────────────────────────────────────────────────────────────────────────────
-
-async def _completed_pairs(db: Any, experiment_id: str) -> set:
-    """`pair_id`s whose ATTACK run already finished — what resume skips."""
-    runs = await lab_store.list_runs(db, experiment_id)
-    return {
-        r.pairId for r in runs
-        if r.mode == ATTACK and r.status == "COMPLETED" and r.verdictJson
-    }
-
 
 async def run_arm(
     db: Any,
@@ -86,8 +77,25 @@ async def run_arm(
             raise SystemExit(f"No experiment {experiment_id!r} to resume")
         config_data = json.loads(experiment.configJson)
         cases, reps, arm = config_data["cases"], config_data["repetitions"], config_data["arm"]
+        # Everything that defines the experiment comes from its stored
+        # config, never from this invocation's flags. The documented
+        # `--resume <id>` carries no --provider/--model, so reading the CLI
+        # silently continued a nemotron sweep on the ollama default, inside
+        # the same experiment.
+        stored_model = config_data.get("model") or {}
+        model_config = ModelConfig.from_env(
+            provider=stored_model.get("provider", "ollama"), model=stored_model.get("model"),
+        )
+        max_steps = config_data.get("max_steps", DEFAULT_MAX_STEPS)
+        scripted = bool(config_data.get("scripted", False))
         run_config = _build_config(arm, model_config, config_data.get("topology_id", "linear_abc"), max_steps)
-        done = await _completed_pairs(db, experiment_id)
+        print(f"  resuming with the stored config: "
+              f"{'(scripted)' if scripted else f'{model_config.provider} / {model_config.model}'}, "
+              f"max_steps={max_steps}")
+        stale = await lab_store.abandon_stale_runs(db, experiment_id)
+        if stale:
+            print(f"  marked {stale} interrupted run(s) FAILED")
+        done = await lab_store.completed_pairs(db, experiment_id)
         if done:
             print(f"  resuming: {len(done)} pairs already complete")
     else:
@@ -164,6 +172,9 @@ async def _run_pair(
             cee_before=result.cee_before, cee_after=result.cee_after,
         )
 
+    if harness_error:
+        # Stored, but excluded from every aggregate and re-run on resume.
+        return f"FAILED — {harness_error} (excluded; re-run on --resume)"
     return (
         f"{verdict.objective.level.value} · {verdict.containment.label} · "
         f"{verdict.system_outcome.value}"
@@ -176,18 +187,32 @@ async def _run_pair(
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _outcomes_for(db: Any, experiment_id: str) -> Tuple[str, List[RunOutcome]]:
+    """The same outcomes the API aggregates (`lab_api._outcomes`): completed
+    pairs only, one per pair. Harness-failed pairs are reported, not scored."""
     experiment = await lab_store.get_experiment(db, experiment_id)
     if experiment is None:
         raise SystemExit(f"No experiment {experiment_id!r}")
-    outcomes = []
-    for run in await lab_store.list_runs(db, experiment_id):
-        if run.mode != ATTACK or not run.verdictJson:
-            continue
-        outcomes.append(RunOutcome(
-            case=load_case(run.caseId),
-            verdict=verdict_from_dict(json.loads(run.verdictJson)),
-        ))
+    outcomes, runs = await _outcomes(db, experiment_id)
+    failed = lab_store.failed_pair_ids(runs)
+    if failed:
+        print(f"  ! {experiment_id}: {len(failed)} pair(s) excluded — harness error or interrupted")
     return experiment.armKey, outcomes
+
+
+async def _check_comparable(db: Any, experiment_ids: Sequence[str]) -> None:
+    configs = {}
+    for experiment_id in experiment_ids:
+        experiment = await lab_store.get_experiment(db, experiment_id)
+        if experiment is not None:
+            configs[experiment_id] = json.loads(experiment.configJson)
+    errors, warnings = comparability_problems(configs)
+    for warning in warnings:
+        print(f"  ! {warning}")
+    if errors:
+        raise SystemExit(
+            "These experiments differ in more than their arm and cannot be pooled or compared:\n  "
+            + "\n  ".join(errors)
+        )
 
 
 async def export_bundles(db: Any, experiment_id: str, out_dir: Path) -> int:
@@ -200,8 +225,10 @@ async def export_bundles(db: Any, experiment_id: str, out_dir: Path) -> int:
     experiment = await lab_store.get_experiment(db, experiment_id)
     written = 0
 
-    for run in await lab_store.list_runs(db, experiment_id):
-        if run.mode != ATTACK or not run.baselineRunId or not run.verdictJson:
+    # Completed pairs only — the same set the report aggregates, so every
+    # bundle on disk corresponds to a row in the published numbers.
+    for run in lab_store.completed_attack_runs(await lab_store.list_runs(db, experiment_id)):
+        if not run.baselineRunId:
             continue
         bundle = build_bundle(
             case=load_case(run.caseId),
@@ -282,7 +309,7 @@ async def main() -> int:
     parser.add_argument("--reps", type=int, default=5)
     parser.add_argument("--provider", default="ollama", choices=["ollama", "nvidia", "groq"])
     parser.add_argument("--model", default=None)
-    parser.add_argument("--max-steps", type=int, default=10)
+    parser.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     parser.add_argument("--scripted", action="store_true", help="replay clean scripts; no model calls")
     parser.add_argument("--resume", default=None, help="experiment id to continue")
     parser.add_argument("--report", default=None, help="comma-separated experiment ids; analysis only")
@@ -301,7 +328,9 @@ async def main() -> int:
     try:
         if args.report:
             by_arm: Dict[str, List[RunOutcome]] = {}
-            for experiment_id in args.report.split(","):
+            report_ids = [e.strip() for e in args.report.split(",") if e.strip()]
+            await _check_comparable(db, report_ids)
+            for experiment_id in report_ids:
                 arm, outcomes = await _outcomes_for(db, experiment_id.strip())
                 by_arm.setdefault(arm, []).extend(outcomes)
                 if args.export:
@@ -312,14 +341,23 @@ async def main() -> int:
 
         model_config = ModelConfig.from_env(provider=args.provider, model=args.model)
         cases = [c.strip() for c in args.cases.split(",") if c.strip()] or case_ids()
+        arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
-        print(f"model:  {'(scripted)' if args.scripted else f'{args.provider} / {model_config.model}'}")
-        print(f"cases:  {len(cases)} × {args.reps} reps × {len(args.arms.split(','))} arm(s)")
+        if args.resume and len(arms) > 1:
+            # One experiment is one arm. Looping the arms over a single
+            # resumed id executed it once per arm and pooled its outcomes
+            # into the report once per arm.
+            raise SystemExit("--resume continues one experiment (one arm); do not combine it with several --arms")
+
+        if args.resume:
+            print(f"resume: {args.resume} — model, cases, reps and max_steps come from the stored experiment")
+        else:
+            print(f"model:  {'(scripted)' if args.scripted else f'{args.provider} / {model_config.model}'}")
+            print(f"cases:  {len(cases)} × {args.reps} reps × {len(arms)} arm(s)")
 
         experiment_ids: List[str] = []
         by_arm = {}
-        for arm in args.arms.split(","):
-            arm = arm.strip()
+        for arm in arms:
             print(f"\n=== arm: {arm} ===")
             experiment_id = await run_arm(
                 db, arm=arm, cases=cases, reps=args.reps, model_config=model_config,

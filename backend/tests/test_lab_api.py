@@ -468,3 +468,117 @@ class TestCompareEndpoint:
     def test_unknown_experiment_is_404(self, client):
         experiment = _create_experiment(client)["experiment_id"]
         assert client.get(f"/api/lab/compare?experiments={experiment},nope").status_code == 404
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regressions from the pre-P7 review
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _TimesOutOnAttack:
+    """Scripted client whose provider times out during every ATTACK run —
+    the harness error an unretried timeout or exhausted budget produces."""
+
+    def __init__(self, script):
+        from core.lab.runner import ScriptedClient
+        self._inner = ScriptedClient(script)
+        self.call_count = 0
+        self._runs = 0
+
+    def reset(self):
+        self._inner.reset()
+        self._runs += 1
+
+    async def complete(self, messages):
+        import httpx
+        self.call_count += 1
+        if self._runs % 2 == 0:
+            raise httpx.ReadTimeout("provider timed out")
+        return await self._inner.complete(messages)
+
+
+class TestHarnessFailedPairsAreExcluded:
+    """Regression: a pair whose attack run hit a harness error was stored as
+    FAILED *with a verdict*, and `_outcomes` read every attack row with a
+    verdict — so a truncated run scored as a valid NOT_REACHED /
+    CONTAINED_AT_B result, deflating ASR with n_invalid still 0."""
+
+    def test_failed_pair_is_reported_not_scored(self, client, monkeypatch):
+        import lab_api
+        monkeypatch.setattr(lab_api, "_client_for", lambda cfg, mc, case: _TimesOutOnAttack(case["clean_script"]))
+        experiment = _run_to_completion(client, repetitions=2)["experiment"]
+
+        metrics = client.get(f"/api/lab/experiments/{experiment['experiment_id']}/metrics").json()
+        assert metrics["n_attack_runs"] == 0
+        assert metrics["n_failed_pairs"] == 2
+        assert metrics["aggregate"]["asr"]["value"] is None
+
+
+class TestRunResumesInsteadOfRestarting:
+    """Regression: `/run` always started from pair 1. An EventSource re-issues
+    the request by itself after any disconnect, so one dropped connection
+    executed the whole experiment a second time into the same record."""
+
+    def test_second_run_executes_nothing_new(self, client):
+        created = _run_to_completion(client, repetitions=2)["experiment"]
+        experiment_id = created["experiment_id"]
+        events = _stream(client, experiment_id)
+
+        assert not [e for e in events if e["event"] == "run_started"]
+        started = next(e for e in events if e["event"] == "experiment_started")
+        assert started["data"]["already_completed_pairs"] == 2
+        assert client.get(f"/api/lab/experiments/{experiment_id}").json()["run_count"] == 4
+
+    def test_interrupted_runs_are_marked_failed_on_resume(self, client):
+        import asyncio
+        experiment_id = _create_experiment(client)["experiment_id"]
+
+        async def orphan():
+            import lab_store
+            await lab_store.create_run(
+                database.prisma, experiment_id=experiment_id, case_id="RGM-001", mode="CLEAN",
+                pair_id=f"{experiment_id}-RGM-001-r1", repetition_index=1,
+            )
+        client.portal.call(orphan)
+
+        _stream(client, experiment_id)
+        runs = client.get(f"/api/lab/experiments/{experiment_id}").json()["runs"]
+        assert not [r for r in runs if r["status"] == "RUNNING"]
+        assert any((r["invalid_reason"] or "").startswith("abandoned") for r in runs)
+        # ...and the pair itself was then executed properly.
+        assert client.get(f"/api/lab/experiments/{experiment_id}/metrics").json()["n_attack_runs"] == 1
+
+    def test_concurrent_run_is_refused(self, client):
+        import lab_api
+        experiment_id = _create_experiment(client)["experiment_id"]
+        lab_api._RUNNING_EXPERIMENTS.add(experiment_id)
+        try:
+            response = client.get(f"/api/lab/experiments/{experiment_id}/run")
+            assert response.status_code == 409
+        finally:
+            lab_api._RUNNING_EXPERIMENTS.discard(experiment_id)
+
+
+def test_default_step_budget_is_ten(client):
+    """Regression: the API defaulted to 6 while E2 measured 10 — and the UI
+    never sent max_steps, so every UI-launched experiment ran on 6."""
+    experiment = _create_experiment(client)
+    assert experiment["config"]["max_steps"] == 10
+
+
+class TestCompareRefusesIncomparableExperiments:
+    """Regression: `/compare` pooled by arm only, so arms run on different
+    models or step budgets were compared and the gap reported as the arm's
+    effect."""
+
+    def test_different_step_budgets_are_refused(self, client):
+        first = _run_to_completion(client, arm="attack", max_steps=10)["experiment"]["experiment_id"]
+        second = _run_to_completion(client, arm="attack_bus_gateway", max_steps=4)["experiment"]["experiment_id"]
+        response = client.get(f"/api/lab/compare?experiments={first},{second}")
+        assert response.status_code == 400
+        assert "max_steps" in response.json()["detail"]
+
+    def test_different_case_sets_are_a_warning(self, client):
+        first = _run_to_completion(client, arm="attack", cases=["RGM-001"])["experiment"]["experiment_id"]
+        second = _run_to_completion(client, arm="attack_bus_gateway", cases=["RGM-002"])["experiment"]["experiment_id"]
+        body = client.get(f"/api/lab/compare?experiments={first},{second}").json()
+        assert any("different case sets" in w for w in body["warnings"])

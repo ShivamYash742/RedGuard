@@ -17,6 +17,7 @@ the intervals overlap — and `overlapping` is the caveat, not the headline.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .evaluator import AgentImpactLevel, ObjectiveAchievement, SystemOutcome
@@ -238,3 +239,43 @@ def compromise_by_agent(outcomes: Sequence[RunOutcome]) -> Dict[str, Dict[str, i
             row = table.setdefault(agent, {level.value: 0 for level in AgentImpactLevel})
             row[impact.level.value] += 1
     return table
+
+
+#: Configuration that must be identical across every experiment pooled into
+#: one comparison. Arm-specific settings (validation mode, the permissive
+#: topology id) are exactly what is being compared and are left out.
+_COMPARABLE_MODEL_FIELDS = ("provider", "model", "temperature", "max_tokens")
+
+
+def comparability_problems(configs: Dict[str, Dict[str, Any]]) -> Tuple[List[str], List[str]]:
+    """Why a set of experiments (id -> stored config) cannot be pooled.
+
+    Returns `(errors, warnings)`. Pooling by arm alone let a nemotron arm be
+    compared with an ollama arm, or a scripted experiment be pooled with a
+    real one, and the difference be reported as the effect of the arm.
+    Differing case sets are only a warning: a sweep split across several
+    experiments legitimately covers different cases in each.
+    """
+    errors: List[str] = []
+    warnings: List[str] = []
+
+    def values(getter) -> Dict[str, Any]:
+        return {eid: getter(cfg) for eid, cfg in configs.items()}
+
+    checks = {f"model.{f}": (lambda cfg, f=f: (cfg.get("model") or {}).get(f)) for f in _COMPARABLE_MODEL_FIELDS}
+    checks["max_steps"] = lambda cfg: cfg.get("max_steps")
+    checks["scripted"] = lambda cfg: bool(cfg.get("scripted", False))
+    for label, getter in checks.items():
+        seen = values(getter)
+        if len({json.dumps(v, sort_keys=True, default=str) for v in seen.values()}) > 1:
+            errors.append(f"{label} differs: " + ", ".join(f"{eid}={v!r}" for eid, v in sorted(seen.items())))
+
+    by_arm: Dict[str, set] = {}
+    for cfg in configs.values():
+        by_arm.setdefault(cfg.get("arm", "?"), set()).update(cfg.get("cases") or [])
+    if len({frozenset(c) for c in by_arm.values()}) > 1:
+        warnings.append(
+            "arms cover different case sets: "
+            + "; ".join(f"{arm}={sorted(c)}" for arm, c in sorted(by_arm.items()))
+        )
+    return errors, warnings
