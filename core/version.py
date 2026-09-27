@@ -60,22 +60,22 @@ MIN_RUNS_FOR_STATISTICS: int = 3
 # to new ones — that is the point of keeping it separate from the others.
 
 #: Version of the Mode B trace/event schema and its persistence models.
-LAB_SCHEMA_VERSION: str = "1.0.0"
+LAB_SCHEMA_VERSION: str = "1.1.0"
 
 #: Version of the Mode B security test case schema.
-CASE_SCHEMA_VERSION: str = "1.0.0"
+CASE_SCHEMA_VERSION: str = "1.1.0"
 
 #: Version of the Controlled Execution Environment semantics.
-CEE_VERSION: str = "1.0.0"
+CEE_VERSION: str = "1.1.0"
 
 #: Version of the topology definitions and authorization tables.
 TOPOLOGY_VERSION: str = "1.0.0"
 
 #: Version of the verdict definitions and predicate DSL.
-EVALUATOR_VERSION: str = "1.0.0"
+EVALUATOR_VERSION: str = "1.1.0"
 
 #: Version of the Mode B metric formulas.
-METRIC_VERSION: str = "1.0.0"
+METRIC_VERSION: str = "1.1.0"
 
 #: Human-readable release name.
 RELEASE_NAME: str = "RedGuard Benchmark v3.0.0"
