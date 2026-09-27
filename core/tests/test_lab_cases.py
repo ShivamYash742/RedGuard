@@ -929,3 +929,23 @@ def test_unparameterised_string_table_is_returned_whole_when_filtered():
     from core.lab.cee import ControlledExecutionEnvironment
     cee = ControlledExecutionEnvironment.from_dict({"db": {"t": "free text"}})
     assert cee.query_db("t", {"vendor": "x"}) == "free text"
+
+
+class TestReproStampWithoutGit:
+    """In a Docker image there is no .git; the build-time commit is used and
+    cleanliness is reported as unknown rather than guessed."""
+
+    def test_falls_back_to_the_build_commit(self, monkeypatch):
+        from core.lab import repro
+        monkeypatch.setattr(repro, "_get_git_commit", lambda: None)
+        monkeypatch.setattr(repro, "_get_git_status_clean", lambda: True)
+        monkeypatch.setenv("REDGUARD_GIT_COMMIT", "abc123")
+        stamp = repro.reproducibility_stamp()
+        assert stamp["git_commit"] == "abc123"
+        assert stamp["git_clean"] is None
+
+    def test_no_commit_anywhere_is_none(self, monkeypatch):
+        from core.lab import repro
+        monkeypatch.setattr(repro, "_get_git_commit", lambda: None)
+        monkeypatch.delenv("REDGUARD_GIT_COMMIT", raising=False)
+        assert repro.reproducibility_stamp()["git_commit"] is None

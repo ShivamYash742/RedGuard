@@ -34,8 +34,14 @@ diagram, and `CLAUDE.md` for Claude-Code-specific notes.
 
 ## Setup
 
+With Docker (no local installs): `docker compose up --build` — see the
+README's "Run with Docker" section for tests, sweeps and the live-reload
+override.
+
+Without Docker:
+
 ```bash
-npm install
+npm ci
 cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cd ..
 cp .env.example .env   # then fill in the keys for whichever agents you need
 ```
@@ -52,8 +58,8 @@ npm run build            # production build
 
 ```bash
 cd backend && source .venv/bin/activate
-pytest tests/                 # backend: inspector, scanner
-pytest ../core/tests/         # core: BDS metric, statistics, dataset schema
+pytest tests/                 # backend: inspector, scanner, lab store/API
+pytest ../core/tests/         # core: BDS metric, statistics, dataset schema, Mode B
 ```
 
 There's no frontend test suite yet — validate UI changes with `npm run dev`

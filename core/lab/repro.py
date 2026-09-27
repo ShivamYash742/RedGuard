@@ -21,6 +21,7 @@ live path.
 
 from __future__ import annotations
 
+import os
 import platform
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -37,10 +38,18 @@ def reproducibility_stamp() -> Dict[str, Any]:
     rather than assumed. `None` means the question could not be answered (no
     git, no repo, timeout) — which is not the same as clean.
     """
+    commit = _get_git_commit()
+    clean = _get_git_status_clean()
+    if commit is None:
+        # Inside a Docker image there is no .git to ask. The build records
+        # the commit it was built from; whether that tree was clean cannot
+        # be answered here, so `git_clean` stays None ("unknown"), never True.
+        commit = os.getenv("REDGUARD_GIT_COMMIT") or None
+        clean = None
     return {
         "versions": get_lab_version_info(),
-        "git_commit": _get_git_commit(),
-        "git_clean": _get_git_status_clean(),
+        "git_commit": commit,
+        "git_clean": clean,
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "captured_at": datetime.now(timezone.utc).isoformat(),

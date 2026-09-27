@@ -221,8 +221,46 @@ RedGuard/
 
 ## 🚀 Quick Start Guide
 
+### Run with Docker (no local installs)
+
+The only prerequisite is Docker with Compose v2. Python, Node, Prisma and every
+dependency live in the images.
+
+```bash
+cp .env.example .env            # optional — only for the model providers you use
+docker compose up --build       # UI http://localhost:3000 · API http://localhost:8000
+```
+
+The backend keeps its database on the `redguard-data` volume: on first start it
+copies the committed demo data and adds the Mode B `lab_*` tables to that copy.
+`backend/prisma/dev.db` itself is never written. `docker compose down -v` resets it.
+
+Live-reload development (source bind-mounted, nothing installed on the host):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# after changing requirements.txt or package.json, add -V to refresh node_modules
+```
+
+Tests, sweeps and smoke runs inside the backend container:
+
+```bash
+docker compose run --rm backend python -m pytest ../core/tests tests -q
+docker compose run --rm backend python -m core.lab.cases
+docker compose run --rm backend python -m core.lab.smoke --scripted
+docker compose run --rm backend python sweep.py --scripted --reps 2 --export /data/bundles
+docker compose cp backend:/data/bundles ./bundles     # copy evidence bundles out
+```
+
+Notes:
+- **Ollama on the host**: containers reach it at `http://host.docker.internal:11434`
+  by default. Override with `DOCKER_OLLAMA_BASE_URL` in your shell or `.env`.
+- **Reproducibility stamp**: there is no `.git` in the image, so build with
+  `GIT_COMMIT=$(git rev-parse HEAD) docker compose build` to record the commit in
+  every Mode B experiment (`git_clean` is then reported as unknown, never as clean).
+
 ### 1. Prerequisites
-- Node.js 18+ & `npm`
+- Node.js 20.9+ & `npm` (Next.js 16)
 - Python 3.10+ & `pip` / `venv`
 
 ### 2. Installation
@@ -232,14 +270,25 @@ git clone https://github.com/ShivamYash742/RedGuard.git
 cd RedGuard
 
 # Install frontend dependencies
-npm install
+npm ci
 
 # Setup backend Python environment
 cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+prisma generate --schema prisma/schema.prisma
 cd ..
+```
+
+The committed `backend/prisma/dev.db` is demo seed data **without** the Mode B
+`lab_*` tables, and CLAUDE.md asks that it not be written. To use `/lab` locally,
+work on a copy:
+
+```bash
+cp backend/prisma/dev.db backend/prisma/local.db
+DATABASE_URL="file:./local.db" backend/.venv/bin/prisma db push --schema backend/prisma/schema.prisma --skip-generate
+# then set DATABASE_URL="file:./local.db" in .env
 ```
 
 ### 3. Environment Variables
@@ -275,8 +324,8 @@ npm run lint                                                  # ESLint (Next.js 
 npm run typecheck                                              # tsc --noEmit
 
 cd backend && source .venv/bin/activate
-pytest tests/                                                  # backend unit tests (inspector, scanner)
-pytest ../core/tests/                                          # core benchmark/dataset tests (BDS, stats, schema validation)
+pytest tests/                                                  # backend: inspector, scanner, lab store/API
+pytest ../core/tests/                                          # core: BDS, stats, schema validation, all of Mode B
 ```
 
 ---

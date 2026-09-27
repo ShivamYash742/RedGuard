@@ -43,6 +43,12 @@ Two halves of the codebase matter and don't overlap much:
 ## Commands
 
 ```bash
+docker compose up --build                                          # everything, no local installs
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up  # same, with live reload
+docker compose run --rm backend python -m pytest ../core/tests tests -q
+```
+
+```bash
 npm run dev:all       # frontend (:3000) + backend (:8000) together
 npm run lint           # ESLint
 npm run typecheck      # tsc --noEmit
@@ -52,7 +58,7 @@ npm run typecheck      # tsc --noEmit
 cd backend && source .venv/bin/activate
 pytest tests/                 # backend: inspector, scanner, lab_store, lab_api
 pytest ../core/tests/         # core: BDS metric, statistics, schema validation, all of Mode B
-pytest ../core/tests/ tests/  # everything (471 tests, no LLM needed)
+pytest ../core/tests/ tests/  # everything (541 tests, no LLM needed)
 ```
 
 Mode B has its own entry points, none of which need an LLM except `smoke`:
@@ -87,12 +93,18 @@ There is no frontend test suite currently — verify UI changes by running
   `.gitignore` (`*.db` / `!backend/prisma/dev.db`) as seed data for the demo
   UI. Don't `rm` or `.gitignore` it without checking with the user first —
   regenerating it from scratch loses the seeded scan history.
-  **Two traps worth knowing:** `git status` will not show changes to it —
-  it is flagged `assume-unchanged` (`git ls-files -v` shows `h`), so verify
-  by querying row counts, not by trusting git. And `npm run dev:all` points
-  the backend at this file, so any lab experiment launched that way writes
-  into the committed demo data. Point `DATABASE_URL` at a copy when running
-  experiments.
+  **Traps worth knowing:** it does **not** contain the Mode B `lab_*`
+  tables — the backend tests migrate a temp copy (`backend/tests/conftest.py`)
+  and Docker migrates its volume copy, so neither ever writes this file.
+  Some checkouts flag it `assume-unchanged` locally (`git ls-files -v` shows
+  `h`); that flag is per-clone and not committed, which is how a schema push
+  on one machine went unnoticed. Verify by querying tables/row counts, not
+  by trusting git. And `npm run dev:all` points the backend at whatever
+  `DATABASE_URL` in `.env` says — point it at a copy when running experiments.
+- **Python 3.10+ must keep working.** Python 3.14 evaluates annotations
+  lazily, so a missing `typing` import only fails on older interpreters
+  (`core/tests/test_scenarios_import.py` guards this). The Docker image runs
+  3.12.
 - **Mode B cases are data too.** The 9 security test cases live as JSON in
   `core/lab/cases/*.json` with a schema of record beside them, loaded and
   validated by `core/lab/cases.py`. Each ships a `clean_script` — a compliant
