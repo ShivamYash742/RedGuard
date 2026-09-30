@@ -254,9 +254,10 @@ before this change are not comparable with numbers after it.
    `attack_bus_gateway`, `attack_capability_gateway`
    (`attack_permissive_tools` is optional): 9 cases × 5 reps, ~2,650 calls per
    arm at the pilots' rate. Settle the budget first.
-3. **Cross-arm results.** `/api/lab/compare` returns EXP-4/6/6b/6c/7/7b with
-   the new paired blocks; there is **no UI** for it yet.
-4. **UI, optional.** A compare page. A vertical stage for phones: the stage
+3. **Cross-arm results.** *Done:* `/lab/compare` picks experiments and shows
+   EXP-4/6/6b/6c/7/7b with the case-paired differences. It needs real sweep
+   data to say anything.
+4. **UI, optional.** A vertical stage for phones: the stage
    currently scrolls sideways inside its panel below ~560px. No frontend
    tests exist. DESIGN.md has not been written, and the impeccable finish
    review was not run.

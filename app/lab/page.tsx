@@ -212,7 +212,12 @@ export default function LabPage() {
       </section>
 
       <section aria-label="Experiments" className="overflow-hidden rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
-        <h2 className="border-b border-[var(--border-subtle)] px-4 py-3 text-base font-semibold text-[var(--text-primary)]">Experiments</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-4 py-3">
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">Experiments</h2>
+          <Link href="/lab/compare" className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--primary)] hover:underline">
+            Compare defences <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
         {experiments.length === 0 ? (
           <EmptyState title="No experiments yet" description="Launch one above. A scripted run costs nothing and shows the whole pipeline working." />
         ) : (

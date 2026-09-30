@@ -234,6 +234,60 @@ export interface ExperimentMetrics {
   run_counts: Record<string, number>
 }
 
+/** One arm against another, case by case (`analysis._paired`): the unit this
+ *  design generalises over is the case, not the run. `ci` is null below five
+ *  shared cases, where a bootstrap has almost nothing to resample. */
+export interface PairedDifference {
+  n_cases: number
+  mean_difference: number | null
+  ci: [number, number] | null
+  cases_lower: number
+  cases_equal: number
+  cases_higher: number
+  excludes_zero: boolean | null
+}
+
+export interface RateComparison {
+  baseline: RateWithCI
+  variant: RateWithCI
+  difference: number | null
+  overlapping: boolean | null
+  paired: PairedDifference
+}
+
+export interface ArmSummary {
+  n_runs: number
+  n_valid: number
+  n_invalid: number
+  icr: RateWithCI
+  asr: RateWithCI
+  partial_rate: RateWithCI
+  cpr: number | 'n/a'
+  cpr_denominator_size: number
+  containment_rate: number | null
+  mean_coverage: number | null
+}
+
+export interface ArmComparison {
+  baseline_arm: string
+  variant_arm: string
+  metrics: {
+    icr: RateComparison
+    asr: RateComparison
+    partial_rate: RateComparison
+    cpr: { baseline: number | 'n/a'; variant: number | 'n/a'; comparable: boolean }
+    containment_rate: { baseline: number | null; variant: number | null }
+  }
+  caveat: string
+}
+
+/** `GET /api/lab/compare` — §11's EXP-4/6/6b/6c/7/7b over pooled experiments. */
+export interface CompareResult {
+  arms: Record<string, ArmSummary>
+  comparisons: Record<string, ArmComparison>
+  warnings: string[]
+}
+
 export interface CreateExperimentRequest {
   name?: string
   arm?: string
@@ -342,6 +396,12 @@ class LabService {
 
   public async fetchMetrics(experimentId: string): Promise<ExperimentMetrics> {
     return getJSON(`/api/lab/experiments/${experimentId}/metrics`)
+  }
+
+  /** Rejects with the backend's reason when the experiments differ in more
+   *  than their arm (model, step budget, scripted mode) or share one arm. */
+  public async fetchCompare(experimentIds: string[]): Promise<CompareResult> {
+    return getJSON(`/api/lab/compare?experiments=${experimentIds.map(encodeURIComponent).join(',')}`)
   }
 
   // ── runs ─────────────────────────────────────────────────────────────
