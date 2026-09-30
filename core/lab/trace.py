@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -164,10 +164,13 @@ class TraceEvent:
 class EventCollector:
     """Appends `TraceEvent`s for one run, assigning a monotonic `step` to each."""
 
-    def __init__(self, run_id: str):
+    def __init__(self, run_id: str, listener: Optional[Callable[[TraceEvent], None]] = None):
+        """`listener` sees every event the moment it is emitted — how the
+        API streams a run while it executes instead of after it finishes."""
         self.run_id = run_id
         self._events: List[TraceEvent] = []
         self._next_step = 0
+        self._listener = listener
 
     @property
     def events(self) -> List[TraceEvent]:
@@ -207,6 +210,8 @@ class EventCollector:
         )
         self._next_step += 1
         self._events.append(event)
+        if self._listener is not None:
+            self._listener(event)
         return event
 
     def by_step(self, step: int) -> Optional[TraceEvent]:
@@ -235,12 +240,12 @@ class EventCollector:
 # Taint closure + canary scan (§5.5)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def is_attack_derived(collector: EventCollector, step: int) -> bool:
-    """True if `step`, or any event transitively reachable via `derived_from`,
-    is an artifact_planted / artifact_observed event.
-    """
+def ancestors(collector: EventCollector, steps: Iterable[int]) -> Iterator[TraceEvent]:
+    """The events at `steps` and everything transitively reachable through
+    `derived_from`, each once, lazily — so a caller that stops early walks
+    only as far as it needs to."""
     visited: set[int] = set()
-    stack = [step]
+    stack = list(steps)
     while stack:
         current = stack.pop()
         if current in visited:
@@ -249,10 +254,15 @@ def is_attack_derived(collector: EventCollector, step: int) -> bool:
         event = collector.by_step(current)
         if event is None:
             continue
-        if event.event_type in _ARTIFACT_EVENT_TYPES:
-            return True
+        yield event
         stack.extend(event.derived_from)
-    return False
+
+
+def is_attack_derived(collector: EventCollector, step: int) -> bool:
+    """True if `step`, or any event transitively reachable via `derived_from`,
+    is an artifact_planted / artifact_observed event.
+    """
+    return any(e.event_type in _ARTIFACT_EVENT_TYPES for e in ancestors(collector, (step,)))
 
 
 def canary_in(value: Any, canary: str) -> bool:

@@ -10,7 +10,9 @@ MULTI_AGENT_LAB_PLAN.md).
 
   1. emit `tool_requested` (args recorded verbatim)
   2. `topology.tool_authorized(agent, tool)` -> if false: emit `tool_denied`
-     with reason, return a denial result, **do not execute**
+     with reason, return a denial result, **do not execute**. Under the
+     `capability_gateway` arm a `capability_policy` may refuse the call the
+     same way (see its docstring)
   3. execute -> emit `tool_executed` with result, or `tool_error`
   4. tag the result event `content_tag = external_content`; if the result
      contains the planted artifact marker, add the artifact event to
@@ -23,12 +25,13 @@ touched — an unauthorized call cannot mutate CEE state.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
 from .cee import NO_RESULTS, ControlledExecutionEnvironment
 from .topology import Topology
-from .trace import ContentTag, EventCategory, EventCollector, EventType
+from .trace import ContentTag, EventCategory, EventCollector, EventType, ancestors
 
 
 @dataclass(frozen=True)
@@ -99,6 +102,75 @@ def _artifact_derivation(
     return tuple(base)
 
 
+#: The argument naming the resource each gated tool reads. `web_search` is
+#: absent on purpose: a query is free text, not a resource, and what it
+#: returns is untrusted content the policy already tracks downstream.
+_CAPABILITY_ARGS = {"file_read": "path", "db_query": "name"}
+
+#: Events whose content came out of the environment — what the capability
+#: gateway treats as untrusted. Defined by the defense in terms of what
+#: produced the content (CaMeL's rule: tool output is untrusted data), never
+#: by reading `content_tag`, which stays an observational label (§8).
+_UNTRUSTED_SOURCE_TYPES = frozenset({EventType.TOOL_EXECUTED, EventType.STATE_READ})
+
+#: (agent, tool, args, derived_from) -> None to allow, or denial metadata.
+ToolPolicy = Callable[[str, str, Dict[str, Any], Sequence[int]], Optional[Dict[str, Any]]]
+
+
+def _named_in(resource: str, text: str) -> bool:
+    """Is `resource` named in `text`, verbatim or with `_`/`-` read as spaces?
+
+    The spaced reading is what lets "record the approved vendors" name the
+    `approved_vendors` table. Without it the policy refuses the benign path
+    of seven of the nine cases, and the arm measures its own breakage rather
+    than containment. Word boundaries stop a short name matching inside a
+    longer word.
+    """
+    def spaced(s: str) -> str:
+        return re.sub(r"[_\-]+", " ", s.lower())
+
+    for needle, haystack in ((resource.lower(), text.lower()), (spaced(resource), spaced(text))):
+        if needle.strip() and re.search(rf"(?<![\w/]){re.escape(needle)}(?!\w)", haystack):
+            return True
+    return False
+
+
+def capability_policy(task: str, collector: EventCollector) -> ToolPolicy:
+    """The `capability_gateway` arm: a task-scoped capability policy in the
+    spirit of CaMeL (Debenedetti et al., 2025, "Defeating Prompt Injections
+    by Design").
+
+    A call is refused when both hold:
+
+    - the resource it reads is not named in the task the agents were given;
+    - the caller's context already holds untrusted content — anything a tool
+      or shared memory returned, reachable through `derived_from`.
+
+    It knows the task and the trace, never the attack: nothing here reads the
+    case's objective, artifact, canary or targets. That is the line between
+    it and `bus_gateway`, whose blocklist names the very resources the cases
+    target and so measures an oracle upper bound, not a deployable control.
+    A direct injection (`channel: task`) rides inside the task itself, so the
+    policy trusts it — as any capability system trusts its own principal.
+    """
+    def check(
+        agent_id: str, tool_name: str, args: Dict[str, Any], derived_from: Sequence[int],
+    ) -> Optional[Dict[str, Any]]:
+        arg = _CAPABILITY_ARGS.get(tool_name)
+        resource = args.get(arg) if arg else None
+        if not isinstance(resource, str) or _named_in(resource, task):
+            return None
+        untrusted = sorted(
+            e.step for e in ancestors(collector, derived_from)
+            if e.event_type in _UNTRUSTED_SOURCE_TYPES and e.authorized
+        )
+        if not untrusted:
+            return None
+        return {"reason": "capability_policy", "resource": resource, "untrusted_sources": untrusted}
+
+    return check
+
+
 class ToolGateway:
     """The sole authorization chokepoint between an agent and the CEE.
 
@@ -106,6 +178,9 @@ class ToolGateway:
     runner, once it has planted an artifact and recorded that event's
     step), a tool result containing the marker gets that event added to its
     `derived_from`, linking observed content back to the injection.
+
+    `policy` is the `capability_gateway` arm's extra check, applied after
+    the topology's own authorization and before the CEE is touched.
     """
 
     def __init__(
@@ -115,12 +190,14 @@ class ToolGateway:
         collector: EventCollector,
         artifact_step: Optional[int] = None,
         artifact_marker: Optional[str] = None,
+        policy: Optional[ToolPolicy] = None,
     ):
         self.cee = cee
         self.topology = topology
         self.collector = collector
         self.artifact_step = artifact_step
         self.artifact_marker = artifact_marker
+        self.policy = policy
 
     def call(
         self,
@@ -157,6 +234,21 @@ class ToolGateway:
                 metadata={"reason": "not_authorized"},
             )
             return ToolResult(ok=False, error="not_authorized")
+
+        refusal = self.policy(agent_id, tool_name, args, derived_from) if self.policy else None
+        if refusal is not None:
+            self.collector.emit(
+                EventCategory.TOOL,
+                EventType.TOOL_DENIED,
+                agent_id=agent_id,
+                tool=tool_name,
+                arguments=args,
+                authorized=False,
+                source_event_id=requested.step,
+                derived_from=(requested.step,),
+                metadata=refusal,
+            )
+            return ToolResult(ok=False, error=refusal["reason"])
 
         tool_fn = TOOLS.get(tool_name)
         if tool_fn is None:

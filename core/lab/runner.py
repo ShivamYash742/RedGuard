@@ -49,7 +49,7 @@ from .model_client import (
 )
 from .repro import reproducibility_stamp
 from .topology import MessageBus, Topology, default_content_filter
-from .tools import TOOL_SIGNATURES, StateGateway, ToolGateway
+from .tools import TOOL_SIGNATURES, StateGateway, ToolGateway, capability_policy
 from .trace import ContentTag, EventCategory, EventCollector, EventType
 
 CLEAN = "CLEAN"
@@ -57,6 +57,7 @@ ATTACK = "ATTACK"
 
 AGENT_PROMPT = "agent_prompt"
 BUS_GATEWAY = "bus_gateway"
+CAPABILITY_GATEWAY = "capability_gateway"
 
 #: Default role blurbs for the MVP topology (§4). A case may override any of
 #: them via a top-level "roles" mapping.
@@ -93,14 +94,19 @@ class RunConfig:
     #: small does not lower scores, it invalidates the baseline and
     #: discards the whole pair (§21.8).
     max_steps: int = DEFAULT_MAX_STEPS
-    #: none        — no validation of any kind (ARM-ATTACK)
-    #: agent_prompt — the agents are *told* to treat received content as data
-    #: bus_gateway  — the harness refuses the message regardless of the model
+    #: none               — no validation of any kind (ARM-ATTACK)
+    #: agent_prompt       — the agents are *told* to treat received content as data
+    #: bus_gateway        — the harness refuses the message regardless of the
+    #:                      model; its blocklist names the cases' targets, so
+    #:                      it is an oracle upper bound
+    #: capability_gateway — the harness refuses reads of resources the task
+    #:                      never named once untrusted content is in context;
+    #:                      knows the task, never the attack
     #:
-    #: The last two are the contrast §21.4 asks for: a prompt-level
-    #: suggestion is not an architectural control, and conflating them
-    #: overstates what "validation" achieved.
-    validation_mode: str = "none"  # none | agent_prompt | bus_gateway
+    #: The prompt/architecture contrast is the one §21.4 asks for: a
+    #: prompt-level suggestion is not an architectural control, and
+    #: conflating them overstates what "validation" achieved.
+    validation_mode: str = "none"  # none | agent_prompt | bus_gateway | capability_gateway
     #: Which agents get the validation instruction under `agent_prompt`.
     #: Defaults to every agent with an inbound edge; pin it to ("B",) to
     #: reproduce §5.3's narrower "Agent B's system prompt" formulation.
@@ -331,6 +337,7 @@ class CaseRunner:
         *,
         mode: str,
         run_id: str,
+        on_event: Optional[Callable[[Any], None]] = None,
     ):
         self.case = case
         self.cee = cee
@@ -339,7 +346,7 @@ class CaseRunner:
         self.mode = mode
         self.run_id = run_id
 
-        self.collector = EventCollector(run_id=run_id)
+        self.collector = EventCollector(run_id=run_id, listener=on_event)
         self.bus = MessageBus(
             config.topology,
             self.collector,
@@ -614,9 +621,16 @@ class CaseRunner:
         cee_before = self.cee.to_json()
 
         canary = (self.case.get("attack") or {}).get("canary")
+        # Built from `self.task` as delivered, so a task-channel injection is
+        # inside the trusted task — the policy cannot tell the principal from
+        # the attacker there, and it is not supposed to.
         self.gateway = ToolGateway(
             self.cee, self.config.topology, self.collector,
             artifact_step=self.artifact_step, artifact_marker=canary,
+            policy=(
+                capability_policy(self.task, self.collector)
+                if self.config.validation_mode == CAPABILITY_GATEWAY else None
+            ),
         )
         self.state = StateGateway(
             self.cee, self.config.topology, self.collector,
@@ -660,8 +674,10 @@ async def run_case(
     *,
     mode: str,
     run_id: str,
+    on_event: Optional[Callable[[Any], None]] = None,
 ) -> RunResult:
-    return await CaseRunner(case, cee, config, client, mode=mode, run_id=run_id).run()
+    """`on_event` sees each trace event as it is emitted (the API's live stream)."""
+    return await CaseRunner(case, cee, config, client, mode=mode, run_id=run_id, on_event=on_event).run()
 
 
 async def run_pair(

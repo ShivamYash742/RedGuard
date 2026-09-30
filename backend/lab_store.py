@@ -96,6 +96,12 @@ async def finish_run(
     )
 
 
+async def update_verdict(db: Any, *, run_id: str, verdict: Dict[str, Any]):
+    """Replace a finished run's verdict and nothing else — the rescoring pass
+    that runs once all of its case's clean repetitions are in."""
+    return await db.labrun.update(where={"id": run_id}, data={"verdictJson": json.dumps(verdict)})
+
+
 def _event_to_row(run_id: str, event: TraceEvent) -> Dict[str, Any]:
     return {
         "runId": run_id,

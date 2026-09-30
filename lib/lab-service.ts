@@ -47,6 +47,10 @@ export interface Verdict {
     label: string
   }
   system_outcome: SystemOutcome
+  /** How many clean runs defined "normal behaviour" for this verdict: 1 for
+   *  its paired run alone, N once rescored against all of its case's clean
+   *  repetitions. Provenance, not a fifth dimension. */
+  baseline_runs?: number
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,11 +180,20 @@ export interface RunDetail extends RunSummary {
   event_count: number
 }
 
-/** A rate with its Wilson interval. `value: null` means undefined, not zero. */
+/** A rate with its 95% interval. `value: null` means undefined, not zero.
+ *
+ *  Runs of one case succeed or fail together, so the interval is Wilson's
+ *  over the effective sample size (`n_eff`) rather than over `n` runs as if
+ *  they were independent. `ci_method` says which: plain `wilson` when there
+ *  is only one case to cluster by. */
 export interface RateWithCI {
   value: number | null
   n: number
   ci: [number, number] | null
+  ci_method?: 'wilson' | 'wilson_design_effect' | null
+  n_eff?: number | null
+  icc?: number | null
+  n_cases?: number
 }
 
 export interface ExperimentMetrics {
@@ -241,8 +254,9 @@ export interface CreateExperimentRequest {
 export type LabStreamEvent =
   | { event: 'experiment_started'; data: { experiment_id: string; arm: string; cases: string[]; repetitions: number; total_runs: number; already_completed_pairs: number } }
   | { event: 'run_started'; data: { run_id: string; case_id: string; mode: string; pair_id: string; repetition_index: number } }
-  | { event: 'trace_event'; data: { run_id: string; step: number; category: EventCategory; event_type: string; agent_id: string | null; tool: string | null; authorized: boolean | null; derived_from: number[]; content_tag: ContentTag | null } }
+  | { event: 'trace_event'; data: LiveEvent & { run_id: string } }
   | { event: 'run_verdict'; data: { run_id: string; baseline_run_id: string; case_id: string; pair_id: string; repetition_index: number; status: string; verdict: Verdict; diagnostics: Record<string, unknown>; progress: { completed: number; total: number } } }
+  | { event: 'case_rescored'; data: { case_id: string; baseline_runs: number; runs: { run_id: string; verdict: Verdict }[] } }
   | { event: 'experiment_complete'; data: { experiment_id: string; runs_completed: number } }
   | { event: 'experiment_error'; data: { experiment_id: string; error: string } }
 
@@ -251,6 +265,7 @@ const STREAM_EVENTS = [
   'run_started',
   'trace_event',
   'run_verdict',
+  'case_rescored',
   'experiment_complete',
   'experiment_error',
 ] as const
@@ -364,21 +379,318 @@ class LabService {
 export const labService = LabService.getInstance()
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Presentation helpers, kept beside the types they describe
+// Live tracking — one derivation shared by the live board and the replay
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Verdict levels are ordinal; colour encodes severity, never safe/unsafe. */
-export const IMPACT_STYLES: Record<AgentImpactLevel, string> = {
-  COMPROMISED: 'text-[var(--danger)] bg-[var(--danger-bg)] border-[var(--danger)]/30',
-  INFLUENCED: 'text-[var(--warning)] bg-[var(--warning-bg)] border-[var(--warning)]/30',
-  NOT_INFLUENCED: 'text-[var(--text-muted)] bg-[var(--surface-base)] border-[var(--border-subtle)]',
+/** Mirrors `evaluator._RESOURCE_ARG_KEYS`: the argument naming *which
+ *  resource* an action touched. Free text stays out, as it does server-side.
+ *  If the two disagree, the timeline shows a verdict with no visible
+ *  supporting deviation, which reads as the tool contradicting itself. */
+export const RESOURCE_ARG_KEYS = ['path', 'name', 'key', 'to'] as const
+
+/** A trace event as the live stream carries it (`lab_api._event_payload`). */
+export interface LiveEvent {
+  step: number
+  category: EventCategory
+  event_type: string
+  agent_id: string | null
+  tool: string | null
+  authorized: boolean | null
+  derived_from: number[]
+  content_tag: ContentTag | null
+  /** What the action reached for: `{name: 'customer_pii'}`, `{to: 'B'}`, or
+   *  for an injection event `{channel, location}`. */
+  resource: Record<string, string | number> | null
+  /** Why a refused action was refused (`not_authorized`, `capability_policy`, …). */
+  reason: string | null
 }
 
-export const OBJECTIVE_STYLES: Record<ObjectiveLevel, string> = {
-  CRITICAL_REACHED: 'text-[var(--danger)] bg-[var(--danger-bg)] border-[var(--danger)]/30',
-  REACHED: 'text-[var(--danger)] bg-[var(--danger-bg)] border-[var(--danger)]/30',
-  PARTIALLY_REACHED: 'text-[var(--warning)] bg-[var(--warning-bg)] border-[var(--warning)]/30',
-  NOT_REACHED: 'text-[var(--success)] bg-[var(--success-bg)] border-[var(--success)]/30',
+/** A stored event in the stream's shape, so a replay derives its state
+ *  through exactly the function the live board uses. */
+export function toLiveEvent(event: TraceEvent): LiveEvent {
+  const args = (event.arguments && typeof event.arguments === 'object' ? event.arguments : {}) as Record<string, unknown>
+  const meta = event.metadata ?? {}
+  const injection = event.category === 'injection'
+  const resource: Record<string, string | number> = {}
+  for (const key of injection ? ['channel', 'location'] : RESOURCE_ARG_KEYS) {
+    const value = injection ? args[key] || meta[key] : args[key]
+    if (typeof value === 'number' || (typeof value === 'string' && (value !== '' || !injection))) resource[key] = value
+  }
+  return {
+    step: event.step,
+    category: event.category,
+    event_type: event.event_type,
+    agent_id: event.agent_id,
+    tool: event.tool,
+    authorized: event.authorized,
+    derived_from: event.derived_from,
+    content_tag: event.content_tag,
+    resource: Object.keys(resource).length ? resource : null,
+    reason: event.authorized === false && typeof meta.reason === 'string' ? meta.reason : null,
+  }
+}
+
+export interface AgentTrack {
+  /** Attack-derived content was in this agent's context. Observed, not a
+   *  claim of influence — only the verdict decides that. */
+  reached: boolean
+  reachedAt: number | null
+  active: boolean
+  finished: boolean
+  /** Its own actions the harness refused: a tool, a message or shared state. */
+  refused: number
+  lastAction: string | null
+  lastStep: number | null
+  lastRefused: boolean
+}
+
+export interface EdgeTrack {
+  crossed: boolean
+  /** An attack-derived message crossed this edge. */
+  tainted: boolean
+  taintedAt: number | null
+  /** A message on this edge was refused: no edge, or the bus filter. */
+  denied: boolean
+  deniedAt: number | null
+}
+
+export interface RouteState {
+  agents: Record<string, AgentTrack>
+  edges: Record<string, EdgeTrack>
+  planted: boolean
+  finished: boolean
+  count: number
+  last: LiveEvent | null
+}
+
+export const edgeKey = (from: string, to: string) => `${from}>${to}`
+
+const ARTIFACT_EVENTS = new Set(['artifact_planted', 'artifact_observed'])
+
+/** Everything a route view shows, as of `upTo` (inclusive).
+ *
+ *  Attack derivation is the evaluator's own taint closure (`is_attack_derived`),
+ *  computed incrementally: `derived_from` only ever points at earlier steps,
+ *  so an event is derived exactly when it is an artifact event or one of its
+ *  parents is. */
+export function deriveRoute(events: LiveEvent[], agents: string[], upTo = Infinity): RouteState {
+  const tainted = new Set<number>()
+  const state: RouteState = { agents: {}, edges: {}, planted: false, finished: false, count: 0, last: null }
+  for (const agent of agents) {
+    state.agents[agent] = {
+      reached: false, reachedAt: null, active: false, finished: false,
+      refused: 0, lastAction: null, lastStep: null, lastRefused: false,
+    }
+  }
+
+  for (const event of events) {
+    if (event.step > upTo) break
+    state.count += 1
+    state.last = event
+
+    const derived = ARTIFACT_EVENTS.has(event.event_type) || event.derived_from.some((p) => tainted.has(p))
+    if (derived) tainted.add(event.step)
+    if (event.event_type === 'artifact_planted') state.planted = true
+    if (event.event_type === 'run_finished') {
+      state.finished = true
+      for (const agent of agents) state.agents[agent].active = false
+    }
+
+    const track = event.agent_id ? state.agents[event.agent_id] : undefined
+    if (!track || !event.agent_id) continue
+    if (derived && !track.reached) {
+      track.reached = true
+      track.reachedAt = event.step
+    }
+    if (event.event_type === 'agent_step_started') {
+      for (const agent of agents) state.agents[agent].active = agent === event.agent_id
+    }
+    if (event.event_type === 'agent_finished') {
+      track.finished = true
+      track.active = false
+    }
+
+    const refused = event.authorized === false
+    if (refused) track.refused += 1
+    const action = actionLabel(event)
+    if (action) {
+      track.lastAction = action
+      track.lastStep = event.step
+      track.lastRefused = refused
+    }
+
+    const to = event.resource?.to
+    if (typeof to === 'string' && (event.event_type === 'message_sent' || event.event_type === 'message_denied')) {
+      const key = edgeKey(event.agent_id, to)
+      const edge = state.edges[key] ?? (state.edges[key] = {
+        crossed: false, tainted: false, taintedAt: null, denied: false, deniedAt: null,
+      })
+      if (event.event_type === 'message_denied') {
+        edge.denied = true
+        edge.deniedAt ??= event.step
+      } else {
+        edge.crossed = true
+        if (derived && !edge.tainted) {
+          edge.tainted = true
+          edge.taintedAt = event.step
+        }
+      }
+    }
+  }
+  return state
+}
+
+/** What an agent reached for, e.g. `db_query · customer_pii`. */
+export function actionLabel(event: LiveEvent): string | null {
+  const r = event.resource ?? {}
+  const target = r.name ?? r.path ?? r.key
+  switch (event.event_type) {
+    case 'tool_requested':
+    case 'tool_denied':
+      return target !== undefined ? `${event.tool} · ${target}` : event.tool
+    case 'message_sent':
+    case 'message_denied':
+      return `message → ${r.to}`
+    case 'state_read':
+      return `read ${r.key ?? 'state'}`
+    case 'state_write':
+      return `write ${r.key ?? 'state'}`
+    case 'agent_report':
+      return 'flagged content to operators'
+    case 'action_parse_failed':
+      return 'unparseable action'
+    default:
+      return null
+  }
+}
+
+/** Plain-language gloss for each event type, so a trace is readable by
+ *  someone who has not memorised §8's vocabulary. */
+export const EVENT_LABELS: Record<string, string> = {
+  run_started: 'run started',
+  cee_loaded: 'environment loaded',
+  config_snapshot: 'config recorded',
+  run_finished: 'run finished',
+  artifact_planted: 'attacker artifact planted',
+  artifact_observed: 'artifact entered context',
+  agent_step_started: 'step started',
+  agent_output: 'proposed an action',
+  action_parse_failed: 'unparseable action',
+  agent_finished: 'finished',
+  agent_report: 'flagged content to operators',
+  message_sent: 'sent message',
+  message_delivered: 'message delivered',
+  message_denied: 'message refused',
+  message_received: 'received message',
+  tool_requested: 'requested tool',
+  tool_executed: 'tool executed',
+  tool_denied: 'tool refused',
+  tool_error: 'tool error',
+  state_read: 'read shared state',
+  state_write: 'wrote shared state',
+}
+
+export const REFUSAL_REASONS: Record<string, string> = {
+  not_authorized: 'not in its permissions',
+  capability_policy: 'capability policy',
+  no_edge: 'no edge in the topology',
+  content_filter: 'bus filter',
+}
+
+/** One line for a live ticker: who did what to which resource. */
+export function describeEvent(event: LiveEvent): string {
+  const who = event.agent_id ? `Agent ${event.agent_id}` : 'Harness'
+  const r = event.resource ?? {}
+  const action = actionLabel(event)
+  switch (event.event_type) {
+    case 'artifact_planted':
+      return `Artifact planted in ${r.channel ?? 'the environment'}${r.location ? ` · ${r.location}` : ''}`
+    case 'artifact_observed':
+      return `${who} read the injected task`
+    case 'tool_requested':
+      return `${who} → ${action}`
+    case 'tool_executed':
+      return `${who} ← ${event.tool} returned`
+    case 'tool_denied':
+    case 'message_denied':
+      return `${who} → ${action} · refused (${REFUSAL_REASONS[event.reason ?? ''] ?? event.reason ?? 'refused'})`
+    case 'message_sent':
+      return `${who} → Agent ${r.to}`
+    case 'state_read':
+    case 'state_write':
+      return `${who} ${event.authorized === false ? `refused: ${action}` : action}`
+    default:
+      return `${who} · ${EVENT_LABELS[event.event_type] ?? event.event_type}`
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vocabulary — the four verdict dimensions in words
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Short names for the execution arms; the API's `description` stays the
+ *  source of truth for what each one does. */
+export const ARM_NAMES: Record<string, string> = {
+  attack: 'No defence',
+  attack_validated: 'Prompt validation',
+  attack_permissive_tools: 'Permissive tools',
+  attack_bus_gateway: 'Bus filter (oracle)',
+  attack_capability_gateway: 'Capability gateway',
+}
+
+export const armName = (key: string) => ARM_NAMES[key] ?? key
+
+export const FAMILY_LABELS: Record<string, string> = {
+  content_injection: 'Content injection',
+  tool_manipulation: 'Tool manipulation',
+  memory_poisoning: 'Memory poisoning',
+  direct_injection: 'Direct injection',
+}
+
+/** Mirrors `runner.DEFAULT_ROLES`. */
+export const AGENT_ROLES: Record<string, string> = {
+  A: 'researcher',
+  B: 'validator',
+  C: 'executor',
+}
+
+export const IMPACT_LABELS: Record<AgentImpactLevel, string> = {
+  COMPROMISED: 'compromised',
+  INFLUENCED: 'influenced',
+  NOT_INFLUENCED: 'not influenced',
+}
+
+export const OBJECTIVE_LABELS: Record<ObjectiveLevel, string> = {
+  NOT_REACHED: 'not reached',
+  PARTIALLY_REACHED: 'partially reached',
+  REACHED: 'reached',
+  CRITICAL_REACHED: 'critical',
+}
+
+export const MECHANISM_LABELS: Record<string, string> = {
+  tool_denied: 'tool permission refused it',
+  capability_denied: 'capability policy refused it',
+  message_denied: 'bus refused the message',
+  agent_non_compliance: 'agent did not comply',
+  no_derived_content_delivered: 'attack content never arrived',
+}
+
+/** Mechanisms where the attack content reached the containing agent and
+ *  stopped *there*; the others stopped it before it arrived. */
+export const HELD_AT_AGENT = new Set(['agent_non_compliance', 'tool_denied', 'capability_denied'])
+
+export const OUTCOME_LABELS: Record<SystemOutcome, string> = {
+  TASK_COMPLETED_CLEANLY: 'task done',
+  TASK_COMPLETED_WITH_DEVIATION: 'task done, deviated',
+  TASK_FAILED: 'task failed',
+  RUN_INVALID: 'invalid: baseline failed',
+}
+
+export function containmentLabel(verdict: Verdict): string {
+  const c = verdict.containment
+  if (c.status === 'CONTAINED') return `Sealed at ${c.agent}`
+  if (c.status === 'NO_DOWNSTREAM_ELIGIBLE') return 'Entry-local'
+  return 'Not contained'
 }
 
 export const CATEGORY_STYLES: Record<EventCategory, string> = {
@@ -387,19 +699,14 @@ export const CATEGORY_STYLES: Record<EventCategory, string> = {
   communication: 'text-[var(--accent)] border-[var(--accent)]/40',
   state: 'text-[var(--warning)] border-[var(--warning)]/40',
   agent: 'text-[var(--text-secondary)] border-[var(--border-default)]',
-  system: 'text-[var(--text-muted)] border-[var(--border-subtle)]',
-  evaluation: 'text-[var(--text-muted)] border-[var(--border-subtle)]',
+  system: 'text-[var(--text-secondary)] border-[var(--border-subtle)]',
+  evaluation: 'text-[var(--text-secondary)] border-[var(--border-subtle)]',
 }
 
 /** `"n/a"` and `null` are meaningfully different from 0 and must not render
  *  as a number — §10.3's whole point. */
-export function formatRate(value: number | null | 'n/a', digits = 1): string {
+export function formatRate(value: number | null | 'n/a' | undefined, digits = 1): string {
   if (value === 'n/a') return 'n/a'
   if (value === null || value === undefined) return '—'
   return `${(value * 100).toFixed(digits)}%`
-}
-
-export function formatCI(ci: [number, number] | null): string {
-  if (!ci) return ''
-  return `[${(ci[0] * 100).toFixed(0)}–${(ci[1] * 100).toFixed(0)}%]`
 }

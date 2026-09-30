@@ -58,7 +58,7 @@ npm run typecheck      # tsc --noEmit
 cd backend && source .venv/bin/activate
 pytest tests/                 # backend: inspector, scanner, lab_store, lab_api
 pytest ../core/tests/         # core: BDS metric, statistics, schema validation, all of Mode B
-pytest ../core/tests/ tests/  # everything (541 tests, no LLM needed)
+pytest ../core/tests/ tests/  # everything (582 tests, no LLM needed)
 ```
 
 Mode B has its own entry points, none of which need an LLM except `smoke`:

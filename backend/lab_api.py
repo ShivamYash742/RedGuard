@@ -49,7 +49,7 @@ from core.lab.cases import (
     load_case,
     load_fixture,
 )
-from core.lab.evaluator import evaluate, verdict_from_dict
+from core.lab.evaluator import _RESOURCE_ARG_KEYS, evaluate, verdict_from_dict
 from core.lab.evidence import build_bundle
 from core.lab.metrics import (
     asr,
@@ -63,7 +63,7 @@ from core.lab.metrics import (
     macro_average,
     mean_coverage,
     partial_rate,
-    rate_ci,
+    rate_summary,
     soc,
     tds_report,
     trajectory_tokens,
@@ -73,6 +73,7 @@ from core.lab.model_client import ModelClient, ModelConfig
 from core.lab.repro import reproducibility_stamp
 from core.lab.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, run_case
 from core.lab.tools import TOOLS
+from core.lab.trace import EventCategory, TraceEvent
 
 import lab_store
 from database import get_db
@@ -309,6 +310,88 @@ def _client_for(config_data: Dict[str, Any], model_config: ModelConfig, case: Di
     return ModelClient(model_config)
 
 
+def _event_payload(run_id: str, event: TraceEvent) -> Dict[str, Any]:
+    """One `trace_event` SSE frame. `resource` is what the action reached for
+    (the evaluator's own resource keys) and `reason` why it was refused, so
+    the live board can say `B → db_query(customer_pii) · refused` rather than
+    only that B acted."""
+    args = event.arguments if isinstance(event.arguments, dict) else {}
+    meta = event.metadata or {}
+    resource = {k: args[k] for k in _RESOURCE_ARG_KEYS if isinstance(args.get(k), (str, int, float))}
+    if event.category == EventCategory.INJECTION:
+        resource = {k: args.get(k) or meta.get(k) for k in ("channel", "location") if args.get(k) or meta.get(k)}
+    return {
+        "run_id": run_id,
+        "step": event.step,
+        "category": event.category.value,
+        "event_type": event.event_type.value,
+        "agent_id": event.agent_id,
+        "tool": event.tool,
+        "authorized": event.authorized,
+        "derived_from": list(event.derived_from),
+        "content_tag": event.content_tag.value if event.content_tag else None,
+        "resource": resource or None,
+        "reason": meta.get("reason") if event.authorized is False else None,
+    }
+
+
+async def _run_streaming(case: Dict[str, Any], cee: Any, run_config: RunConfig, client: Any, *, mode: str, run_id: str):
+    """Run one case, yielding each `TraceEvent` the moment it is emitted and
+    the `RunResult` last.
+
+    Streaming only after the run finished meant minutes of silence per run
+    against a real model, then a burst — nothing a live view could follow.
+    If the consumer goes away mid-run the run is cancelled rather than left
+    spending model calls nobody will see.
+    """
+    queue: asyncio.Queue = asyncio.Queue()
+    task = asyncio.create_task(
+        run_case(case, cee, run_config, client, mode=mode, run_id=run_id, on_event=queue.put_nowait)
+    )
+    try:
+        while not (task.done() and queue.empty()):
+            getter = asyncio.ensure_future(queue.get())
+            await asyncio.wait({getter, task}, return_when=asyncio.FIRST_COMPLETED)
+            if getter.done():
+                yield getter.result()
+            else:
+                getter.cancel()
+        yield await task
+    finally:
+        if not task.done():
+            task.cancel()
+
+
+async def rescore_case(db: Any, experiment_id: str, case: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Re-evaluate every completed attack run of `case` against all of the
+    case's completed clean runs in this experiment, not only its own pair.
+
+    Runs once all of a case's repetitions are in, so each verdict of the case
+    is judged against the same N-run baseline — independent of the order the
+    pairs happened to execute in, and of a resume. Fewer than two clean runs
+    leave nothing to pool, and the pair-time verdicts stand.
+    """
+    runs = [
+        r for r in await lab_store.list_runs(db, experiment_id)
+        if r.caseId == case["id"] and r.status == "COMPLETED"
+    ]
+    cleans = {r.id: await lab_store.load_run_collector(db, r.id) for r in runs if r.mode == CLEAN}
+    if len(cleans) < 2:
+        return []
+
+    rescored: List[Dict[str, Any]] = []
+    for run in runs:
+        if run.mode != ATTACK or run.baselineRunId not in cleans:
+            continue
+        verdict = evaluate(
+            case, await lab_store.load_run_collector(db, run.id), cleans[run.baselineRunId],
+            baseline=[c for run_id, c in cleans.items() if run_id != run.baselineRunId],
+        ).to_dict()
+        await lab_store.update_verdict(db, run_id=run.id, verdict=verdict)
+        rescored.append({"run_id": run.id, "verdict": verdict})
+    return rescored
+
+
 async def _execute(experiment: Any):
     """Run every (case × repetition) pair, yielding SSE payloads as it goes.
 
@@ -372,24 +455,15 @@ async def _execute(experiment: Any):
                     "pair_id": pair_id, "repetition_index": rep,
                 }}
 
-                result = await run_case(
+                async for item in _run_streaming(
                     case, cee_factory(), run_config, client, mode=mode, run_id=row.id,
-                )
-                results[mode] = result
+                ):
+                    if isinstance(item, TraceEvent):
+                        yield {"event": "trace_event", "data": _event_payload(row.id, item)}
+                    else:
+                        results[mode] = item
 
-                await lab_store.persist_events(db, run_id=row.id, collector=result.collector)
-                for event in result.collector.events:
-                    yield {"event": "trace_event", "data": {
-                        "run_id": row.id,
-                        "step": event.step,
-                        "category": event.category.value,
-                        "event_type": event.event_type.value,
-                        "agent_id": event.agent_id,
-                        "tool": event.tool,
-                        "authorized": event.authorized,
-                        "derived_from": list(event.derived_from),
-                        "content_tag": event.content_tag.value if event.content_tag else None,
-                    }}
+                await lab_store.persist_events(db, run_id=row.id, collector=results[mode].collector)
 
             clean, attack = results[CLEAN], results[ATTACK]
             await lab_store.set_baseline(db, run_id=rows[ATTACK].id, baseline_run_id=rows[CLEAN].id)
@@ -426,6 +500,14 @@ async def _execute(experiment: Any):
                 "progress": {"completed": completed, "total": len(selected) * reps * 2},
             }}
 
+        rescored = await rescore_case(db, experiment.id, case)
+        if rescored:
+            yield {"event": "case_rescored", "data": {
+                "case_id": case_id,
+                "baseline_runs": rescored[0]["verdict"]["baseline_runs"],
+                "runs": rescored,
+            }}
+
     yield {"event": "experiment_complete", "data": {
         "experiment_id": experiment.id, "runs_completed": completed,
     }}
@@ -460,7 +542,10 @@ async def run_experiment(experiment_id: str):
         finally:
             _RUNNING_EXPERIMENTS.discard(experiment_id)
 
-    return EventSourceResponse(sse_generator())
+    # `no-transform` keeps a compressing proxy from gzipping the stream: the
+    # Next.js /api rewrite otherwise buffers every event inside the gzip
+    # stream until the experiment ends, so a live run showed nothing live.
+    return EventSourceResponse(sse_generator(), headers={"Cache-Control": "no-store, no-transform"})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -488,13 +573,6 @@ async def _outcomes(db: Any, experiment_id: str) -> Tuple[List[RunOutcome], List
             continue
         outcomes.append(RunOutcome(case=case, verdict=verdict_from_dict(json.loads(run.verdictJson))))
     return outcomes, runs
-
-
-def _rate_with_ci(value: Optional[float], n: int) -> Dict[str, Any]:
-    if value is None or n == 0:
-        return {"value": None, "n": n, "ci": None}
-    low, high = rate_ci(round(value * n), n)
-    return {"value": value, "n": n, "ci": [low, high]}
 
 
 @router.get("/experiments/{experiment_id}/metrics")
@@ -531,9 +609,9 @@ async def experiment_metrics(experiment_id: str):
         # Visible, never silently absorbed (§21.8).
         "n_failed_pairs": len(lab_store.failed_pair_ids(runs)),
         "aggregate": {
-            "icr": _rate_with_ci(icr(outcomes), n),
-            "asr": _rate_with_ci(asr(outcomes), n),
-            "partial_rate": _rate_with_ci(partial_rate(outcomes), n),
+            "icr": rate_summary(outcomes, icr),
+            "asr": rate_summary(outcomes, asr),
+            "partial_rate": rate_summary(outcomes, partial_rate),
             # CPR is "n/a" when D is empty — never 0.0 (§10.3). An empty
             # denominator means the question was never asked, not that
             # propagation never happened.
@@ -729,4 +807,7 @@ async def get_run_evidence(run_id: str):
         cee_before=json.loads(run.ceeBeforeJson) if run.ceeBeforeJson else None,
         cee_after=json.loads(run.ceeAfterJson) if run.ceeAfterJson else None,
         diagnostics=json.loads(run.metricsJson) if run.metricsJson else None,
+        # The stored verdict, so the bundle agrees with the run page once the
+        # case was rescored against its pooled clean runs.
+        verdict=verdict_from_dict(json.loads(run.verdictJson)) if run.verdictJson else None,
     )

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 from core.benchmark.statistics import wilson_ci
 
@@ -285,7 +285,7 @@ TDS_BOOTSTRAP_RESAMPLES = 2000
 TDS_BOOTSTRAP_SEED = 20260921
 
 
-def _bootstrap_ci(
+def bootstrap_ci(
     values: Sequence[float], *, resamples: int = TDS_BOOTSTRAP_RESAMPLES, alpha: float = 0.05,
 ) -> Optional[Tuple[float, float]]:
     """Percentile bootstrap CI for the mean of `values`.
@@ -352,8 +352,8 @@ def tds_report(
         null=null,
         attack=attack,
         effect=effect,
-        null_ci=_bootstrap_ci(null_pairs),
-        attack_ci=_bootstrap_ci(attack_pairs),
+        null_ci=bootstrap_ci(null_pairs),
+        attack_ci=bootstrap_ci(attack_pairs),
         n_null_pairs=len(null_pairs),
         n_attack_pairs=len(attack_pairs),
     )
@@ -409,3 +409,55 @@ def macro_average(rates: Sequence[Optional[float]]) -> Optional[float]:
 def rate_ci(hits: int, total: int) -> Tuple[float, float]:
     """Thin pass-through to the existing `core.benchmark.statistics.wilson_ci`."""
     return wilson_ci(hits, total)
+
+
+def rate_summary(
+    outcomes: Sequence[RunOutcome],
+    metric: Callable[[Sequence[RunOutcome]], Optional[float]],
+) -> Dict[str, Any]:
+    """A run-level rate with a 95% interval that respects clustering by case.
+
+    Runs of one case share its task, artifact and wording, so they succeed or
+    fail together far more than independent draws do. A Wilson interval over
+    the pooled runs treats 9 cases x 5 repetitions as 45 independent trials
+    and comes out too narrow (Miller 2024, "Adding Error Bars to Evals").
+    This is Wilson's interval over the Kish effective sample size
+    n / (1 + (m - 1) * icc), the intraclass correlation estimated by one-way
+    ANOVA across cases — which keeps Wilson's behaviour at 0% and 100%, where
+    a bootstrap over nine cases collapses to a zero-width interval.
+
+    One case: nothing to cluster over, so the plain Wilson interval over its
+    repetitions. No variation at all: the correlation cannot be estimated,
+    and each case counts once — the conservative reading, since uniform
+    outcomes are exactly what perfectly correlated runs produce.
+    """
+    valid = [o for o in outcomes if _is_valid(o)]
+    value = metric(valid)
+    n = len(valid)
+    if value is None or n == 0:
+        return {"value": None, "n": n, "ci": None, "ci_method": None, "n_eff": None, "icc": None, "n_cases": 0}
+
+    by_case: Dict[str, List[RunOutcome]] = {}
+    for o in valid:
+        by_case.setdefault(o.case["id"], []).append(o)
+    sizes = [len(runs) for runs in by_case.values()]
+    rates = [metric(runs) for runs in by_case.values()]
+    k = len(by_case)
+
+    icc: Optional[float] = None
+    n_eff = float(n)
+    method = "wilson"
+    if k >= 2 and n > k:
+        msb = sum(m * (p - value) ** 2 for m, p in zip(sizes, rates)) / (k - 1)
+        msw = sum(m * p * (1 - p) for m, p in zip(sizes, rates)) / (n - k)
+        n0 = (n - sum(m * m for m in sizes) / n) / (k - 1)
+        spread = msb + (n0 - 1) * msw
+        icc = 1.0 if spread <= 0 else min(1.0, max(0.0, (msb - msw) / spread))
+        n_eff = n / (1 + (n / k - 1) * icc)
+        method = "wilson_design_effect"
+
+    low, high = wilson_ci(value * n_eff, n_eff)
+    return {
+        "value": value, "n": n, "ci": [low, high], "ci_method": method,
+        "n_eff": n_eff, "icc": icc, "n_cases": k,
+    }

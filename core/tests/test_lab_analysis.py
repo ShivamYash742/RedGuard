@@ -27,7 +27,7 @@ from core.lab.evaluator import (
     SystemOutcome,
     Verdict,
 )
-from core.lab.metrics import RunOutcome
+from core.lab.metrics import RunOutcome, rate_ci
 
 
 def _case(case_id="RGM-001", entry="A", eligible=("B", "C")):
@@ -195,3 +195,64 @@ class TestCompromiseByAgent:
             RunOutcome(_case(), _verdict({"A": "COMPROMISED"}, system_outcome="RUN_INVALID"))
         ]
         assert compromise_by_agent(outcomes)["A"]["COMPROMISED"] == 2
+
+
+class TestClusteredIntervals:
+    """Runs of one case share its task, artifact and wording, so they succeed
+    or fail together. Pooling them as independent trials gave intervals that
+    were too narrow."""
+
+    def test_one_case_keeps_the_plain_wilson_interval(self):
+        icr = arm_summary(_compromised(3) + _clean(2))["icr"]
+        assert icr["ci_method"] == "wilson"
+        assert icr["ci"] == pytest.approx(list(rate_ci(3, 5)))
+
+    def test_cases_that_move_together_widen_the_interval(self):
+        icr = arm_summary(_compromised(5, "RGM-001") + _clean(5, "RGM-002"))["icr"]
+        naive_low, naive_high = rate_ci(5, 10)
+        assert icr["ci_method"] == "wilson_design_effect"
+        assert icr["n_eff"] == pytest.approx(2.0)   # two cases, each all-or-nothing
+        assert icr["ci"][1] - icr["ci"][0] > naive_high - naive_low
+
+    def test_uncorrelated_cases_keep_their_full_sample(self):
+        outcomes = (_compromised(3, "RGM-001") + _clean(2, "RGM-001")
+                    + _compromised(2, "RGM-002") + _clean(3, "RGM-002"))
+        icr = arm_summary(outcomes)["icr"]
+        assert icr["icc"] == 0.0
+        assert icr["n_eff"] == pytest.approx(10.0)
+
+    def test_uniform_outcomes_count_each_case_once(self):
+        """No variation to estimate the correlation from: the conservative
+        reading, since uniform outcomes are what correlated runs produce."""
+        outcomes = _compromised(5, "RGM-001") + _compromised(5, "RGM-002") + _compromised(5, "RGM-003")
+        icr = arm_summary(outcomes)["icr"]
+        assert icr["value"] == 1.0
+        assert icr["n_eff"] == pytest.approx(3.0)
+        assert icr["ci"][0] == pytest.approx(rate_ci(3, 3)[0])
+
+
+SIX_CASES = [f"RGM-00{i}" for i in range(1, 7)]
+
+
+class TestPairedComparison:
+    def test_arms_are_compared_case_by_case(self):
+        baseline = [o for c in SIX_CASES for o in _compromised(3, c)]
+        variant = [o for c in SIX_CASES for o in _clean(3, c)]
+        paired = compare_arms("attack", baseline, "attack_capability_gateway", variant)["metrics"]["asr"]["paired"]
+        assert paired["n_cases"] == 6
+        assert paired["mean_difference"] == pytest.approx(-1.0)
+        assert paired["cases_lower"] == 6 and paired["cases_higher"] == 0
+        assert paired["excludes_zero"] is True
+
+    def test_too_few_shared_cases_give_counts_but_no_interval(self):
+        baseline = [o for c in SIX_CASES[:3] for o in _compromised(3, c)]
+        variant = [o for c in SIX_CASES[:3] for o in _clean(3, c)]
+        paired = compare_arms("attack", baseline, "attack_validated", variant)["metrics"]["asr"]["paired"]
+        assert paired["cases_lower"] == 3
+        assert paired["ci"] is None and paired["excludes_zero"] is None
+
+    def test_only_cases_both_arms_ran_are_paired(self):
+        baseline = _compromised(3, "RGM-001") + _compromised(3, "RGM-002")
+        variant = _clean(3, "RGM-002") + _clean(3, "RGM-003")
+        paired = compare_arms("attack", baseline, "attack_validated", variant)["metrics"]["asr"]["paired"]
+        assert paired["n_cases"] == 1

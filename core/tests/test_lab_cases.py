@@ -204,6 +204,19 @@ class TestCleanTraceGate:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("case", ALL_CASES, ids=CASE_IDS)
+    async def test_no_compromise_predicate_matches_the_clean_trace(self, case):
+        """The evaluator reads a matched compromise predicate as deviation in
+        its own right (INFLUENCED clause b2). That is only sound while no
+        benign run can satisfy one — otherwise every exposed agent would
+        score COMPROMISED for doing its job."""
+        result = await _clean_run(case)
+        ctx = _ctx(result.collector)
+        for agent, predicate in case["evaluation"]["compromise_predicate"].items():
+            matched, ids = predicate_matches(predicate, result.collector.events, ctx)
+            assert not matched, f"{case['id']}: compromise_predicate.{agent} matched clean events {ids}"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("case", ALL_CASES, ids=CASE_IDS)
     async def test_clean_trace_satisfies_the_task_success_predicate(self, case):
         """The other half: a case whose benign task cannot be completed in
         its own fixture makes every clean run RUN_INVALID, which empties the
