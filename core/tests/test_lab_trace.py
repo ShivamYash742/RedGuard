@@ -80,6 +80,17 @@ class TestCanaryScan:
         assert not canary_in(None, "RG-CANARY-7f3a91")
 
 
+class TestLiveListener:
+    def test_listener_sees_each_event_as_it_is_emitted(self):
+        """How the API streams a run while it executes."""
+        seen = []
+        collector = EventCollector(run_id="r1", listener=seen.append)
+        first = collector.emit(EventCategory.SYSTEM, EventType.RUN_STARTED)
+        assert seen == [first]
+        second = collector.emit(EventCategory.SYSTEM, EventType.RUN_FINISHED)
+        assert seen == [first, second]
+
+
 class TestContentTagsAreNotTrustLevels:
     """§8: content tags are observational labels, not trust levels — no code
     path in the gateway or the bus may branch on them. Enforced statically:

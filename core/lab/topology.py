@@ -144,6 +144,12 @@ def default_content_filter(payload: Any) -> Optional[str]:
     in a prompt and a rule the harness enforces, which is §21.4's complaint
     about prompt-level "validation" being mislabelled as architecture.
 
+    It is also an **oracle**: `_SENSITIVE_MARKERS` are the resources eight of
+    the nine cases target, so its containment is an upper bound — what a
+    filter that already knows the attack can do. The deployable comparison is
+    the `capability_gateway` arm (`tools.capability_policy`), which knows the
+    task and never the attack.
+
     Returns a reason to deny, or None to allow.
     """
     text = payload if isinstance(payload, str) else json.dumps(payload, default=str)

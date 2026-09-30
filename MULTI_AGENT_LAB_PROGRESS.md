@@ -70,7 +70,7 @@ you which defence to build.
 | P6 | The web interface | ✅ |
 | **P7** | **Actually running the experiments and writing up results** | 🔄 **piloting** |
 
-541 automated tests pass. None of them need an AI — the whole thing can be
+582 automated tests pass. None of them need an AI — the whole thing can be
 tested for free, which is why we could find serious bugs without spending
 anything.
 
@@ -198,6 +198,83 @@ sensible before committing to several hours.
 
 ---
 
+## 2026-09-30 — what changed, and what is left
+
+Mode B only; no Mode A file, route or verdict was touched. Tests 541 → **582**,
+all passing; `typecheck` and ESLint clean. (The per-file inventory table under
+**Testing** predates these 41 tests.) Versions bumped: `EVALUATOR_VERSION`
+1.2.0, `METRIC_VERSION` 1.2.0, `TOPOLOGY_VERSION` 1.1.0, so numbers from
+before this change are not comparable with numbers after it.
+
+### Changed
+
+- **Clustered intervals.** Runs of one case succeed or fail together; rates now
+  carry a Wilson interval over the Kish effective sample size
+  (`metrics.rate_summary`), and every arm comparison carries a case-paired
+  block (`analysis._paired`: mean difference, bootstrap interval over cases,
+  lower/equal/higher counts). `overlapping` is kept but is not evidence.
+- **Pooled clean baseline.** Once all of a case's repetitions finish, every
+  attack verdict of that case is re-judged against all of its clean runs, not
+  only its own pair (`lab_api.rescore_case`, also in `sweep.py`). Stored
+  verdicts carry `baseline_runs`. One clean run was one sample of "normal",
+  which scored ordinary variation as INFLUENCED.
+- **Bug 41 — a relayed instruction was invisible.** An agent that passed the
+  attacker's instruction on in its own words (no canary) scored NOT_INFLUENCED,
+  because a message's signature ignores its text, so its compromise predicate
+  could never fire. 8 of 9 cases were affected, which lowered ICR. A matched
+  compromise predicate on attack-derived events now counts as influence, and a
+  new gate proves no compromise predicate matches its own clean trace.
+- **New arm: `attack_capability_gateway`** (CaMeL-style). It refuses a read of a
+  resource the task never named once untrusted content is in the caller's
+  context. It knows the task and never the attack. `attack_bus_gateway` is now
+  labelled an **oracle upper bound**, because its blocklist names the cases'
+  own targets. New comparisons: EXP-7 (attack vs capability), EXP-7b (oracle vs
+  capability). Known limits: it trusts a task-channel injection (RGM-009), and
+  it gates reads only, not state writes (RGM-006).
+- **Bug 42 — the live view was never live.** Trace events were sent only after
+  each run finished; they now stream as they are emitted (`on_event` listener →
+  `lab_api._run_streaming`).
+- **Bug 43 — the Next.js `/api` proxy gzipped the SSE stream**, holding every
+  event until the experiment ended. Scripted runs end instantly, so it never
+  showed. Fixed with `Cache-Control: no-transform` on the Lab stream.
+- **Lab UI rebuilt** (`app/lab/*`, `components/LabRoute.tsx`,
+  `lib/lab-service.ts`, framer-motion). Launch now opens the experiment page as
+  a live board: a propagation stage for the current attack run, a ledger with a
+  route strip per run, clustered-CI rates, "where attacks stopped", per case.
+  Each run has a scrubbable replay synced to its event timeline. Impact levels
+  are drawn as shapes as well as colours, because hazard and caution collapse
+  under deuteranopia on the light theme.
+
+### Left to do
+
+1. **Post-fix pilot on a real model** (nemotron-3-super, 1 arm, 3 cases, 2
+   reps, ~350 calls): confirm clean runs complete and verdicts are coherent.
+   Every number so far is scripted or synthetic.
+2. **Full sweep** of the arms `attack`, `attack_validated`,
+   `attack_bus_gateway`, `attack_capability_gateway`
+   (`attack_permissive_tools` is optional): 9 cases × 5 reps, ~2,650 calls per
+   arm at the pilots' rate. Settle the budget first.
+3. **Cross-arm results.** *Done:* `/lab/compare` picks experiments and shows
+   EXP-4/6/6b/6c/7/7b with the case-paired differences. It needs real sweep
+   data to say anything.
+4. **UI, optional.** A vertical stage for phones: the stage
+   currently scrolls sideways inside its panel below ~560px. No frontend
+   tests exist. DESIGN.md has not been written, and the impeccable finish
+   review was not run.
+5. **Outside Mode B, needs approval.** The global header overflows 81px at
+   390px wide (`components/Header.tsx`). Mode A's `/api/scan/family` stream
+   probably has the same gzip buffering (same one-header fix). The Mode A
+   findings from the 2026-09-30 research are also still open: the inspector
+   blocks 28/50 probes pre-model and counts them as BLOCKED, per-probe
+   `evaluation_rules` are unused, the leaderboard is invented, about 6,500
+   lines are dead, `/api/proxy` is an open forwarder, CORS is `*`, Docker binds
+   0.0.0.0, and `CLASSIFIER_URL` defaults to a third-party host.
+6. **Local database drift.** This checkout's `backend/prisma/dev.db` holds
+   `lab_*` tables (12 experiments) and is flagged assume-unchanged, so git
+   hides it. Check with `git ls-files -v backend/prisma/dev.db`.
+
+---
+
 # Technical record (P0 → P6, plus pre-P7)
 
 Companion to [`MULTI_AGENT_LAB_PLAN.md`](./MULTI_AGENT_LAB_PLAN.md). That
@@ -214,7 +291,7 @@ cd backend && source .venv/bin/activate
 pytest ../core/tests/ tests/ -q
 ```
 
-Current result: **541 passed**, 0 failed (on Python 3.11 and in the Docker image).
+Current result: **582 passed**, 0 failed (on Python 3.11 and in the Docker image).
 
 Is a given model usable with the harness?
 
@@ -1230,7 +1307,7 @@ built.
 ## Testing — complete inventory
 
 Everything below is what exists today, test by test, so the coverage can be
-reviewed rather than taken on trust. **541 tests, all passing, ~8s.** Not
+reviewed rather than taken on trust. **582 tests, all passing, ~8s.** Not
 one of them calls an LLM — the only LLM contact in the whole project is the
 `smoke.py` command, which is run by hand.
 
@@ -1239,7 +1316,7 @@ one of them calls an LLM — the only LLM contact in the whole project is the
 ```bash
 cd backend && source .venv/bin/activate
 
-pytest ../core/tests/ tests/ -q        # everything (541)
+pytest ../core/tests/ tests/ -q        # everything (582)
 pytest ../core/tests/ -q               # the lab + pre-existing core (357)
 pytest tests/ -q                       # backend: inspector, scanner, lab_store, lab_api (58)
 

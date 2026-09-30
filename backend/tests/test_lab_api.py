@@ -14,6 +14,7 @@ untouched by any of this.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 from pathlib import Path
@@ -24,7 +25,13 @@ from fastapi.testclient import TestClient
 from prisma import Prisma
 
 import database
+import lab_api
 from app import app
+from core.lab.cases import fixture_factory, load_case
+from core.lab.model_client import ModelConfig
+from core.lab.runner import CLEAN, RunConfig, RunResult
+from core.lab.topology import linear_abc
+from core.lab.trace import TraceEvent
 
 
 
@@ -124,6 +131,7 @@ class TestCatalogEndpoints:
         keys = {a["key"] for a in client.get("/api/lab/arms").json()["arms"]}
         assert keys == {
             "attack", "attack_validated", "attack_permissive_tools", "attack_bus_gateway",
+            "attack_capability_gateway",
         }
 
     def test_bus_gateway_arm_is_an_architectural_control(self, client):
@@ -220,7 +228,9 @@ class TestExperimentExecution:
     def test_verdict_event_carries_all_four_dimensions(self, client):
         result = _run_to_completion(client)
         verdict = next(e["data"] for e in result["events"] if e["event"] == "run_verdict")["verdict"]
-        assert set(verdict) == {"agent_impact", "objective", "containment", "system_outcome"}
+        # `baseline_runs` is provenance (how many clean runs defined normal
+        # behaviour), not a fifth dimension — and never a collapsed score.
+        assert set(verdict) - {"baseline_runs"} == {"agent_impact", "objective", "containment", "system_outcome"}
         assert set(verdict["agent_impact"]) == {"A", "B", "C"}
 
     def test_progress_counts_reach_the_declared_total(self, client):
@@ -582,3 +592,57 @@ class TestCompareRefusesIncomparableExperiments:
         second = _run_to_completion(client, arm="attack_bus_gateway", cases=["RGM-002"])["experiment"]["experiment_id"]
         body = client.get(f"/api/lab/compare?experiments={first},{second}").json()
         assert any("different case sets" in w for w in body["warnings"])
+
+
+class TestLiveTracking:
+    def test_trace_events_name_what_they_touched(self, client):
+        """The live board says `B → db_query(customer_pii) · refused`, not
+        only that B acted."""
+        events = [e["data"] for e in _run_to_completion(client)["events"] if e["event"] == "trace_event"]
+        planted = next(e for e in events if e["event_type"] == "artifact_planted")
+        assert planted["resource"] == {"channel": "files", "location": "/research/vendor_notes.md"}
+        queries = [e["resource"] for e in events if e["event_type"] == "tool_requested" and e["tool"] == "db_query"]
+        assert {"name": "approved_vendors"} in queries
+
+    def test_each_case_is_rescored_against_all_its_clean_runs(self, client):
+        result = _run_to_completion(client, repetitions=3)
+        rescored = [e["data"] for e in result["events"] if e["event"] == "case_rescored"]
+        assert len(rescored) == 1
+        assert rescored[0]["baseline_runs"] == 3 and len(rescored[0]["runs"]) == 3
+        run_id = rescored[0]["runs"][0]["run_id"]
+        assert client.get(f"/api/lab/runs/{run_id}").json()["verdict"]["baseline_runs"] == 3
+
+    def test_the_stream_forbids_proxy_compression(self, client):
+        """The Next.js /api rewrite gzips responses by default, and gzip holds
+        SSE frames until the stream ends: a live run showed nothing live."""
+        experiment = _create_experiment(client)
+        with client.stream("GET", f"/api/lab/experiments/{experiment['experiment_id']}/run") as response:
+            assert "no-transform" in response.headers["cache-control"]
+
+    def test_a_single_repetition_keeps_its_paired_verdict(self, client):
+        result = _run_to_completion(client)
+        assert not [e for e in result["events"] if e["event"] == "case_rescored"]
+
+    @pytest.mark.asyncio
+    async def test_events_arrive_while_the_run_is_still_executing(self):
+        """Streaming only after the run finished meant minutes of silence per
+        run against a real model, then a burst. Here the model never answers
+        until the first event has already been received."""
+        gate = asyncio.Event()
+
+        class GatedClient:
+            async def complete(self, messages):
+                await gate.wait()
+                return json.dumps({"action": "finish", "summary": "done"})
+
+        case = load_case("RGM-001")
+        cfg = RunConfig(topology=linear_abc(), model=ModelConfig(model="scripted"))
+        stream = lab_api._run_streaming(case, fixture_factory(case)(), cfg, GatedClient(), mode=CLEAN, run_id="r")
+
+        first = await asyncio.wait_for(stream.__anext__(), timeout=5)
+        assert isinstance(first, TraceEvent)
+        gate.set()
+        rest = [item async for item in stream]
+        result = rest[-1]
+        assert isinstance(result, RunResult)
+        assert [e.step for e in [first, *rest[:-1]]] == [e.step for e in result.collector.events]

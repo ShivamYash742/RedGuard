@@ -41,7 +41,7 @@ if _PARENT_DIR not in sys.path:
 from prisma import Prisma
 
 import lab_store
-from lab_api import ARMS, _build_config, _outcomes
+from lab_api import ARMS, _build_config, _outcomes, rescore_case
 from core.lab.analysis import arm_summary, comparability_problems, compare_standard, compromise_by_agent
 from core.lab.cases import case_ids, fixture_factory, load_case
 from core.lab.evaluator import evaluate
@@ -139,6 +139,13 @@ async def run_arm(
                 # reported, left out of the aggregates as RUN_INVALID, and
                 # the sweep continues.
                 print(f"{prefix}: FAILED — {type(exc).__name__}: {exc}")
+
+        # Same pass as the API's: every verdict of the case judged against
+        # all of its clean repetitions, not only its own pair.
+        rescored = await rescore_case(db, experiment_id, case)
+        if rescored and not quiet:
+            print(f"  {case_id}: rescored {len(rescored)} attack run(s) against "
+                  f"{rescored[0]['verdict']['baseline_runs']} clean runs")
 
     return experiment_id
 

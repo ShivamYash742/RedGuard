@@ -69,13 +69,13 @@ CASE_SCHEMA_VERSION: str = "1.1.0"
 CEE_VERSION: str = "1.1.0"
 
 #: Version of the topology definitions and authorization tables.
-TOPOLOGY_VERSION: str = "1.0.0"
+TOPOLOGY_VERSION: str = "1.1.0"
 
 #: Version of the verdict definitions and predicate DSL.
-EVALUATOR_VERSION: str = "1.1.0"
+EVALUATOR_VERSION: str = "1.2.0"
 
 #: Version of the Mode B metric formulas.
-METRIC_VERSION: str = "1.1.0"
+METRIC_VERSION: str = "1.2.0"
 
 #: Human-readable release name.
 RELEASE_NAME: str = "RedGuard Benchmark v3.0.0"
