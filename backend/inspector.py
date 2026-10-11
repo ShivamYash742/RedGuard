@@ -19,20 +19,48 @@ class Inspector:
             return {"ingress_rules": [], "default_action": "ALLOW"}
 
     def _compile_patterns(self):
-        return {
-            "injection_patterns": re.compile(r"(ignore.*instructions|system override|INTERNAL NOTE)", re.IGNORECASE),
-            "role_impersonation": re.compile(r"(act as|you are now|pretend you'?re)", re.IGNORECASE),
-            "exfiltration": re.compile(r"(send to|upload|pastebin|webhook)", re.IGNORECASE),
-            "sensitive_paths": re.compile(r"(/etc/shadow|~/\.ssh|\.env|/root/)", re.IGNORECASE),
-            "system_commands": re.compile(r"(rm -rf|sudo|curl\s+\||chmod)", re.IGNORECASE),
-            "credentials": re.compile(r"(API_KEY|token|password|secret)", re.IGNORECASE),
-            "malware_request": re.compile(r"(exploit|payload|reverse shell)", re.IGNORECASE),
-            "harm_patterns": re.compile(r"(kill|bomb|poison)", re.IGNORECASE),
-            "obfuscation": re.compile(r"(base64|hex\s+enc|\\x)", re.IGNORECASE),
-            "phishing_patterns": re.compile(r"(verify your account|click here urgently)", re.IGNORECASE),
-            "pii_request": re.compile(r"(ssn|credit card|phone number)", re.IGNORECASE),
-            "urls": re.compile(r"(http://|https://)", re.IGNORECASE)
+        # Each pattern matches the shape of an attack (a verb aimed at a target),
+        # not a single word: "token", "upload", "kill" or a URL alone blocked
+        # 20 of 25 ordinary questions. Two matches reach the 0.2 risk threshold
+        # in policy.yaml, so a loose pattern costs twice. [^.\n]{0,N} keeps a
+        # match inside one sentence.
+        secrets = (r"api[ _]?keys?|(access|session|auth|bearer) tokens?|passwords?|password hash(es)?"
+                   r"|secrets?|credentials|private keys?|connection strings?")
+        patterns = {
+            "injection_patterns":
+                r"\b(ignore|disregard|forget|override|replaces?)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all|your|system)\b"
+                r"[^.\n]{0,30}\b(instructions?|rules|prompts?|guidelines|polic(y|ies))\b"
+                r"|\bsystem override\b|\binternal note\b",
+            "role_impersonation":
+                r"\byou are now\b[^.\n]{0,30}\b(unrestricted|unfiltered|jailbroken|dan|developer mode|debug mode|maintenance mode)\b"
+                r"|\b(act|behave|respond) as (an? )?(unrestricted|unfiltered|jailbroken|uncensored|dan)\b"
+                r"|\b(enter|enable|activate)\b[^.\n]{0,15}\b(developer|debug|maintenance|god|dan) mode\b"
+                r"|(?m:^\s*assistant\s*:)",  # a fabricated assistant turn pasted into the input
+            "exfiltration":
+                r"\b(pastebin|webhook\.site|requestbin|transfer\.sh)\b"
+                r"|\b(send|forward|upload|post|exfiltrate)\b[^.\n]{0,50}\b(" + secrets +
+                r"|financial (records|information|data)|payment details|all (emails|messages|files|records|data))\b",
+            "sensitive_paths":
+                r"/etc/(shadow|passwd|sudoers)\b|~/\.ssh\b|\bid_rsa\b|/root/"
+                r"|\b(show|print|cat|display|dump|reveal|output)\b[^.\n]{0,40}(?<![\w.])\.env\b",
+            "system_commands":
+                r"\brm\s+-rf\s+[/~*]|\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?(ba|z)?sh\b|\bchmod\s+(-R\s+)?777\b",
+            "credentials":
+                r"\bAPI_KEY\b|\b(reveal|show|print|output|display|dump|repeat|expose|leak|send)\b[^.\n]{0,25}"
+                r"\b(your|the|all|any|their|users?'?|admin|system)\b[^.\n]{0,15}\b(" + secrets + r")\b",
+            "malware_request":
+                r"\breverse shell\b|\b(write|create|build|generate|make)\b[^.\n]{0,30}\b(malware|ransomware|keylogger|rootkit|botnet)\b",
+            "harm_patterns":
+                r"\b(kill|poison|murder|hurt)\s+(someone|somebody|people|a person|my (wife|husband|partner|boss|neighbou?r))\b"
+                r"|\b(build|make|assemble)\b[^.\n]{0,15}\b(bomb|explosive)s?\b",
+            # A decode-then-act request, or a long mixed-case base64 blob (hex hashes have no capitals).
+            "obfuscation":
+                r"\b(decode|decrypt|deobfuscate)\b[^.\n]{0,60}\b(execute|run|follow|obey)\b"
+                r"|(?-i:\b(?=[A-Za-z0-9+/]*[a-z])(?=[A-Za-z0-9+/]*[A-Z])[A-Za-z0-9+/]{40,}={0,2})",
+            "phishing_patterns": r"\bverify your account\b|\bclick here urgently\b",
+            "pii_request": r"\b(ssn|social security number|credit card number|cvv)\b",
         }
+        return {key: re.compile(rx, re.IGNORECASE) for key, rx in patterns.items()}
 
     def inspect(self, prompt: str) -> Dict[str, Any]:
         metadata = {}

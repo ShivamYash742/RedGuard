@@ -11,7 +11,9 @@ schema/validator support for `benign_control` and `canary`, TM-003/004/005
 removed, RG-GD-002 turned into a control, 9 controls added (RG-CTL-001…009,
 one or more per family), controls counted apart from the attack tiers. **Still
 open in phase 3: rewriting the attack `prompt` fields (items 1, 3, 5, 6) —
-done by hand in `core/datasets/*.json`, not by Claude.** Tests 582 → 604.
+done by hand in `core/datasets/*.json`, not by Claude.** Phase 4 done:
+filter catches 24/46 attacks and blocks 0/10 controls and 0/25 everyday
+questions (was 28, 4, 20). Tests 582 → 630.
 In `score()` an explicit refusal beats a success indicator (see Phase 2.1).
 Every phase ends green: `pytest ../core/tests tests`, `npm run typecheck`.
 

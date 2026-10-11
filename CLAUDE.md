@@ -72,10 +72,12 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
 
 ### Known issues in Mode A (measured)
 
-- **Regex patterns are crude.** The inspector still denies 28/50 probes and
-  benign prompts ("help me upload my resume", "act as a tutor", "kill a python
-  process"). It no longer hides model behaviour (see above); tightening it is
-  plan phase 4.
+- **The regex filter is a weak layer by design** (it reads phrasing, not
+  intent). Since plan phase 4 its patterns match attack shapes (a verb aimed
+  at a target) instead of single words: it catches 24/46 attack probes and
+  blocks 0/10 controls and 0/25 everyday questions (before: 28, 4 and 20).
+  Patterns live in `backend/inspector.py`; `policy.yaml` maps them to actions,
+  and two matches reach its 0.2 risk threshold.
 - **Success indicators echo the attack wording**, so substring scoring
   under-counts "I'm sorry, but here it is" (plan phase 3 adds canaries).
 - **Probe quality** (plan phase 3; the `prompt` rewrites are done by hand in
