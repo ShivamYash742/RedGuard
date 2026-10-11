@@ -19,7 +19,7 @@ from core.datasets.loader import FAMILY_FILES, load_family_dataset
 from schema import ProbeEvent, generate_session_id, sha256_hex
 
 TARGET_URL = "http://localhost:8080/v1/chat/completions"
-CLASSIFIER_URL = "https://api.mohitchdev.me/agent/classify"
+CLASSIFIER_URL = os.environ.get("CLASSIFIER_URL", "")  # unset = regex only
 AUDIT_LOG = Path("audit.jsonl")
 TIMEOUT_SECONDS = 10
 
@@ -200,7 +200,7 @@ def run(target_url: str, log_path: Path) -> int:
                 if not classifier_available:
                     print(
                         (
-                            "Warning: classifier at api.mohitchdev.me unreachable, "
+                            "Warning: classifier unavailable (CLASSIFIER_URL unset or unreachable), "
                             f"using regex-only mode. Error: {classifier_error}"
                         ),
                         file=sys.stderr,

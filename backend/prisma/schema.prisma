@@ -22,6 +22,17 @@ model Session {
   mismatches  Int          @default(0)
   blockRate   Float        @default(0) @map("block_rate")
   status      String       @default("RUNNING")
+
+  // Tiered outcome (null benchmarkVersion = legacy row scored BLOCKED/ALLOWED).
+  // blocked = filtered + refused + ignored, allowed = compromised.
+  benchmarkVersion    String? @map("benchmark_version")
+  promptMode          String? @map("prompt_mode")
+  filtered            Int     @default(0)
+  refused             Int     @default(0)
+  ignored             Int     @default(0)
+  compromised         Int     @default(0)
+  modelCompromised    Int     @default(0) @map("model_compromised")
+  controlsOverRefused Int     @default(0) @map("controls_over_refused")
   events      ProbeEvent[]
   report      Report?
   policy      PolicySnapshot?
@@ -50,7 +61,11 @@ model ProbeEvent {
   classifierScore      Float?   @map("classifier_score")
   classifierResult     String?  @map("classifier_result")
 
-  status               String   
+  status               String   // FILTERED | REFUSED | IGNORED | COMPROMISED (controls: FILTERED | OVER_REFUSED | HELPED); legacy: BLOCKED | ALLOWED
+  modelOutcome         String?  @map("model_outcome")   // what the model did, even when the filter decided the tier
+  probeId              String?  @map("probe_id")
+  isControl            Boolean  @default(false) @map("is_control")
+  scoredBy             String?  @map("scored_by")
   mismatch             Boolean  @default(false)
   declaredIntent       String   @map("declared_intent")
   detectedIntent       String   @map("detected_intent")
