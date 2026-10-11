@@ -331,7 +331,7 @@ function AuditTab() {
                   <td className="text-xs text-[var(--text-secondary)]">{new Date(evt.timestamp).toLocaleString()}</td>
                   <td className="text-xs font-medium capitalize text-[var(--text-primary)]">{evt.category}</td>
                   <td>
-                    <span className={`badge-semantic ${evt.status === 'BLOCKED' ? 'badge-success' : 'badge-danger'}`}>
+                    <span className={`badge-semantic ${evt.status === 'COMPROMISED' || evt.status === 'ALLOWED' ? 'badge-danger' : evt.status === 'OVER_REFUSED' ? 'badge-warning' : 'badge-success'}`}>
                       {evt.status}
                     </span>
                   </td>

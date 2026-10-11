@@ -9,6 +9,7 @@ Allows existing code to work with the new benchmark architecture.
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
@@ -20,7 +21,7 @@ from core.compat.probes_adapter import get_legacy_probe_groups
 
 
 # Legacy constants
-CLASSIFIER_URL = "https://api.mohitchdev.me/agent/classify"
+CLASSIFIER_URL = os.environ.get("CLASSIFIER_URL", "")  # unset = regex only
 DEFAULT_AGENT_ID = "default_agent"
 
 

@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { benchmarkDataService, BenchmarkRun } from '@/lib/data-service'
+import { benchmarkDataService, BenchmarkRun, OUTCOME_TIERS } from '@/lib/data-service'
 import { FileText, Download, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -47,11 +47,16 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
   const overall = report?.reportJson?.overall
   const categoryBreakdown = report?.reportJson?.category_breakdown || []
   const currentSessionObj = sessions.find(s => s.sessionId === routeSessionId)
+  const hasTiers = overall?.filtered !== undefined
 
   const downloadCSV = () => {
     if (!report) return
-    const headers = ['Category', 'Probes', 'Blocked', 'Allowed', 'HighestRiskScore']
-    const rows = categoryBreakdown.map((cb: any) => [cb.category, cb.probes, cb.blocked, cb.allowed, cb.highest_risk_score || 0])
+    const headers = hasTiers
+      ? ['Category', 'Probes', 'Filtered', 'Refused', 'Ignored', 'Compromised', 'ModelAloneCompromised', 'HighestRiskScore']
+      : ['Category', 'Probes', 'Blocked', 'Allowed', 'HighestRiskScore']
+    const rows = categoryBreakdown.map((cb: any) => hasTiers
+      ? [cb.category, cb.probes, cb.filtered, cb.refused, cb.ignored, cb.allowed, cb.model_compromised, cb.highest_risk_score || 0]
+      : [cb.category, cb.probes, cb.blocked, cb.allowed, cb.highest_risk_score || 0])
     const csvContent = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -175,6 +180,11 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
                 {(((overall?.allowed || 0) / (overall?.total_probes || 1)) * 100).toFixed(1)}%
               </div>
               <span className="text-xs text-[var(--text-secondary)] mt-1 block font-mono">{overall?.allowed} Compromised</span>
+              {hasTiers && (
+                <span className="text-[11px] text-[var(--text-muted)] mt-0.5 block font-mono">
+                  Model alone (filter off): {overall.model_compromised}
+                </span>
+              )}
             </div>
 
             <div className="research-card text-center border-t-2 border-t-[var(--primary)]">
@@ -202,8 +212,14 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
                   <tr>
                     <th>Attack Family Category</th>
                     <th className="text-center">Probes</th>
-                    <th className="text-center">Resisted (Secure)</th>
-                    <th className="text-center">Compromised (ASR)</th>
+                    {hasTiers ? (
+                      OUTCOME_TIERS.map(t => <th key={t.key} className="text-center" title={t.hint}>{t.label}</th>)
+                    ) : (
+                      <>
+                        <th className="text-center">Resisted (Secure)</th>
+                        <th className="text-center">Compromised (ASR)</th>
+                      </>
+                    )}
                     <th className="text-center">Mismatches</th>
                     <th className="text-center">Max Risk Score</th>
                   </tr>
@@ -213,8 +229,19 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
                     <tr key={idx}>
                       <td className="font-bold capitalize text-xs text-[var(--text-primary)]">{cb.category.replace(/_/g, ' ')}</td>
                       <td className="font-mono text-xs text-center">{cb.probes}</td>
-                      <td className="font-mono text-xs text-center text-[var(--success)] font-semibold">{cb.blocked}</td>
-                      <td className="font-mono text-xs text-center text-[var(--danger)] font-semibold">{cb.allowed}</td>
+                      {hasTiers ? (
+                        <>
+                          <td className="font-mono text-xs text-center">{cb.filtered}</td>
+                          <td className="font-mono text-xs text-center">{cb.refused}</td>
+                          <td className="font-mono text-xs text-center">{cb.ignored}</td>
+                          <td className="font-mono text-xs text-center text-[var(--danger)] font-semibold">{cb.allowed}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="font-mono text-xs text-center text-[var(--success)] font-semibold">{cb.blocked}</td>
+                          <td className="font-mono text-xs text-center text-[var(--danger)] font-semibold">{cb.allowed}</td>
+                        </>
+                      )}
                       <td className="font-mono text-xs text-center text-[var(--warning)]">{cb.mismatches}</td>
                       <td className="font-mono text-xs text-center font-bold">{cb.highest_risk_score ? cb.highest_risk_score.toFixed(2) : '0.00'}</td>
                     </tr>

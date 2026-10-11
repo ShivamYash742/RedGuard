@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Play, RefreshCw, FileText, Shield, Bot, Wrench, ArrowRight, History } from 'lucide-react'
-import { benchmarkDataService, normalizeFamily, KNOWN_AGENTS, KnownAgent, BenchmarkRun } from '@/lib/data-service'
+import { benchmarkDataService, normalizeFamily, KNOWN_AGENTS, KnownAgent, BenchmarkRun, OUTCOME_TIERS, TierCounts, emptyTierCounts } from '@/lib/data-service'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/Skeletons'
 
@@ -10,14 +10,31 @@ interface FamilyProgress {
   name: string
   total: number
   current: number
-  blocked: number
-  allowed: number
+  counts: TierCounts
+}
+
+type PromptMode = 'baseline' | 'hardened'
+
+function TierBar({ counts, total, height = 'h-3' }: { counts: TierCounts; total: number; height?: string }) {
+  return (
+    <div className={`${height} w-full flex bg-[var(--surface-base)] rounded-full overflow-hidden border border-[var(--border-subtle)]`}>
+      {OUTCOME_TIERS.map(t => (
+        <div
+          key={t.key}
+          title={`${t.label}: ${counts[t.key]}`}
+          className="h-full transition-all duration-300 ease-out"
+          style={{ width: `${total > 0 ? (counts[t.key] / total) * 100 : 0}%`, background: t.color }}
+        />
+      ))}
+    </div>
+  )
 }
 
 export default function RunsPage() {
   const [running, setRunning] = useState(false)
   const [families, setFamilies] = useState<FamilyProgress[]>([])
-  const [progress, setProgress] = useState({ current: 0, total: 0, blocked: 0, allowed: 0 })
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const [promptMode, setPromptMode] = useState<PromptMode>('baseline')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<string>('nemotron_3_ultra')
   const [activeCategory, setActiveCategory] = useState<'nvidia' | 'ollama' | 'custom'>('nvidia')
@@ -70,14 +87,14 @@ export default function RunsPage() {
   const startScan = async () => {
     setRunning(true)
     setFamilies([])
-    setProgress(p => ({ ...p, current: 0, blocked: 0, allowed: 0 }))
+    setProgress(p => ({ ...p, current: 0 }))
     setSessionId(null)
 
     try {
       const res = await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: selectedAgent }),
+        body: JSON.stringify({ agentId: selectedAgent, promptMode }),
       })
       const data = await res.json()
       setSessionId(data.sessionId)
@@ -86,15 +103,13 @@ export default function RunsPage() {
       if (data.families) {
         fams = Object.entries(data.families)
           .filter(([name]) => selectedFamilies.length === 0 || selectedFamilies.some(f => normalizeFamily(f) === normalizeFamily(name)))
-          .map(([name, total]) => ({ name, total: total as number, current: 0, blocked: 0, allowed: 0 }))
+          .map(([name, total]) => ({ name, total: total as number, current: 0, counts: emptyTierCounts() }))
         setFamilies(fams)
       }
 
       const activeTotal = fams.reduce((acc, f) => acc + f.total, 0)
       setProgress(p => ({ ...p, total: activeTotal }))
 
-      let overallBlocked = 0
-      let overallAllowed = 0
       let overallCurrent = 0
 
       for (let i = 0; i < fams.length; i++) {
@@ -110,19 +125,16 @@ export default function RunsPage() {
 
             setFamilies(prev => {
               const updated = [...prev]
-              updated[i] = { ...updated[i], current: payload.index, blocked: payload.blocked, allowed: payload.allowed }
+              updated[i] = { ...updated[i], current: payload.index, counts: payload.counts }
               return updated
             })
           })
 
           evtSource.addEventListener('family_complete', (e) => {
             const payload = JSON.parse(e.data)
-            overallBlocked += payload.blocked
-            overallAllowed += payload.allowed
-            setProgress(p => ({ ...p, blocked: overallBlocked, allowed: overallAllowed }))
             setFamilies(prev => {
               const updated = [...prev]
-              updated[i] = { ...updated[i], blocked: payload.blocked, allowed: payload.allowed }
+              updated[i] = { ...updated[i], counts: payload.counts }
               return updated
             })
             evtSource.close()
@@ -167,6 +179,10 @@ export default function RunsPage() {
   }
 
   const isComplete = !running && sessionId && progress.current > 0
+  const overallCounts = families.reduce((acc, f) => {
+    OUTCOME_TIERS.forEach(t => { acc[t.key] += f.counts[t.key] })
+    return acc
+  }, emptyTierCounts())
   const agentsByCategory = agents.filter(a => a.category === activeCategory)
 
   return (
@@ -257,6 +273,29 @@ export default function RunsPage() {
         </div>
 
         <div className="p-3 bg-[var(--surface-base)] rounded-[var(--radius)] border border-[var(--border-subtle)] space-y-2">
+          <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">System Prompt</span>
+          <div className="flex flex-wrap gap-2">
+            {([
+              { key: 'baseline' as const, label: 'Baseline', sub: 'Neutral prompt — compares models fairly' },
+              { key: 'hardened' as const, label: 'Hardened', sub: 'Prompt that lists the attack families — measures the prompt as a defence' },
+            ]).map(m => (
+              <button
+                key={m.key}
+                onClick={() => !running && setPromptMode(m.key)}
+                aria-pressed={promptMode === m.key}
+                className={`px-3 py-1.5 rounded-[var(--radius)] text-xs border text-left transition-colors ${promptMode === m.key
+                    ? 'bg-[var(--primary)]/15 border-[var(--primary)] text-[var(--primary)] font-semibold'
+                    : 'bg-[var(--surface-raised)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+              >
+                {m.label}
+                <span className="block text-[10px] font-normal text-[var(--text-muted)]">{m.sub}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-3 bg-[var(--surface-base)] rounded-[var(--radius)] border border-[var(--border-subtle)] space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">
               Target Attack Families Scope ({selectedFamilies.length} / {allFamilies.length} Selected)
@@ -299,24 +338,27 @@ export default function RunsPage() {
             <span>Evaluation Progress:</span>
             <span className="font-mono text-sm font-bold text-[var(--primary)]">{progress.current} / {progress.total}</span>
           </div>
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="text-[var(--success)] font-bold">Resisted: {progress.blocked}</span>
-            <span className="text-[var(--danger)] font-bold">Compromised: {progress.allowed}</span>
-          </div>
         </div>
 
-        <div className="h-3 w-full bg-[var(--surface-base)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
-          <div
-            className="h-full bg-[var(--primary)] transition-all duration-300 ease-out"
-            style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }}
-          />
+        <TierBar counts={overallCounts} total={progress.total} />
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {OUTCOME_TIERS.map(t => (
+            <div key={t.key} className="p-2 rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-base)]">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-secondary)]">
+                <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ background: t.color }} />
+                {t.label}
+              </span>
+              <span className="block font-mono text-lg font-bold text-[var(--text-primary)]">{overallCounts[t.key]}</span>
+              <span className="block text-[10px] text-[var(--text-muted)]">{t.hint}</span>
+            </div>
+          ))}
         </div>
       </div>
 
       {families.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {families.map((f, idx) => {
-            const isFinished = f.current === f.total && f.total > 0
             const isActive = running && f.current > 0 && f.current < f.total
             return (
               <div key={idx} className={`research-card transition-all ${isActive ? 'active-scan-pulse border-[var(--primary)]' : ''}`}>
@@ -324,15 +366,15 @@ export default function RunsPage() {
                   <h3 className="text-xs font-bold text-[var(--text-primary)] capitalize">{f.name.replace(/_/g, ' ')}</h3>
                   <span className="font-mono text-[11px] text-[var(--text-muted)]">{f.current} / {f.total}</span>
                 </div>
-                <div className="h-2 w-full bg-[var(--surface-base)] rounded-full overflow-hidden mb-3 border border-[var(--border-subtle)]">
-                  <div
-                    className={`h-full transition-all duration-300 ${isFinished ? 'bg-[var(--success)]' : 'bg-[var(--primary)]'}`}
-                    style={{ width: `${f.total > 0 ? (f.current / f.total) * 100 : 0}%` }}
-                  />
+                <div className="mb-3">
+                  <TierBar counts={f.counts} total={f.total} height="h-2" />
                 </div>
-                <div className="flex items-center justify-between text-[11px] font-mono">
-                  <span className="text-[var(--success)]">Secure: {f.blocked}</span>
-                  <span className="text-[var(--danger)]">Compromised: {f.allowed}</span>
+                <div className="grid grid-cols-4 gap-1 text-[11px] font-mono text-center">
+                  {OUTCOME_TIERS.map(t => (
+                    <span key={t.key} title={t.label} className={t.key === 'COMPROMISED' ? 'text-[var(--danger)] font-bold' : 'text-[var(--text-secondary)]'}>
+                      {t.label[0]} {f.counts[t.key]}
+                    </span>
+                  ))}
                 </div>
               </div>
             )
@@ -363,7 +405,7 @@ export default function RunsPage() {
                   <th>Execution Date & Time</th>
                   <th>Target Agent</th>
                   <th>Probes Fired</th>
-                  <th>Resisted (Secure)</th>
+                  <th>Outcome (F · R · I · C)</th>
                   <th>Security Rate</th>
                   <th>Status</th>
                   <th>Action</th>
@@ -376,9 +418,23 @@ export default function RunsPage() {
                     <tr key={s.id} className="hover:bg-[var(--surface-base)] transition-colors">
                       <td className="font-mono text-xs font-bold text-[var(--text-primary)]">{s.sessionId}</td>
                       <td className="text-xs text-[var(--text-secondary)]">{new Date(s.startedAt).toLocaleString()}</td>
-                      <td className="font-semibold text-xs text-[var(--text-primary)]">{s.agentName}</td>
+                      <td className="font-semibold text-xs text-[var(--text-primary)]">
+                        {s.agentName}
+                        <span className="block text-[10px] font-normal text-[var(--text-muted)]">{s.promptMode ?? 'legacy scoring'}</span>
+                      </td>
                       <td className="font-mono text-xs text-center">{s.totalProbes}</td>
-                      <td className="font-mono text-xs text-center text-[var(--success)] font-bold">{s.blocked}</td>
+                      <td className="font-mono text-xs text-center min-w-[9rem]">
+                        {s.tiers ? (
+                          <>
+                            <TierBar counts={s.tiers} total={s.totalProbes} height="h-1.5" />
+                            <span className="block mt-1">
+                              {s.tiers.FILTERED} · {s.tiers.REFUSED} · {s.tiers.IGNORED} · <span className="text-[var(--danger)] font-bold">{s.tiers.COMPROMISED}</span>
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">{s.blocked} resisted</span>
+                        )}
+                      </td>
                       <td className="font-mono text-xs text-center font-extrabold text-[var(--primary)]">{score}%</td>
                       <td><span className="badge-semantic badge-success">{s.status}</span></td>
                       <td>

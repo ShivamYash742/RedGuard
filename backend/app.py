@@ -15,14 +15,13 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 from core.datasets.loader import load_all_datasets
+from core.version import BENCHMARK_VERSION
 
 from database import get_db, init_db, close_db
-from inspector import Inspector
-from scanner import init_scan_session, run_family_scan, finalize_scan, _invoke_agent, _classify_probe
+from scanner import init_scan_session, run_family_scan, finalize_scan, session_prompt_mode
 from report_generator import generate_report_for_session
 from agent_loader import list_agents, get_agent, DEFAULT_AGENT_ID
 from lab_api import router as lab_router
-import httpx
 
 
 @asynccontextmanager
@@ -34,9 +33,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RedGuard API", lifespan=lifespan)
 
+# The UI reaches the API through the Next.js rewrite (same origin), so CORS
+# only matters for direct browser calls; anything else is refused.
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -261,15 +264,21 @@ async def get_agents():
 async def start_scan(request: Request):
     prisma = await get_db()
     model_name = None
+    requested_mode = "baseline"
     try:
         body = await request.json()
         agent_id = body.get("agentId", DEFAULT_AGENT_ID)
         model_name = body.get("model")
+        requested_mode = body.get("promptMode", "baseline")
     except Exception:
         agent_id = DEFAULT_AGENT_ID
 
     mod = get_agent(agent_id)
     agent_name = getattr(mod, "AGENT_NAME", agent_id)
+    try:
+        prompt_mode = session_prompt_mode(agent_id, requested_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
@@ -278,7 +287,9 @@ async def start_scan(request: Request):
             "sessionId": session_str,
             "agentId": agent_id,
             "agentName": agent_name,
-            "status": "RUNNING"
+            "status": "RUNNING",
+            "benchmarkVersion": BENCHMARK_VERSION,
+            "promptMode": prompt_mode,
         }
     )
 
@@ -290,6 +301,7 @@ async def start_scan(request: Request):
         "displayId": session_str,
         "agentId": agent_id,
         "model": model_name,
+        "promptMode": prompt_mode,
         "total_probes": init_data["total_probes"],
         "families": init_data["families"]
     }
@@ -308,7 +320,9 @@ async def scan_family(sessionId: str, agentId: str, category: str, model: str = 
                 "data": json.dumps(data.get("data", {}))
             }
             
-    return EventSourceResponse(sse_generator())
+    # `no-transform` stops the Next.js proxy gzipping the stream, which would
+    # hold every event until the family finishes (same fix as the Lab stream).
+    return EventSourceResponse(sse_generator(), headers={"Cache-Control": "no-store, no-transform"})
 
 
 @app.post("/api/scan/finalize")
@@ -322,58 +336,6 @@ async def finalize_scan_route(request: Request):
     results = await finalize_scan(session_id)
     await generate_report_for_session(session_id)
     return results
-
-# Proxy route
-@app.api_route("/api/proxy", methods=["GET", "POST", "PUT", "DELETE"])
-async def proxy_request(request: Request):
-    target_url = request.headers.get("x-target-url")
-    if not target_url:
-        return JSONResponse(status_code=400, content={"error": "Missing x-target-url header"})
-
-    # Extract prompt if it's a POST request with JSON
-    prompt = ""
-    data = None
-    if request.method in ["POST", "PUT"]:
-        try:
-            data = await request.json()
-            messages = data.get("messages", [])
-            if messages and len(messages) > 0:
-                prompt = messages[0].get("content", "")
-            elif "prompt" in data:
-                prompt = data["prompt"]
-        except Exception:
-            pass
-
-    # Inspect the prompt if we found one
-    if prompt:
-        inspector = Inspector()
-        insp_result = inspector.process(prompt)
-        verdict = insp_result["policy_result"]["verdict"]
-        
-        if verdict == "DENY":
-            return JSONResponse(
-                status_code=403, 
-                content={"error": "Blocked by RedGuard Policy", "details": insp_result["policy_result"]["deny_message"]}
-            )
-
-    # Forward the request
-    async with httpx.AsyncClient() as client:
-        # Prepare headers (exclude host and target url)
-        headers = dict(request.headers)
-        headers.pop("host", None)
-        headers.pop("x-target-url", None)
-        
-        req = client.build_request(
-            method=request.method,
-            url=target_url,
-            headers=headers,
-            content=await request.body()
-        )
-        try:
-            resp = await client.send(req, stream=False)
-            return JSONResponse(status_code=resp.status_code, content=resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text)
-        except Exception as e:
-            return JSONResponse(status_code=502, content={"error": "Bad Gateway", "details": str(e)})
 
 @app.post("/api/scan/cancel")
 async def cancel_scan_route(request: Request):

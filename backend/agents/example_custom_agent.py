@@ -10,7 +10,8 @@ To create your own agent:
   1. Copy this file to backend/agents/my_agent.py
   2. Set AGENT_NAME, AGENT_DESCRIPTION, and LLM_ENDPOINT / API_KEY
   3. Add an entry for your agent_id in agents/system_prompts.json
-  4. The invoke(prompt) coroutine is the only required interface
+  4. The invoke(prompt) coroutine is the only required interface; accept an
+     optional prompt_mode ("baseline" / "hardened") to support both scan modes
 
 Environment variables (optional):
   CUSTOM_AGENT_URL   = "http://localhost:5000/v1/chat/completions"
@@ -37,11 +38,7 @@ LLM_ENDPOINT: str = os.getenv("CUSTOM_AGENT_URL", "http://localhost:5000/v1/chat
 LLM_MODEL: str    = os.getenv("CUSTOM_AGENT_MODEL", "custom-model")
 LLM_KEY: str      = os.getenv("CUSTOM_AGENT_KEY", "")
 
-# ── System Prompt (loaded from system_prompts.json) ──────────────────────────
-SYSTEM_PROMPT = build_system_prompt("example_custom_agent")
-
-
-async def invoke(prompt: str) -> str:
+async def invoke(prompt: str, prompt_mode: str = "baseline") -> str:
     """
     Send a prompt to the configured LLM endpoint and return the text response.
     Falls back to a safe error message if the endpoint is unavailable.
@@ -53,7 +50,7 @@ async def invoke(prompt: str) -> str:
     payload = {
         "model": LLM_MODEL,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": build_system_prompt("example_custom_agent", prompt_mode)},
             {"role": "user",   "content": prompt},
         ],
         "temperature": 0,

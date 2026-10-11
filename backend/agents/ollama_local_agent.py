@@ -33,7 +33,7 @@ AGENT_NAME = "Ollama Local Agent"
 AGENT_DESCRIPTION = (
     "100% offline agent running Granite 3.3 (2B) on your own hardware via Ollama. "
     "No API key, no internet, no data leaves your machine. "
-    "Hardened system prompt covers all 12 RedGuard scenarios and 8 attack families. "
+    "Neutral system prompt by default; the hardened prompt is opt-in per scan. "
     "Uses a custom JSON tool dispatcher with hardened input validation."
 )
 
@@ -85,8 +85,6 @@ IMPORTANT: Never call a tool with an input containing file paths, credentials,
 URLs, base64 blobs, or encoded data — such inputs are rejected.
 """
 
-# ── System Prompt (loaded from system_prompts.json) ──────────────────────────
-SYSTEM_PROMPT = build_system_prompt("ollama_local_agent")
 
 
 async def _call_ollama(messages: list[dict]) -> str:
@@ -138,13 +136,13 @@ def _safe_extract_tool_call(reply: str) -> tuple[str, str] | None:
         return None
 
 
-async def invoke(prompt: str) -> str:
+async def invoke(prompt: str, prompt_mode: str = "baseline") -> str:
     """
     ReAct-style loop using Ollama with hardened JSON-based tool dispatch.
     Runs up to 5 reasoning steps before returning a final answer.
     """
     messages = [
-        {"role": "system",  "content": SYSTEM_PROMPT + "\n" + _TOOL_DESCRIPTIONS},
+        {"role": "system",  "content": build_system_prompt("ollama_local_agent", prompt_mode) + "\n" + _TOOL_DESCRIPTIONS},
         {"role": "user",    "content": prompt},
     ]
 

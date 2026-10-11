@@ -64,6 +64,18 @@ export interface ScenarioMeta {
   primaryVectors: string[]
 }
 
+export const OUTCOME_TIERS = [
+  { key: 'FILTERED', label: 'Filtered', hint: 'blocked by the regex policy', color: 'var(--accent)' },
+  { key: 'REFUSED', label: 'Refused', hint: 'the model explicitly refused', color: 'var(--success)' },
+  { key: 'IGNORED', label: 'Ignored', hint: 'no refusal, no compliance', color: 'color-mix(in srgb, var(--success) 45%, transparent)' },
+  { key: 'COMPROMISED', label: 'Compromised', hint: 'the attack succeeded', color: 'var(--danger)' },
+] as const
+
+export type OutcomeTier = (typeof OUTCOME_TIERS)[number]['key']
+export type TierCounts = Record<OutcomeTier, number>
+
+export const emptyTierCounts = (): TierCounts => ({ FILTERED: 0, REFUSED: 0, IGNORED: 0, COMPROMISED: 0 })
+
 export interface BenchmarkRun {
   id: string
   sessionId: string
@@ -76,6 +88,11 @@ export interface BenchmarkRun {
   allowed: number
   status: 'COMPLETED' | 'RUNNING' | 'FAILED' | string
   blockRate?: number
+  // null benchmarkVersion = legacy run scored only as blocked/allowed
+  benchmarkVersion: string | null
+  promptMode: string | null
+  tiers: TierCounts | null
+  modelCompromised: number
 }
 
 export interface ModelComparisonResult {
@@ -368,6 +385,12 @@ class BenchmarkDataService {
           allowed: s.allowed || 0,
           status: s.status || 'COMPLETED',
           blockRate: s.totalProbes > 0 ? s.blocked / s.totalProbes : 0,
+          benchmarkVersion: s.benchmarkVersion ?? null,
+          promptMode: s.promptMode ?? null,
+          tiers: s.benchmarkVersion
+            ? { FILTERED: s.filtered, REFUSED: s.refused, IGNORED: s.ignored, COMPROMISED: s.compromised }
+            : null,
+          modelCompromised: s.modelCompromised || 0,
         }))
         this.cache.set(key, { data: formatted, timestamp: Date.now() })
         return formatted
