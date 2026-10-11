@@ -33,6 +33,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Run as `python docs/spec_generator.py` from anywhere: core/ lives at the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 DOCS_DIR = Path(__file__).parent
 REDGUARD_DIR = DOCS_DIR.parent
 OUTPUT_PATH = DOCS_DIR / "benchmark_spec.md"

@@ -15,13 +15,13 @@ different questions.
 **Mode A — probe scanner.** Fires 46 adversarial prompts ("probes") from 8
 attack families and 12 scenarios at a pluggable LLM agent, plus 10 benign
 controls (`"benign_control": true`) that measure over-refusal and regex false
-positives. Each probe passes
-the regex policy engine (`backend/inspector.py` + `backend/policy.yaml`) and an
-external ML classifier (`CLASSIFIER_URL`); if allowed, it goes to the agent and
-the reply is scored against a refusal-keyword list (`backend/scanner.py`).
-Results stream over SSE to the UI. Code: `backend/` (scanner, inspector,
-agents), `core/datasets`, `core/probes`, `core/scenarios`, `core/benchmark`.
-Routes: `/`, `/corpus`, `/runs`, `/models`, `/settings`.
+positives. Each probe goes through the regex filter (`backend/inspector.py` +
+`backend/policy.yaml`), an optional ML classifier (`CLASSIFIER_URL`), and the
+agent; `score()` in `backend/scanner.py` puts it in one tier (below). Results
+stream over SSE to the UI; `/api/leaderboard` (`backend/leaderboard.py`) pools
+measured runs. Code: `backend/` (scanner, inspector, leaderboard, agents),
+`core/datasets` (the probes), `core/benchmark` (BDS, Wilson CI, repro stamp —
+shared with Mode B). Routes: `/`, `/corpus`, `/runs`, `/models`, `/settings`.
 
 **Mode B — multi-agent lab.** Three agents (A researcher → B validator → C
 executor) work inside a simulated environment (`core/lab/cee.py`). The model
@@ -47,13 +47,12 @@ Layout:
 
 - `main` has Mode B merged (PR #2), the `/lab/compare` page, Docker support,
   and a desktop-app plan (`DESKTOP_APP_PLAN.md`, not started).
-- Branch `mode-a-fixes` is working through `MODE_A_FIX_PLAN.md`; phases 1–2
-  (security, tiered scoring) are done.
-- **599 tests pass** (~10 s, no LLM). `npm run typecheck` is clean.
-  `npm run lint` reports **21 errors** (mostly `no-explicit-any` and
-  setState-in-effect), all in Mode A UI files: `app/page.tsx`,
-  `app/models`, `app/runs`, `app/settings`, `components/Header.tsx`,
-  `components/GlobalSearchModal.tsx`, `lib/data-service.ts`.
+- Branch `mode-a-fixes` carries `MODE_A_FIX_PLAN.md` phases 1–9 (security,
+  tiered scoring, benign controls, regex precision, measured leaderboard,
+  lint/phone layout, v4.0.0, unused-code removal, first local results). Still
+  open: hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
+- **630 tests pass** (~10 s, no LLM). `npm run typecheck` and `npm run lint`
+  are clean.
 - **Mode B has no real-model results yet.** Every number so far is scripted or
   synthetic. Next steps: a pilot on nemotron-3-super (1 arm, 3 cases, 2 reps),
   then the full sweep (9 cases × 5 reps per arm).
@@ -89,11 +88,9 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
   memory-poisoning probes cannot succeed; RG-EX-004 needs an email tool the
   agents lack. Template leftovers in RG-CI-002/004/008; RG-CI-001 ≈ RG-CI-002,
   RG-DI-001 ≈ RG-DI-002. (Done: TM-003/004/005 removed, RG-GD-002 is a control.)
-- **Leaderboard** (plan phase 5). `getModelComparisons` in `lib/data-service.ts` seeds
-  hardcoded rows (flagged `synthetic`); real sessions overwrite only the
-  headline numbers, family scores and `utilityScore` stay invented, and "BDS"
-  there is `ASR/100`, not the BDS in `core/benchmark`.
-- Possibly (unverified): Header overflows at 390px width.
+- **Version bump:** Mode A is 4.0.0. Scores from 3.x runs are not comparable;
+  those sessions stay viewable as "legacy scoring" and never enter the
+  leaderboard. Old report files are in `reports/legacy-v3/`.
 
 Fixed in phase 1: `/api/proxy` removed; CORS limited to `CORS_ORIGINS`
 (default `http://localhost:3000`); Docker publishes on 127.0.0.1 only;
@@ -168,7 +165,7 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
   that Mode A routes and `get_version_info()` keys still exist — update them
   if you change those on purpose.
 - **Versions.** Canonical in `core/version.py`. Mode A: `BENCHMARK_VERSION`,
-  `DATASET_VERSION`, `PROBE_SCHEMA_VERSION` (all 3.0.0) — no runtime link to the
+  `DATASET_VERSION`, `PROBE_SCHEMA_VERSION` (all 4.0.0) — no runtime link to the
   frontend, so hand-sync the string into `README.md` (title, badges, structure
   comments), `package.json`, `app/layout.tsx`, `app/corpus/page.tsx`,
   `app/runs/page.tsx`, `components/Header.tsx`, `components/Sidebar.tsx`, then
@@ -189,8 +186,9 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
   copy the file first if you must. `npm run dev:all` uses `DATABASE_URL` from
   `.env`; point it at a copy for experiments.
 - **Python 3.10+** must keep working. 3.14 evaluates annotations lazily, so a
-  missing `typing` import only fails on older interpreters
-  (`core/tests/test_scenarios_import.py` covers this). Docker runs 3.12.
+  missing `typing` import only fails on older interpreters. Check new modules
+  with `typing.get_type_hints()` on their functions (forces evaluation) or run
+  the suite under Docker (3.12); `python3.11` is also installed locally.
 - The `<!-- BEGIN:nextjs-agent-rules -->` block in `AGENTS.md` is regenerated
   by `next dev`; deleting it just brings it back.
 - `scripts/*.py` are legacy standalone CLI tools; they don't talk to the

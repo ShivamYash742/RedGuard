@@ -1,8 +1,8 @@
-# RedGuard v3.0.0 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v4.0.0 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
-[![Benchmark](https://img.shields.io/badge/benchmark-v3.0.0-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
-[![Dataset](https://img.shields.io/badge/dataset-v3.0.0-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Benchmark](https://img.shields.io/badge/benchmark-v4.0.0-indigo.svg)](file:///home/shivammishra/Pictures/RedGuard/core/version.py)
+[![Dataset](https://img.shields.io/badge/dataset-v4.0.0-emerald.svg)](file:///home/shivammishra/Pictures/RedGuard/core/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
 
@@ -10,18 +10,19 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ---
 
-## ✨ Key Features (v3.0.0)
+## ✨ Key Features (v4.0.0)
 
 | Feature | Description |
 |---|---|
-| **Academic Leaderboard & Ranking** | Multi-model ranking across Attack Success Rate (ASR), Behaviour Drift Score (BDS), Security Score, & Tool Resistance |
+| **Measured Leaderboard** | One row per agent and system-prompt mode, from stored runs only: attack success with the regex filter off and on (Wilson 95% CIs), per-family resistance, over-refusal, and Behaviour Drift Score (BDS) |
 | **Research Visualizations** | Recharts Radar Charts (Attack family comparison) and Stacked Outcome Distribution Bars (comparison page) |
 | **6 Navigation Hubs** | Overview, Corpus (families/probes/scenarios), Runs (live execution & history), Models & Ranking, Lab (Mode B), & Settings — v3 consolidated the original 14 routes into 5, plus Mode B's own `/lab` |
 | **Global Search (`⌘K`)** | Fast client-side fuzzy search overlay (`lib/search-index.ts`) matching Probe IDs, Titles, Attack Families, Scenarios, Models, and Reports |
 | **8 Attack Families Taxonomy** | Direct Injection, Content Injection, Data Exfiltration, Goal Diversion, Memory Poisoning, Autonomous Actions, Planning Manipulation, & Tool Manipulation |
-| **50 Empirical Probes** | Auditable JSON dataset entries with research paper citations (arXiv IDs, venues, authors), difficulty levels, & threat models |
+| **46 Attack Probes + 10 Benign Controls** | Auditable JSON dataset entries with research paper citations (arXiv IDs, venues, authors), difficulty levels, & threat models. Controls are harmless requests that measure over-refusal and regex false positives |
 | **12 Application Scenarios** | GitHub, GitLab, Wiki, Documentation, Email, Calendar, Banking, Travel, Shopping, Support, Forum, & Reddit simulation environments |
-| **Live SSE Execution Suite** | Real-time Server-Sent Events stream tracking family progress, live resisted/compromised counters, and pulse border feedback |
+| **Live SSE Execution Suite** | Real-time Server-Sent Events stream: every probe lands in one tier — Filtered (regex), Refused, Ignored or Compromised — with live counters per family; benign controls counted separately |
+| **Tiered Scoring** | Each probe is scored with its own success/blocked indicators; the model sees every probe (even ones the regex blocks), so results exist both as deployed and for the model alone. Agents run with a neutral system prompt unless the run selects the hardened one |
 | **Multi-Format Export** | Download evaluation benchmark reports in Markdown (`.md`) and CSV (`.csv`) formats |
 | **BibTeX Citation Exporter** | Built-in academic citation snippet generator for research paper citations |
 
@@ -30,7 +31,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v3.0.0 Platform
+                        RedGuard v4.0.0 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                          │
@@ -39,7 +40,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 │ │      History)                      ├── Models & Ranking (Radar)   │
 │ ├── Lab — Mode B launcher & traces   ├── Settings (System/Policy/   │
 │ └── Global Search Modal (⌘K)             Audit tabs)                │
-│                 (6 Navigation Hubs · 50 Probes · 9 Mode B Cases)    │
+│        (6 Navigation Hubs · 46 Probes + 10 Controls · 9 Mode B Cases) │
 └──────────────────────────────────┬──────────────────────────────────┘
                                    │ HTTP / SSE Stream
 ┌──────────────────────────────────┴──────────────────────────────────┐
@@ -58,8 +59,9 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 
 ### Mode B — the multi-agent security lab
 
-Everything above is **Mode A**: single-turn probes scored against
-refusal-keyword rules. It answers *did the model say something bad?*
+Everything above is **Mode A**: single-turn probes, each scored with its own
+indicators into one of four tiers (Filtered / Refused / Ignored / Compromised).
+It answers *what does one model do with an attack prompt?*
 
 **Mode B** (`/lab`) answers a different question — *when an attacker hides an
 instruction inside content an agent reads, what does the whole system of
@@ -104,7 +106,7 @@ Mode B is additive — no Mode A file, model, endpoint or verdict is affected.
 
 ```
 RedGuard/
-├── app/                               # Next.js App Router pages (v3.0.0)
+├── app/                               # Next.js App Router pages (v4.0.0)
 │   │                                  # v3 IA: 14 routes consolidated into 5 hubs
 │   │                                  # + Mode B's own /lab section (old routes 301-redirect, see next.config.js)
 │   ├── page.tsx                       # Overview — Dashboard (6 Research Cards + Taxonomy Grid)
@@ -136,22 +138,19 @@ RedGuard/
 │   └── search-index.ts                # Client-side Search Index Engine
 │
 ├── core/                              # Shared Python research library (importable by backend)
-│   ├── datasets/                      # 8 JSON Attack Family Datasets (50 Probes total) — Mode A
-│   │   ├── direct_injection.json      # 8 probes
-│   │   ├── content_injection.json     # 9 probes
-│   │   ├── exfiltration.json          # 6 probes
-│   │   ├── goal_diversion.json        # 4 probes
-│   │   ├── memory_poisoning.json      # 6 probes
-│   │   ├── autonomy.json              # 5 probes
-│   │   ├── planning.json              # 5 probes
-│   │   ├── tool_security.json         # 7 probes
+│   ├── datasets/                      # 8 JSON families: 46 attack probes + 10 benign controls — Mode A
+│   │   ├── direct_injection.json      # 8 attacks + 2 controls
+│   │   ├── content_injection.json     # 9 attacks + 1 control
+│   │   ├── exfiltration.json          # 6 attacks + 2 controls
+│   │   ├── goal_diversion.json        # 3 attacks + 1 control
+│   │   ├── memory_poisoning.json      # 6 attacks + 1 control
+│   │   ├── autonomy.json              # 5 attacks + 1 control
+│   │   ├── planning.json              # 5 attacks + 1 control
+│   │   ├── tool_security.json         # 4 attacks + 1 control
 │   │   ├── schema.json                # Probe JSON schema definition
 │   │   ├── loader.py                  # Dataset loader (used by FastAPI backend)
 │   │   └── validator.py               # Schema validation utilities
-│   ├── probes/                        # Probe class definitions per family — Mode A
-│   ├── scenarios/                     # 12 scenario context classes — Mode A
-│   ├── benchmark/                     # Metrics, BDS, statistics, reproducibility — Mode A
-│   ├── compat/                        # Backwards-compat adapters for the legacy scanner/probe API
+│   ├── benchmark/                     # BDS, Wilson CIs, reproducibility stamp (shared by both modes)
 │   ├── lab/                           # Multi-agent harness — Mode B (frozen boundary: never imports backend/)
 │   │   ├── cases/                     # 9 security test cases (JSON) + case_schema.json
 │   │   ├── cee.py                     # Controlled Execution Environment
@@ -165,18 +164,19 @@ RedGuard/
 │   │   ├── evidence.py                # Evidence bundle builder
 │   │   ├── repro.py                   # Reproducibility stamp
 │   │   └── smoke.py                   # No-DB model-suitability smoke test
-│   ├── version.py                     # Canonical Version Constants (v3.0.0)
+│   ├── version.py                     # Canonical Version Constants (v4.0.0)
 │   └── __init__.py
 │
 ├── backend/                           # FastAPI Service (:8000)
 │   ├── app.py                         # FastAPI endpoints & CORS configuration — Mode A
-│   ├── scanner.py                     # Scanner orchestration & SSE streams — Mode A
-│   ├── inspector.py                   # Regex & YAML policy rules engine — Mode A
+│   ├── scanner.py                     # Scan loop, tiered scoring (score()) & SSE streams — Mode A
+│   ├── inspector.py                   # Regex filter (attack-shape patterns) + policy.yaml rules — Mode A
+│   ├── leaderboard.py                 # Measured leaderboard rows (/api/leaderboard) — Mode A
 │   ├── agent_loader.py                # Plugin agent auto-discovery — Mode A
 │   ├── database.py                    # Prisma ORM connection
 │   ├── schema.py                      # Pydantic request/response schemas
 │   ├── report_generator.py            # Evaluation report generation — Mode A
-│   ├── target_agent.py                # Target agent wrapper — Mode A
+│   ├── target_agent.py                # Interactive CLI to chat with any agent — Mode A
 │   ├── policy.yaml                    # YAML security policy rules — Mode A
 │   ├── lab_api.py                     # Mode B HTTP surface (/api/lab/*, SSE experiment stream)
 │   ├── lab_store.py                   # Mode B persistence (Experiment/LabRun/TraceEvent)
@@ -184,10 +184,12 @@ RedGuard/
 │   ├── agents/                        # Configured Model Agents — Mode A
 │   │   ├── nemotron_3_ultra.py        # Nemotron-3 Ultra (550B)
 │   │   ├── nemotron_super_agent.py    # Nemotron-3 Super (120B)
-│   │   ├── llama3_3_70b_agent.py      # Llama 3.3 70B Instruct
-│   │   ├── deepseek_flash_agent.py    # DeepSeek V4 Flash
+│   │   ├── gpt_oss_120b_agent.py      # GPT OSS 120B (Groq)
+│   │   ├── llama_3_1_8b_agent.py      # GPT OSS 20B (Groq; file name is historical)
 │   │   ├── ollama_local_agent.py      # Ollama Local Agent
-│   │   └── example_custom_agent.py    # Custom Template Agent
+│   │   ├── example_custom_agent.py    # Custom Template Agent
+│   │   ├── _tools.py                  # Shared tools; file_read is confined to agents/sandbox/
+│   │   └── system_prompts.json        # Neutral baseline prompt + per-agent hardened prompts
 │   ├── tests/                         # Backend unit tests (inspector, scanner, lab_store, lab_api)
 │   ├── prisma/schema.prisma           # Database schema (SQLite) — 5 Mode A models + 3 Mode B models
 │   ├── prisma/dev.db                  # Local SQLite database (seeded demo data — see note below)
@@ -195,7 +197,7 @@ RedGuard/
 │
 ├── docs/                              # Project documentation & research specs
 │   ├── architecture.md                # System architecture
-│   ├── benchmark_spec.md              # 50-probe formal specification
+│   ├── benchmark_spec.md              # Probe specification (generated by spec_generator.py)
 │   ├── literature_mapping.md          # Academic citations & literature mapping
 │   ├── research_paper.md              # Benchmark research paper draft
 │   └── spec_generator.py              # Spec auto-generator script
@@ -301,7 +303,8 @@ Copy `.env.example` to `.env` and fill in the keys you need. `DATABASE_URL` is r
 
 | `GOOGLE_API_KEY` / `GEMINI_MODEL` | Gemini Flash agent |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent (run `ollama serve` first) |
-| `CLASSIFIER_URL` | ML classifier endpoint used for secondary verdicts during a scan |
+| `CLASSIFIER_URL` | Optional ML classifier for a secondary verdict. Unset = no call; every probe is sent to this URL, so only use a service you run |
+| `CORS_ORIGINS` | Origins allowed to call the API directly from a browser (default `http://localhost:3000`) |
 | `WEBHOOK_URL` | Optional Slack/Discord webhook for post-scan alerts |
 
 ### 4. Running Locally
@@ -325,7 +328,7 @@ npm run typecheck                                              # tsc --noEmit
 
 cd backend && source .venv/bin/activate
 pytest tests/                                                  # backend: inspector, scanner, lab store/API
-pytest ../core/tests/                                          # core: BDS, stats, schema validation, all of Mode B
+pytest ../core/tests/                                          # core: BDS, stats, dataset validation, all of Mode B
 ```
 
 ---
