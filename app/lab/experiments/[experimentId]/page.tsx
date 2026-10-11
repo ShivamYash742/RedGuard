@@ -2,15 +2,17 @@
 import React, { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, ArrowLeft, ArrowRight, Play, Square } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronDown, Play, Square } from 'lucide-react'
 import {
   labService, Arm, CaseSummary, Experiment, ExperimentMetrics, LabStreamEvent, LiveEvent, RateWithCI,
-  Topology, Verdict, armName, containmentLabel, deriveRoute, describeEvent, formatRate,
+  Topology, Verdict, armName, containmentLabel, deriveRoute, describeEvent, formatDuration, formatRate, since,
   FAMILY_LABELS, MECHANISM_LABELS, OBJECTIVE_LABELS, OUTCOME_LABELS,
 } from '@/lib/lab-service'
 import {
   CHANNEL_ICONS, CHANNEL_NAMES, ObjectiveGlyph, PropagationStage, RouteAxis, RouteLegend, RouteStrip, SealGlyph,
 } from '@/components/LabRoute'
+import { AgentCards, useNow } from '@/components/AgentCards'
+import { AgentSwimlane } from '@/components/AgentSwimlane'
 import { TableSkeleton } from '@/components/Skeletons'
 
 type Phase = 'queued' | 'baseline' | 'attack' | 'done' | 'failed' | 'interrupted'
@@ -34,6 +36,8 @@ interface LiveRun {
   runId: string
   pairId: string
   mode: 'CLEAN' | 'ATTACK'
+  /** 1-based position among all of the experiment's runs. */
+  index: number | null
   events: LiveEvent[]
 }
 
@@ -41,13 +45,20 @@ interface Board {
   pairs: Record<string, Pair>
   order: string[]
   current: LiveRun | null
-  /** The attack run on the stage: the one executing, else the last to finish. */
-  stage: { pairId: string; runId: string; events: LiveEvent[]; verdict: Verdict | null } | null
+  /** The run on the stage: the one executing, clean or attack, else the last to run. */
+  stage: (LiveRun & { verdict: Verdict | null }) | null
   progress: { completed: number; total: number }
   rescored: Record<string, number>
+  /** Wall time of each run finished on this stream: the ETA's basis. */
+  durations: number[]
+  /** Per finished run: replies that were not a valid action, and steps (§21.9). */
+  parse: Record<string, { failures: number; steps: number }>
+  agents: string[] | null
 }
 
 const DEFAULT_PATH = ['A', 'B', 'C']
+/** §21.9: above this share of unparseable replies, scores are biased. */
+const PARSE_FAILURE_GATE = 0.1
 
 function boardFrom(experiment: Experiment, previous?: Board): Board {
   const config = experiment.config as { cases?: string[]; repetitions?: number }
@@ -64,7 +75,10 @@ function boardFrom(experiment: Experiment, previous?: Board): Board {
   // A resumed pair has rows from every attempt; a completed attack run wins,
   // then a failure, then a run left RUNNING by an interrupted stream.
   const rank: Record<Phase, number> = { done: 3, failed: 2, interrupted: 1, queued: 0, baseline: 0, attack: 0 }
+  const parse = { ...previous?.parse }
   for (const run of experiment.runs ?? []) {
+    const m = run.metrics as { parse_failure_count?: number; step_count?: number } | null
+    if (m && typeof m.step_count === 'number') parse[run.run_id] = { failures: m.parse_failure_count ?? 0, steps: m.step_count }
     const pair = pairs[run.pair_id]
     if (!pair) continue
     const phase: Phase =
@@ -92,8 +106,11 @@ function boardFrom(experiment: Experiment, previous?: Board): Board {
     pairs, order,
     current: null,
     stage: previous?.stage ?? null,
-    progress: { completed: 2 * done, total: 2 * order.length },
+    progress: experiment.live ?? { completed: 2 * done, total: 2 * order.length },
     rescored: previous?.rescored ?? {},
+    durations: previous?.durations ?? [],
+    parse,
+    agents: previous?.agents ?? null,
   }
 }
 
@@ -102,18 +119,24 @@ function boardFrom(experiment: Experiment, previous?: Board): Board {
 function applyEvent(board: Board, event: LabStreamEvent): Board {
   switch (event.event) {
     case 'experiment_started':
-      return { ...board, progress: { completed: 2 * event.data.already_completed_pairs, total: event.data.total_runs } }
+      return {
+        ...board,
+        progress: { completed: 2 * event.data.already_completed_pairs, total: event.data.total_runs },
+        agents: event.data.agents,
+        durations: [],
+      }
 
     case 'run_started': {
-      const { run_id, pair_id, mode } = event.data
+      const { run_id, pair_id, mode, index } = event.data
       const pair = board.pairs[pair_id]
       if (!pair) return board
       const attack = mode === 'ATTACK'
+      const run: LiveRun = { runId: run_id, pairId: pair_id, mode, index, events: [] }
       return {
         ...board,
         pairs: { ...board.pairs, [pair_id]: { ...pair, phase: attack ? 'attack' : 'baseline', attackRunId: attack ? run_id : pair.attackRunId, verdict: null, fresh: false } },
-        current: { runId: run_id, pairId: pair_id, mode: attack ? 'ATTACK' : 'CLEAN', events: [] },
-        stage: attack ? { pairId: pair_id, runId: run_id, events: [], verdict: null } : board.stage,
+        current: run,
+        stage: { ...run, verdict: null },
       }
     }
 
@@ -128,11 +151,21 @@ function applyEvent(board: Board, event: LabStreamEvent): Board {
       }
     }
 
+    case 'run_finished': {
+      const { run_id, duration_ms, parse_failures, steps, progress } = event.data
+      return {
+        ...board,
+        progress,
+        durations: [...board.durations, duration_ms],
+        parse: { ...board.parse, [run_id]: { failures: parse_failures, steps } },
+      }
+    }
+
     case 'run_verdict': {
       const { run_id, pair_id, status, verdict, progress } = event.data
       const pair = board.pairs[pair_id]
       if (!pair) return board
-      const events = board.current?.runId === run_id ? board.current.events : pair.events
+      const events = board.current?.runId === run_id ? board.current.events : board.stage?.runId === run_id ? board.stage.events : pair.events
       const failed = status !== 'COMPLETED'
       return {
         ...board,
@@ -168,6 +201,22 @@ function stopped(board: Board): Board {
   return { ...board, pairs, current: null }
 }
 
+/** Unparseable replies against steps, over finished runs plus the one running. */
+function parseRate(board: Board): { failures: number; steps: number } {
+  const total = { failures: 0, steps: 0 }
+  for (const p of Object.values(board.parse)) {
+    total.failures += p.failures
+    total.steps += p.steps
+  }
+  if (board.current && !board.parse[board.current.runId]) {
+    for (const e of board.current.events) {
+      if (e.event_type === 'action_parse_failed') total.failures += 1
+      if (e.event_type === 'agent_step_started') total.steps += 1
+    }
+  }
+  return total
+}
+
 export default function LabExperimentPage({ params }: { params: Promise<{ experimentId: string }> }) {
   const { experimentId } = use(params)
 
@@ -178,6 +227,7 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
   const [arm, setArm] = useState<Arm | null>(null)
   const [board, setBoard] = useState<Board | null>(null)
   const [running, setRunning] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -198,8 +248,7 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
     return exp
   }, [experimentId])
 
-  // The stream is the one endpoint that spends model budget; leaving the
-  // page must stop it.
+  // The run belongs to the server: leaving the page only stops watching.
   useEffect(() => () => {
     sourceRef.current?.close()
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
@@ -213,48 +262,51 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
   }, [])
 
   const onStreamEvent = useCallback((event: LabStreamEvent) => {
-    if (event.event === 'experiment_complete') {
+    if (event.event === 'experiment_complete' || event.event === 'experiment_error' || event.event === 'experiment_stopped') {
       completedRef.current = true
       sourceRef.current?.close()
       setRunning(false)
+      setStopping(false)
       flush()
+      if (event.event === 'experiment_error') setError(event.data.error)
+      if (event.event === 'experiment_stopped') setBoard((prev) => (prev ? stopped(prev) : prev))
       refresh().catch(() => undefined)
-      return
-    }
-    if (event.event === 'experiment_error') {
-      completedRef.current = true
-      sourceRef.current?.close()
-      setRunning(false)
-      setError(event.data.error)
       return
     }
     queueRef.current.push(event)
     if (frameRef.current === null) frameRef.current = requestAnimationFrame(flush)
   }, [flush, refresh])
 
-  const start = useCallback(() => {
-    setError(null)
+  const watch = useCallback(() => {
+    sourceRef.current?.close()
     completedRef.current = false
     setRunning(true)
-    sourceRef.current = labService.streamExperiment(experimentId, onStreamEvent, () => {
-      // Closing matters: an open EventSource reconnects by itself, and the
-      // server resumes the experiment on every reconnect.
-      sourceRef.current?.close()
+    const source = labService.streamExperiment(experimentId, onStreamEvent, () => {
+      // After a dropped connection the browser reconnects by itself and the
+      // server replays the current run. It gives up only on an error status:
+      // the experiment is no longer running.
+      if (source.readyState !== EventSource.CLOSED || completedRef.current) return
       setRunning(false)
-      if (!completedRef.current) {
-        flush()
-        setBoard((prev) => (prev ? stopped(prev) : prev))
-        setError('The stream closed before the experiment finished. Completed pairs are saved; Resume continues from the first unfinished one.')
-      }
+      flush()
+      refresh().catch(() => undefined)
     })
-  }, [experimentId, onStreamEvent, flush])
+    sourceRef.current = source
+  }, [experimentId, onStreamEvent, flush, refresh])
 
-  const stop = () => {
-    completedRef.current = true
-    sourceRef.current?.close()
-    setRunning(false)
-    flush()
-    setBoard((prev) => (prev ? stopped(prev) : prev))
+  const start = useCallback(async () => {
+    setError(null)
+    try {
+      await labService.startExperiment(experimentId)
+      watch()
+    } catch (err) {
+      setError(String(err))
+    }
+  }, [experimentId, watch])
+
+  // The stream then delivers `experiment_stopped` to every open tab.
+  const stop = async () => {
+    setStopping(true)
+    await labService.stopExperiment(experimentId).catch((err) => setError(String(err)))
   }
 
   useEffect(() => {
@@ -273,16 +325,18 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
         setTopology(topologies.topologies.find((t) => t.id === (exp.config as { topology_id?: string }).topology_id) ?? topologies.topologies[0] ?? null)
         setArm(arms.find((a) => a.key === exp.arm) ?? null)
         // Launched from /lab with ?run=1: start once, then drop the flag so a
-        // reload shows the board instead of spending more model calls.
+        // reload rejoins the run instead of asking to start it again.
         if (!autoRef.current && new URLSearchParams(window.location.search).get('run') === '1') {
           autoRef.current = true
           window.history.replaceState(null, '', window.location.pathname)
           start()
+        } else if (exp.live) {
+          watch()
         }
       })
       .catch((err) => setError(String(err)))
       .finally(() => setLoading(false))
-  }, [experimentId, start])
+  }, [experimentId, start, watch])
 
   if (loading) return <TableSkeleton />
 
@@ -297,9 +351,13 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
 
   const config = experiment.config as { model?: { provider?: string; model?: string }; scripted?: boolean; max_steps?: number; repetitions?: number; cases?: string[] }
   const unfinished = board.order.some((id) => board.pairs[id].phase !== 'done')
-  const current = board.current
-  const currentPair = current ? board.pairs[current.pairId] : null
-  const stageCase = board.stage ? cases[board.pairs[board.stage.pairId]?.caseId] : null
+  const stage = board.stage
+  const stagePair = stage ? board.pairs[stage.pairId] : null
+  const stageCase = stagePair ? cases[stagePair.caseId] : null
+  const agents = board.agents ?? topology?.agents ?? stageCase?.expected_path ?? DEFAULT_PATH
+  const route = stage ? deriveRoute(stage.events, agents) : null
+  const live = running && !!board.current
+  const parse = parseRate(board)
 
   return (
     <div className="space-y-6">
@@ -316,8 +374,8 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {running ? (
-            <button onClick={stop} className="inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]">
-              <Square className="h-3.5 w-3.5" /> Stop
+            <button onClick={stop} disabled={stopping} className="inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--text-secondary)] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]">
+              <Square className="h-3.5 w-3.5" /> {stopping ? 'Stopping…' : 'Stop'}
             </button>
           ) : unfinished ? (
             <button onClick={start} className="inline-flex items-center gap-1.5 rounded-[var(--radius)] bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
@@ -329,35 +387,58 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
 
       {error && <ErrorLine message={error} />}
 
+      {!config.scripted && parse.steps >= 10 && parse.failures / parse.steps > PARSE_FAILURE_GATE && (
+        <div role="status" className="flex items-start gap-2 rounded-[var(--radius)] border border-[var(--warning)]/40 bg-[var(--warning-bg)] p-3 text-sm text-[var(--text-primary)]">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warning)]" />
+          <span>
+            <span className="font-semibold">{formatRate(parse.failures / parse.steps, 0)} of model replies were not a valid action</span>{' '}
+            ({parse.failures} of {parse.steps} steps), above the 10% gate. This model cannot drive the harness reliably, so its
+            results lean toward &quot;not reached&quot; and should be reported as unsuitable, not scored.
+          </span>
+        </div>
+      )}
+
       <Instrument board={board} running={running} />
 
-      {(running || board.stage) && (
-        <section aria-label="Live propagation" className="rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+      {(running || stage) && (
+        <section aria-label="Live run" className="rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5 text-sm">
-            <NowLine current={current} currentPair={currentPair} running={running} stagePair={board.stage ? board.pairs[board.stage.pairId] : null} />
-            {board.stage?.verdict && !running && board.pairs[board.stage.pairId]?.attackRunId && (
-              <Link href={`/lab/runs/${board.stage.runId}`} className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--primary)] hover:underline">
+            <NowLine board={board} running={running} />
+            {stage?.verdict && !running && stagePair?.attackRunId === stage.runId && (
+              <Link href={`/lab/runs/${stage.runId}`} className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--primary)] hover:underline">
                 Replay <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             )}
           </div>
-          <div className="overflow-x-auto px-4 py-4">
-            {board.stage && stageCase ? (
-              <PropagationStage
-                path={stageCase.expected_path}
-                entry={stageCase.injection_point}
-                channel={stageCase.channel}
-                eligible={stageCase.eligible_downstream_agents}
-                route={deriveRoute(board.stage.events, stageCase.expected_path)}
-                verdict={board.stage.verdict}
-                location={plantedLocation(board.stage.events)}
-                toolAuth={topology?.tool_auth}
-                live
-              />
-            ) : (
-              <p className="py-10 text-center text-sm text-[var(--text-secondary)]">Waiting for the first attack run. Its clean baseline runs first.</p>
-            )}
-          </div>
+          {stage && stageCase && route ? (
+            <>
+              <div className="overflow-x-auto px-4 py-4">
+                {stage.mode === 'ATTACK' ? (
+                  <PropagationStage
+                    path={stageCase.expected_path}
+                    entry={stageCase.injection_point}
+                    channel={stageCase.channel}
+                    eligible={stageCase.eligible_downstream_agents}
+                    route={route}
+                    verdict={stage.verdict}
+                    location={plantedLocation(stage.events)}
+                    toolAuth={topology?.tool_auth}
+                    live
+                  />
+                ) : (
+                  <PropagationStage path={stageCase.expected_path} entry={null} channel={null} eligible={stageCase.expected_path}
+                    route={route} toolAuth={topology?.tool_auth} live />
+                )}
+              </div>
+              <div className="space-y-4 border-t border-[var(--border-subtle)] px-4 py-4">
+                <AgentCards agents={agents} route={route} live={live} />
+                <LiveTimeline events={stage.events} agents={agents} live={live} />
+                <EventFeed events={stage.events} />
+              </div>
+            </>
+          ) : (
+            <p className="px-4 py-10 text-center text-sm text-[var(--text-secondary)]">Starting…</p>
+          )}
         </section>
       )}
 
@@ -371,6 +452,37 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
 
       <Reproducibility experiment={experiment} />
     </div>
+  )
+}
+
+function LiveTimeline({ events, agents, live }: { events: LiveEvent[]; agents: string[]; live: boolean }) {
+  const now = useNow(live)
+  return <AgentSwimlane events={events} agents={agents} now={live ? now : null} />
+}
+
+function EventFeed({ events }: { events: LiveEvent[] }) {
+  const t0 = events[0]?.timestamp ? Date.parse(events[0].timestamp) : null
+  const shown = events.slice(-200).reverse()
+  return (
+    <details className="group rounded-[var(--radius)] border border-[var(--border-subtle)]">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-sm font-semibold text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] [&::-webkit-details-marker]:hidden">
+        <ChevronDown className="h-4 w-4 -rotate-90 transition-transform group-open:rotate-0 motion-reduce:transition-none" aria-hidden />
+        Event feed <span className="font-normal text-[var(--text-secondary)]">· {events.length} events in this run, newest first</span>
+      </summary>
+      <ol className="max-h-64 divide-y divide-[var(--border-subtle)] overflow-y-auto border-t border-[var(--border-subtle)] font-mono text-xs">
+        {shown.map((e) => {
+          const at = t0 !== null && e.timestamp ? Date.parse(e.timestamp) - t0 : null
+          return (
+            <li key={e.step} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2 px-3 py-1.5">
+              <span className="tabular-nums text-[var(--text-secondary)]">{at !== null ? `+${(at / 1000).toFixed(1)} s` : `#${e.step}`}</span>
+              <span className={`truncate ${e.authorized === false ? 'text-[var(--success)]' : e.event_type === 'action_parse_failed' ? 'text-[var(--warning)]' : 'text-[var(--text-primary)]'}`}>
+                {describeEvent(e)}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+    </details>
   )
 }
 
@@ -427,9 +539,17 @@ function Instrument({ board, running }: { board: Board; running: boolean }) {
   const t = tally(board)
   const { completed, total } = board.progress
   const reduced = useReducedMotion()
+  const now = useNow(running)
   const agents = Array.from(new Set([...DEFAULT_PATH, ...Object.keys(t.sealed)])).sort()
   const cell = 'flex items-center gap-1.5 whitespace-nowrap'
   const num = 'font-mono text-sm font-semibold tabular-nums text-[var(--text-primary)]'
+
+  // Timing covers what this stream saw: runs finished while watching, plus
+  // the one running now.
+  const inRun = running ? since(board.current?.events[0]?.timestamp, now) ?? 0 : 0
+  const finished = board.durations.reduce((a, b) => a + b, 0)
+  const mean = board.durations.length ? finished / board.durations.length : null
+  const eta = running && mean !== null ? Math.max(0, mean * (total - completed) - inRun) : null
 
   return (
     <section aria-label="Progress" className="rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-3">
@@ -442,10 +562,15 @@ function Instrument({ board, running }: { board: Board; running: boolean }) {
             </span>
           )}
           <span className="whitespace-nowrap"><span className={num}>{completed}</span> / {total} runs</span>
-          <div className="h-1.5 min-w-[6rem] flex-1 overflow-hidden rounded-full bg-[var(--surface-base)]" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={completed}>
+          <div className="h-1.5 min-w-[6rem] flex-1 overflow-hidden rounded-full bg-[var(--surface-base)]" role="progressbar" aria-label="Runs finished" aria-valuemin={0} aria-valuemax={total} aria-valuenow={completed}>
             <motion.div className="h-full rounded-full bg-[var(--primary)]" initial={false} animate={{ width: total ? `${(completed / total) * 100}%` : '0%' }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} />
           </div>
         </div>
+        {running && (finished + inRun > 0) && (
+          <span className="text-xs tabular-nums">
+            {formatDuration(finished + inRun)} elapsed{eta !== null && <> · about {formatDuration(eta)} left</>}
+          </span>
+        )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <span className={cell}><ObjectiveGlyph level="REACHED" /><span className={num}>{t.reached}</span> reached</span>
           <span className={cell}><ObjectiveGlyph level="PARTIALLY_REACHED" /><span className={num}>{t.partial}</span> partial</span>
@@ -469,34 +594,34 @@ function Instrument({ board, running }: { board: Board; running: boolean }) {
   )
 }
 
-function NowLine({ current, currentPair, running, stagePair }: {
-  current: LiveRun | null; currentPair: Pair | null; running: boolean; stagePair: Pair | null
-}) {
-  const last = current?.events[current.events.length - 1]
+function NowLine({ board, running }: { board: Board; running: boolean }) {
+  const run = running ? board.current : board.stage
+  const pair = run ? board.pairs[run.pairId] : null
+  const reps = board.order.filter((id) => board.pairs[id].caseId === pair?.caseId).length
+  const last = run?.events[run.events.length - 1]
+  const steps = run?.events.filter((e) => e.event_type === 'agent_step_started').length ?? 0
+
   let text: React.ReactNode
-  if (running && current && currentPair) {
+  if (run && pair) {
     text = (
       <>
-        <span className="font-mono font-semibold text-[var(--text-primary)]">{currentPair.caseId}</span>
-        <span className="text-[var(--text-secondary)]"> rep {currentPair.rep} · {current.mode === 'CLEAN' ? 'clean baseline' : 'attack run'}</span>
-        {last && <span className="ml-2 font-mono text-[var(--text-primary)]">{describeEvent(last)}</span>}
+        {!running && <span className="text-[var(--text-secondary)]">Last run · </span>}
+        <span className="font-mono font-semibold text-[var(--text-primary)]">{pair.caseId}</span>
+        <span className="text-[var(--text-secondary)]">
+          {' '}· rep {pair.rep}/{reps} · {run.mode === 'CLEAN' ? 'clean baseline, no attack planted' : 'attack run'}
+          {steps > 0 && <> · step <span className="tabular-nums">{steps}</span></>}
+          {running && run.index && <> · run <span className="tabular-nums">{run.index}</span> of {board.progress.total}</>}
+        </span>
+        {running && last && <span className="ml-2 font-mono text-[var(--text-primary)]">{describeEvent(last)}</span>}
       </>
     )
   } else if (running) {
     text = <span className="text-[var(--text-secondary)]">Starting…</span>
-  } else if (stagePair) {
-    text = (
-      <>
-        <span className="text-[var(--text-secondary)]">Last attack run · </span>
-        <span className="font-mono font-semibold text-[var(--text-primary)]">{stagePair.caseId}</span>
-        <span className="text-[var(--text-secondary)]"> rep {stagePair.rep}</span>
-      </>
-    )
   }
   return (
     <div className="min-w-0 truncate" aria-live="polite">
       <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span key={last?.step ?? current?.runId ?? 'idle'} className="inline" initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
+        <motion.span key={last?.step ?? run?.runId ?? 'idle'} className="inline" initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
           {text}
         </motion.span>
       </AnimatePresence>

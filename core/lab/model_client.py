@@ -26,10 +26,13 @@ import asyncio
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import httpx
+
+from .tools import TOOLS
 
 # ─────────────────────────────────────────────────────────────────────────────
 # The action protocol (§5.4)
@@ -57,6 +60,23 @@ _REQUIRED_FIELDS: Dict[str, Tuple[str, ...]] = {
     STATE_READ: ("key",),
     REPORT: ("content",),
     FINISH: (),
+}
+
+#: The action protocol as a JSON schema, for providers that can constrain
+#: decoding to it. Required fields per kind stay in `parse_action`.
+ACTION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "action": {"type": "string", "enum": sorted(ACTION_KINDS)},
+        "tool": {"type": "string", "enum": sorted(TOOLS)},
+        "args": {"type": "object"},
+        "to": {"type": "string"},
+        "content": {"type": "string"},
+        "key": {"type": "string"},
+        "value": {"type": "string"},
+        "summary": {"type": "string"},
+    },
+    "required": ["action"],
 }
 
 
@@ -217,7 +237,7 @@ class ModelConfig:
         if provider == "ollama":
             base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/") + "/v1"
         return cls(
-            model=model or os.getenv("LAB_MODEL", "llama3.1:latest"),
+            model=model or os.getenv("LAB_MODEL", "granite3.3:2b"),
             provider=provider,
             base_url=base_url,
             api_key=os.getenv(key_var, "") if key_var else "",
@@ -325,6 +345,18 @@ class ModelClient:
         }
         if self.config.seed is not None:
             payload["seed"] = self.config.seed
+        # Ollama constrains decoding to the action protocol's shape. Plain
+        # JSON mode was not enough: granite3.3:2b then answered with valid
+        # JSON naming the tool as the action (`{"action": "db_query", ...}`)
+        # on 12 of 14 steps, and the repair retry repeated it. The schema
+        # fixes the vocabulary only; which action and tool to use is still
+        # the model's choice, and `parse_action` still checks required
+        # fields, so a malformed action is a parse failure as before (§21.9).
+        if self.config.provider == "ollama":
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "action", "schema": ACTION_SCHEMA},
+            }
 
         self.call_count += 1
         async with httpx.AsyncClient(timeout=self.config.timeout, transport=self._transport) as client:
@@ -405,6 +437,9 @@ class ActionAttempt:
 
     action: Optional[Action]
     failures: List[Tuple[str, str]] = field(default_factory=list)  # (raw_text, reason)
+    #: Wall time of each model call in order, so the live view can say how
+    #: long an agent was thinking: one per failure, then the action's.
+    latencies_ms: List[int] = field(default_factory=list)
 
 
 REPAIR_INSTRUCTION = (
@@ -420,12 +455,15 @@ async def request_action(client: Any, messages: Sequence[Dict[str, str]]) -> Act
     async `complete(messages) -> str`.
     """
     failures: List[Tuple[str, str]] = []
+    latencies: List[int] = []
     conversation = list(messages)
 
     for attempt in range(2):
+        started = time.monotonic()
         text = await client.complete(conversation)
+        latencies.append(round((time.monotonic() - started) * 1000))
         try:
-            return ActionAttempt(action=parse_action(text), failures=failures)
+            return ActionAttempt(action=parse_action(text), failures=failures, latencies_ms=latencies)
         except (ActionParseError, json.JSONDecodeError) as exc:
             reason = str(exc)
             failures.append((text, reason))
@@ -438,4 +476,4 @@ async def request_action(client: Any, messages: Sequence[Dict[str, str]]) -> Act
                     {"role": "user", "content": REPAIR_INSTRUCTION.format(reason=reason)},
                 ]
 
-    return ActionAttempt(action=None, failures=failures)
+    return ActionAttempt(action=None, failures=failures, latencies_ms=latencies)

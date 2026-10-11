@@ -9,17 +9,21 @@ Mode A table.
 
 Shape, mirroring `app.py` rather than inventing a second style:
 
-  POST /api/lab/experiments          create the row  (cf. POST /api/scan/start)
-  GET  /api/lab/experiments/{id}/run execute it, SSE (cf. GET /api/scan/family)
+  POST /api/lab/experiments             create the row  (cf. POST /api/scan/start)
+  POST /api/lab/experiments/{id}/start  execute it as a server-owned task
+  POST /api/lab/experiments/{id}/stop   cancel that task
+  GET  /api/lab/experiments/{id}/stream watch it, SSE — any number of viewers
+  GET  /api/lab/experiments/{id}/run    start + stream in one request
 
 Creation and execution are separate on purpose. An experiment is a durable
 record of *what was configured* — arm, cases, repetitions, model, versions,
 git commit — and it has to exist before any run does, so a crashed sweep is
-still attributable. Execution then streams.
+still attributable. Execution then runs in the background: closing or
+reloading the page that started it no longer stops it.
 
 **The model is called here and only here.** Everything downstream of the
 trace — evaluation, metrics, verdicts — is deterministic, so every endpoint
-except `/run` is reproducible from the database alone.
+except execution is reproducible from the database alone.
 """
 
 from __future__ import annotations
@@ -28,7 +32,8 @@ import asyncio
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
@@ -73,7 +78,7 @@ from core.lab.model_client import ModelClient, ModelConfig
 from core.lab.repro import reproducibility_stamp
 from core.lab.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, run_case
 from core.lab.tools import TOOLS
-from core.lab.trace import EventCategory, TraceEvent
+from core.lab.trace import EventCategory, EventType, TraceEvent
 
 import lab_store
 from database import get_db
@@ -82,11 +87,8 @@ router = APIRouter(prefix="/api/lab", tags=["lab"])
 
 DEFAULT_REPS = 5
 MAX_REPS = 25
-
-#: Experiments currently being executed by this process. `/run` is a GET
-#: that an EventSource re-issues on its own after any disconnect; without a
-#: guard a reconnect started a second execution beside the first.
-_RUNNING_EXPERIMENTS: set = set()
+#: Upper bound on the scripted demo's pause per step.
+MAX_STEP_DELAY_MS = 5000
 
 
 def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int) -> RunConfig:
@@ -198,6 +200,11 @@ async def create_experiment(request: Request):
     if not 1 <= reps <= MAX_REPS:
         raise HTTPException(status_code=400, detail=f"repetitions must be between 1 and {MAX_REPS}")
 
+    scripted = bool(body.get("scripted", False))
+    step_delay_ms = int(body.get("step_delay_ms") or 0)
+    if not 0 <= step_delay_ms <= MAX_STEP_DELAY_MS:
+        raise HTTPException(status_code=400, detail=f"step_delay_ms must be between 0 and {MAX_STEP_DELAY_MS}")
+
     unknown = [c for c in selected if c not in case_ids()]
     if unknown:
         raise HTTPException(status_code=400, detail=f"Unknown case ids: {unknown}")
@@ -222,7 +229,10 @@ async def create_experiment(request: Request):
             "arm": arm,
             "cases": selected,
             "repetitions": reps,
-            "scripted": bool(body.get("scripted", False)),
+            "scripted": scripted,
+            # Slows the scripted replay so a demo can be watched; a model
+            # run is slow enough on its own.
+            **({"step_delay_ms": step_delay_ms} if scripted and step_delay_ms else {}),
         },
         versions=reproducibility_stamp(),
     )
@@ -245,6 +255,8 @@ def _experiment_row(experiment: Any, runs: Optional[List[Any]] = None) -> Dict[s
         "config": config,
         "versions": json.loads(experiment.versionsJson),
         "created_at": experiment.createdAt.isoformat(),
+        # Runs per run, so `/lab` can badge a live experiment from any tab.
+        "live": _JOBS[experiment.id].progress if experiment.id in _JOBS else None,
     }
     if runs is not None:
         payload["runs"] = [_run_summary(r) for r in runs]
@@ -306,7 +318,7 @@ def _client_for(config_data: Dict[str, Any], model_config: ModelConfig, case: Di
     no budget and no nondeterminism, which is also how the API is tested.
     """
     if config_data.get("scripted"):
-        return ScriptedClient(case["clean_script"])
+        return ScriptedClient(case["clean_script"], delay_ms=config_data.get("step_delay_ms", 0))
     return ModelClient(model_config)
 
 
@@ -314,15 +326,22 @@ def _event_payload(run_id: str, event: TraceEvent) -> Dict[str, Any]:
     """One `trace_event` SSE frame. `resource` is what the action reached for
     (the evaluator's own resource keys) and `reason` why it was refused, so
     the live board can say `B → db_query(customer_pii) · refused` rather than
-    only that B acted."""
+    only that B acted.
+
+    `timestamp`, `latency_ms` (one model call) and `turn` / `max_steps` are
+    what the agent cards and the swimlane time: "B thinking 12 s, step 3 of
+    10". `reason` is also set on `agent_finished`, which says why the agent
+    stopped (`finish`, `parse_failure`, `max_steps`)."""
     args = event.arguments if isinstance(event.arguments, dict) else {}
     meta = event.metadata or {}
     resource = {k: args[k] for k in _RESOURCE_ARG_KEYS if isinstance(args.get(k), (str, int, float))}
     if event.category == EventCategory.INJECTION:
         resource = {k: args.get(k) or meta.get(k) for k in ("channel", "location") if args.get(k) or meta.get(k)}
+    explains = event.authorized is False or event.event_type == EventType.AGENT_FINISHED
     return {
         "run_id": run_id,
         "step": event.step,
+        "timestamp": event.timestamp.isoformat(),
         "category": event.category.value,
         "event_type": event.event_type.value,
         "agent_id": event.agent_id,
@@ -331,7 +350,10 @@ def _event_payload(run_id: str, event: TraceEvent) -> Dict[str, Any]:
         "derived_from": list(event.derived_from),
         "content_tag": event.content_tag.value if event.content_tag else None,
         "resource": resource or None,
-        "reason": meta.get("reason") if event.authorized is False else None,
+        "reason": meta.get("reason") if explains else None,
+        "latency_ms": meta.get("latency_ms"),
+        "turn": meta.get("turn"),
+        "max_steps": meta.get("max_steps"),
     }
 
 
@@ -422,15 +444,23 @@ async def _execute(experiment: Any):
         config_data.get("max_steps", DEFAULT_MAX_STEPS),
     )
 
+    total_runs = len(selected) * reps * 2
     yield {"event": "experiment_started", "data": {
         "experiment_id": experiment.id,
         "arm": experiment.armKey,
         "cases": selected,
         "repetitions": reps,
-        "total_runs": len(selected) * reps * 2,
+        "total_runs": total_runs,
         "already_completed_pairs": len(done),
+        # Enough for the page to lay out the agent cards before any event.
+        "scripted": bool(config_data.get("scripted")),
+        "model": {"provider": model_config.provider, "model": model_config.model},
+        "max_steps": run_config.max_steps,
+        "agents": list(run_config.topology.agents),
     }}
 
+    # Counted per run, not per pair: against a real model one run is
+    # minutes, and a bar that moves only every second run looks stuck.
     completed = 2 * len(done)
     for case_id in selected:
         case = load_case(case_id)
@@ -453,8 +483,10 @@ async def _execute(experiment: Any):
                 yield {"event": "run_started", "data": {
                     "run_id": row.id, "case_id": case_id, "mode": mode,
                     "pair_id": pair_id, "repetition_index": rep,
+                    "index": completed + 1, "total_runs": total_runs,
                 }}
 
+                started = time.monotonic()
                 async for item in _run_streaming(
                     case, cee_factory(), run_config, client, mode=mode, run_id=row.id,
                 ):
@@ -464,6 +496,16 @@ async def _execute(experiment: Any):
                         results[mode] = item
 
                 await lab_store.persist_events(db, run_id=row.id, collector=results[mode].collector)
+                completed += 1
+                result = results[mode]
+                yield {"event": "run_finished", "data": {
+                    "run_id": row.id, "case_id": case_id, "mode": mode, "pair_id": pair_id,
+                    "duration_ms": round((time.monotonic() - started) * 1000),
+                    "steps": result.step_count,
+                    "parse_failures": result.parse_failure_count,
+                    "harness_error": result.harness_error,
+                    "progress": {"completed": completed, "total": total_runs},
+                }}
 
             clean, attack = results[CLEAN], results[ATTACK]
             await lab_store.set_baseline(db, run_id=rows[ATTACK].id, baseline_run_id=rows[CLEAN].id)
@@ -487,7 +529,6 @@ async def _execute(experiment: Any):
                     cee_after=result.cee_after,
                 )
 
-            completed += 2
             yield {"event": "run_verdict", "data": {
                 "run_id": rows[ATTACK].id,
                 "baseline_run_id": rows[CLEAN].id,
@@ -497,7 +538,7 @@ async def _execute(experiment: Any):
                 "status": status,
                 "verdict": verdict.to_dict(),
                 "diagnostics": attack.diagnostics(),
-                "progress": {"completed": completed, "total": len(selected) * reps * 2},
+                "progress": {"completed": completed, "total": total_runs},
             }}
 
         rescored = await rescore_case(db, experiment.id, case)
@@ -513,39 +554,151 @@ async def _execute(experiment: Any):
     }}
 
 
-@router.get("/experiments/{experiment_id}/run")
-async def run_experiment(experiment_id: str):
-    db = await get_db()
-    experiment = await lab_store.get_experiment(db, experiment_id)
-    if experiment is None:
-        raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
+class _Job:
+    """One experiment executing in this process, and everyone watching it.
 
-    if experiment_id in _RUNNING_EXPERIMENTS:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Experiment '{experiment_id}' is already running. Reopen it once it finishes to resume.",
-        )
-    _RUNNING_EXPERIMENTS.add(experiment_id)
+    The run belongs to the server, not to a request: it used to execute
+    inside the browser's SSE request, so closing or reloading the tab
+    stopped it and a second tab got 409. Viewers now subscribe and leave
+    freely; only `stop` cancels.
 
-    async def sse_generator():
+    A late subscriber first gets the backlog: every event so far except the
+    trace of runs already finished (their verdicts are in the backlog, their
+    traces in the database), then live events.
+    """
+
+    def __init__(self, experiment: Any):
+        self.experiment_id = experiment.id
+        self.backlog: List[Dict[str, Any]] = []
+        self.subscribers: Set[asyncio.Queue] = set()
+        self.progress: Dict[str, int] = {"completed": 0, "total": 0}
+        self.task = asyncio.create_task(self._run(experiment))
+        # A callback, not a `finally` in `_run`: a task cancelled before its
+        # first step never enters the coroutine at all.
+        self.task.add_done_callback(self._close)
+
+    def _close(self, _task: asyncio.Task) -> None:
+        if _JOBS.get(self.experiment_id) is self:
+            del _JOBS[self.experiment_id]
+        for queue in self.subscribers:
+            queue.put_nowait(None)
+
+    def _publish(self, payload: Dict[str, Any]) -> None:
+        if payload["event"] == "run_started":
+            self.backlog = [p for p in self.backlog if p["event"] != "trace_event"]
+        if payload["event"] == "experiment_started":
+            self.progress = {"completed": 2 * payload["data"]["already_completed_pairs"], "total": payload["data"]["total_runs"]}
+        if payload["event"] == "run_finished":
+            self.progress = payload["data"]["progress"]
+        self.backlog.append(payload)
+        for queue in self.subscribers:
+            queue.put_nowait(payload)
+
+    async def _run(self, experiment: Any) -> None:
         try:
             async for payload in _execute(experiment):
-                yield {"event": payload["event"], "data": json.dumps(payload["data"])}
-        except asyncio.CancelledError:  # client disconnected — stop quietly
+                self._publish(payload)
+        except asyncio.CancelledError:
+            # Runs left RUNNING are marked FAILED when it is resumed.
+            self._publish({"event": "experiment_stopped", "data": {"experiment_id": self.experiment_id}})
             raise
         except Exception as exc:
-            # The stream is the only channel the caller has; an unreported
-            # failure is indistinguishable from a finished sweep.
-            yield {"event": "experiment_error", "data": json.dumps(
-                {"experiment_id": experiment_id, "error": f"{type(exc).__name__}: {exc}"}
-            )}
+            # Unreported, a crash is indistinguishable from a finished sweep.
+            self._publish({"event": "experiment_error", "data": {
+                "experiment_id": self.experiment_id, "error": f"{type(exc).__name__}: {exc}",
+            }})
+
+    async def subscribe(self) -> AsyncIterator[Dict[str, Any]]:
+        queue: asyncio.Queue = asyncio.Queue()
+        for payload in self.backlog:
+            queue.put_nowait(payload)
+        self.subscribers.add(queue)
+        try:
+            while (payload := await queue.get()) is not None:
+                yield payload
         finally:
-            _RUNNING_EXPERIMENTS.discard(experiment_id)
+            self.subscribers.discard(queue)
+
+
+#: ponytail: in-process registry, so one uvicorn worker; a job queue only if
+#: the backend ever runs several workers.
+_JOBS: Dict[str, _Job] = {}
+
+
+async def _experiment_or_404(experiment_id: str) -> Any:
+    experiment = await lab_store.get_experiment(await get_db(), experiment_id)
+    if experiment is None:
+        raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
+    return experiment
+
+
+def _start(experiment: Any) -> _Job:
+    """Idempotent: a second start (another tab, a double click) joins the
+    running job instead of executing the experiment twice into one record."""
+    job = _JOBS.get(experiment.id)
+    if job is None:
+        job = _JOBS[experiment.id] = _Job(experiment)
+    return job
+
+
+def _sse(job: _Job) -> EventSourceResponse:
+    async def frames():
+        async for payload in job.subscribe():
+            yield {"event": payload["event"], "data": json.dumps(payload["data"])}
 
     # `no-transform` keeps a compressing proxy from gzipping the stream: the
     # Next.js /api rewrite otherwise buffers every event inside the gzip
     # stream until the experiment ends, so a live run showed nothing live.
-    return EventSourceResponse(sse_generator(), headers={"Cache-Control": "no-store, no-transform"})
+    return EventSourceResponse(frames(), headers={"Cache-Control": "no-store, no-transform"})
+
+
+@router.post("/experiments/{experiment_id}/start")
+async def start_experiment(experiment_id: str):
+    experiment = await _experiment_or_404(experiment_id)
+    already = experiment_id in _JOBS
+    _start(experiment)
+    return {"experiment_id": experiment_id, "running": True, "already_running": already}
+
+
+@router.post("/experiments/{experiment_id}/stop")
+async def stop_experiment(experiment_id: str):
+    await _experiment_or_404(experiment_id)
+    job = _JOBS.get(experiment_id)
+    if job is None:
+        return {"experiment_id": experiment_id, "stopped": False}
+    job.task.cancel()
+    # Wait for the cancellation to land, so a read straight after this
+    # already sees the experiment as not running.
+    await asyncio.wait({job.task})
+    return {"experiment_id": experiment_id, "stopped": True}
+
+
+@router.get("/experiments/{experiment_id}/stream")
+async def stream_experiment(experiment_id: str):
+    await _experiment_or_404(experiment_id)
+    job = _JOBS.get(experiment_id)
+    if job is None:
+        # Not 200: an EventSource that gets an error status gives up instead
+        # of reconnecting forever to an experiment that is not running.
+        raise HTTPException(status_code=409, detail=f"Experiment '{experiment_id}' is not running")
+    return _sse(job)
+
+
+@router.get("/experiments/{experiment_id}/run")
+async def run_experiment(experiment_id: str):
+    """Start (or join) and stream in one request — what the sweep tests and
+    older clients use. Disconnecting no longer stops the run."""
+    return _sse(_start(await _experiment_or_404(experiment_id)))
+
+
+async def shutdown_jobs() -> None:
+    """Cancel running experiments on shutdown rather than leave their tasks
+    pending on a closed loop; their RUNNING rows are failed on resume."""
+    jobs = list(_JOBS.values())
+    for job in jobs:
+        job.task.cancel()
+    if jobs:
+        await asyncio.wait({job.task for job in jobs})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

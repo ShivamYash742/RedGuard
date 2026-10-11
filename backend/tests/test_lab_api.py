@@ -557,15 +557,6 @@ class TestRunResumesInsteadOfRestarting:
         # ...and the pair itself was then executed properly.
         assert client.get(f"/api/lab/experiments/{experiment_id}/metrics").json()["n_attack_runs"] == 1
 
-    def test_concurrent_run_is_refused(self, client):
-        import lab_api
-        experiment_id = _create_experiment(client)["experiment_id"]
-        lab_api._RUNNING_EXPERIMENTS.add(experiment_id)
-        try:
-            response = client.get(f"/api/lab/experiments/{experiment_id}/run")
-            assert response.status_code == 409
-        finally:
-            lab_api._RUNNING_EXPERIMENTS.discard(experiment_id)
 
 
 def test_default_step_budget_is_ten(client):
@@ -646,3 +637,112 @@ class TestLiveTracking:
         result = rest[-1]
         assert isinstance(result, RunResult)
         assert [e.step for e in [first, *rest[:-1]]] == [e.step for e in result.collector.events]
+
+
+def _wait_until_idle(client: TestClient, experiment_id: str, timeout: float = 15) -> Dict[str, Any]:
+    import time
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        body = client.get(f"/api/lab/experiments/{experiment_id}").json()
+        if body["live"] is None:
+            return body
+        time.sleep(0.05)
+    raise AssertionError("experiment still running")
+
+
+class TestRichLiveEvents:
+    """Plan phase 2: enough in the stream to time each agent and the run."""
+
+    def test_trace_events_carry_time_turn_and_latency(self, client):
+        events = [e["data"] for e in _run_to_completion(client)["events"] if e["event"] == "trace_event"]
+        assert all(e["timestamp"] for e in events)
+        step = next(e for e in events if e["event_type"] == "agent_step_started")
+        assert step["turn"] == 1 and step["max_steps"] == 10
+        output = next(e for e in events if e["event_type"] == "agent_output")
+        assert isinstance(output["latency_ms"], int)
+        finished = [e for e in events if e["event_type"] == "agent_finished"]
+        assert finished and all(e["reason"] for e in finished)
+
+    def test_progress_counts_runs_not_pairs(self, client):
+        events = _run_to_completion(client, repetitions=2)["events"]
+        started = next(e["data"] for e in events if e["event"] == "experiment_started")
+        assert started["agents"] == ["A", "B", "C"] and started["max_steps"] == 10 and started["scripted"]
+        runs = [e["data"] for e in events if e["event"] == "run_started"]
+        assert [r["index"] for r in runs] == [1, 2, 3, 4] and {r["total_runs"] for r in runs} == {4}
+        finished = [e["data"] for e in events if e["event"] == "run_finished"]
+        assert [f["progress"]["completed"] for f in finished] == [1, 2, 3, 4]
+        assert all(f["steps"] > 0 and f["duration_ms"] >= 0 for f in finished)
+
+    def test_step_delay_is_scripted_only_and_bounded(self, client):
+        def stored(**overrides):
+            experiment_id = _create_experiment(client, **overrides)["experiment_id"]
+            return client.get(f"/api/lab/experiments/{experiment_id}").json()["config"]
+        assert stored(step_delay_ms=300)["step_delay_ms"] == 300
+        assert "step_delay_ms" not in stored(scripted=False, step_delay_ms=300)
+        assert client.post("/api/lab/experiments", json={"step_delay_ms": 60000, "scripted": True}).status_code == 400
+
+
+class TestRunsDoNotDependOnTheTab:
+    """Plan phase 4: the server owns the run; viewers come and go."""
+
+    def test_two_subscribers_receive_the_same_events(self, client):
+        experiment_id = _create_experiment(client)["experiment_id"]
+
+        async def watch_twice():
+            import lab_store
+            job = lab_api._start(await lab_store.get_experiment(database.prisma, experiment_id))
+
+            async def collect():
+                return [p async for p in job.subscribe()]
+            return await asyncio.gather(collect(), collect())
+
+        first, second = client.portal.call(watch_twice)
+        assert first == second
+        assert first[-1]["event"] == "experiment_complete"
+
+    def test_closing_the_stream_does_not_stop_the_run(self, client):
+        experiment_id = _create_experiment(client, step_delay_ms=20)["experiment_id"]
+        assert client.post(f"/api/lab/experiments/{experiment_id}/start").json()["running"]
+        with client.stream("GET", f"/api/lab/experiments/{experiment_id}/stream") as response:
+            for line in response.iter_lines():
+                if line.startswith("event: trace_event"):
+                    break
+        body = _wait_until_idle(client, experiment_id)
+        assert sorted(r["status"] for r in body["runs"]) == ["COMPLETED", "COMPLETED"]
+
+    def test_a_second_start_joins_instead_of_running_twice(self, client):
+        experiment_id = _create_experiment(client, step_delay_ms=20)["experiment_id"]
+        client.post(f"/api/lab/experiments/{experiment_id}/start")
+        assert client.post(f"/api/lab/experiments/{experiment_id}/start").json()["already_running"]
+        events = _stream(client, experiment_id)
+        assert len([e for e in events if e["event"] == "run_started"]) == 2
+        assert client.get(f"/api/lab/experiments/{experiment_id}").json()["run_count"] == 2
+
+    def test_a_late_subscriber_gets_the_current_run_from_its_start(self, client):
+        experiment_id = _create_experiment(client, repetitions=2, step_delay_ms=20)["experiment_id"]
+        client.post(f"/api/lab/experiments/{experiment_id}/start")
+        import time
+        while (client.get(f"/api/lab/experiments/{experiment_id}").json()["live"] or {}).get("completed", 4) < 1:
+            time.sleep(0.02)
+        with client.stream("GET", f"/api/lab/experiments/{experiment_id}/stream") as response:
+            names = [line.split(":", 1)[1].strip() for line in response.iter_lines() if line.startswith("event:")]
+        assert names[0] == "experiment_started" and names[-1] == "experiment_complete"
+        assert names.count("run_started") == 4 and names.count("run_verdict") == 2
+        # Earlier runs' traces are not replayed: each trace follows its run_started.
+        first_trace = names.index("trace_event")
+        assert names[first_trace - 1] == "run_started"
+
+    def test_stop_cancels_the_run(self, client):
+        experiment_id = _create_experiment(client, step_delay_ms=2000)["experiment_id"]
+        client.post(f"/api/lab/experiments/{experiment_id}/start")
+        assert client.post(f"/api/lab/experiments/{experiment_id}/stop").json()["stopped"]
+        body = client.get(f"/api/lab/experiments/{experiment_id}").json()
+        assert body["live"] is None
+        assert not [r for r in body["runs"] if r["status"] == "COMPLETED"]
+        assert client.post(f"/api/lab/experiments/{experiment_id}/stop").json()["stopped"] is False
+
+    def test_stream_of_an_idle_experiment_is_refused(self, client):
+        experiment_id = _create_experiment(client)["experiment_id"]
+        assert client.get(f"/api/lab/experiments/{experiment_id}/stream").status_code == 409
+        assert client.get("/api/lab/experiments/nope/stream").status_code == 404
+        assert client.post("/api/lab/experiments/nope/start").status_code == 404

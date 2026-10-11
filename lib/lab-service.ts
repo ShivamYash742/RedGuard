@@ -170,6 +170,8 @@ export interface Experiment {
   runs?: RunSummary[]
   run_count?: number
   status_counts?: Record<string, number>
+  /** Runs done so far while the server is executing it; null when idle. */
+  live: { completed: number; total: number } | null
 }
 
 export interface RunDetail extends RunSummary {
@@ -299,6 +301,8 @@ export interface CreateExperimentRequest {
   max_steps?: number
   /** Replay each case's clean_script instead of calling a model. */
   scripted?: boolean
+  /** Scripted only: pause per step so the demo can be watched. */
+  step_delay_ms?: number
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -306,22 +310,32 @@ export interface CreateExperimentRequest {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type LabStreamEvent =
-  | { event: 'experiment_started'; data: { experiment_id: string; arm: string; cases: string[]; repetitions: number; total_runs: number; already_completed_pairs: number } }
-  | { event: 'run_started'; data: { run_id: string; case_id: string; mode: string; pair_id: string; repetition_index: number } }
+  | { event: 'experiment_started'; data: {
+      experiment_id: string; arm: string; cases: string[]; repetitions: number; total_runs: number; already_completed_pairs: number
+      scripted: boolean; model: { provider: string; model: string }; max_steps: number; agents: string[]
+    } }
+  | { event: 'run_started'; data: { run_id: string; case_id: string; mode: 'CLEAN' | 'ATTACK'; pair_id: string; repetition_index: number; index: number; total_runs: number } }
   | { event: 'trace_event'; data: LiveEvent & { run_id: string } }
+  | { event: 'run_finished'; data: {
+      run_id: string; case_id: string; mode: 'CLEAN' | 'ATTACK'; pair_id: string; duration_ms: number; steps: number
+      parse_failures: number; harness_error: string | null; progress: { completed: number; total: number }
+    } }
   | { event: 'run_verdict'; data: { run_id: string; baseline_run_id: string; case_id: string; pair_id: string; repetition_index: number; status: string; verdict: Verdict; diagnostics: Record<string, unknown>; progress: { completed: number; total: number } } }
   | { event: 'case_rescored'; data: { case_id: string; baseline_runs: number; runs: { run_id: string; verdict: Verdict }[] } }
   | { event: 'experiment_complete'; data: { experiment_id: string; runs_completed: number } }
   | { event: 'experiment_error'; data: { experiment_id: string; error: string } }
+  | { event: 'experiment_stopped'; data: { experiment_id: string } }
 
 const STREAM_EVENTS = [
   'experiment_started',
   'run_started',
   'trace_event',
+  'run_finished',
   'run_verdict',
   'case_rescored',
   'experiment_complete',
   'experiment_error',
+  'experiment_stopped',
 ] as const
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -414,18 +428,27 @@ class LabService {
     return getJSON(`/api/lab/runs/${runId}/evidence`)
   }
 
+  /** Runs on the server until it finishes or `stopExperiment`; starting a
+   *  running experiment joins it. */
+  public async startExperiment(experimentId: string): Promise<void> {
+    const res = await fetch(`/api/lab/experiments/${experimentId}/start`, { method: 'POST' })
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? 'Failed to start experiment')
+  }
+
+  public async stopExperiment(experimentId: string): Promise<void> {
+    await fetch(`/api/lab/experiments/${experimentId}/stop`, { method: 'POST' })
+  }
+
   /**
-   * Stream an experiment's execution.
-   *
-   * Returns the `EventSource` so the caller can close it — this is the one
-   * endpoint that calls a model, so an abandoned stream is a real cost.
+   * Watch a running experiment: what happened so far, then live. Closing
+   * the source only stops watching; the run carries on server-side.
    */
   public streamExperiment(
     experimentId: string,
     onEvent: (event: LabStreamEvent) => void,
     onError?: (error: Event) => void,
   ): EventSource {
-    const source = new EventSource(`/api/lab/experiments/${experimentId}/run`)
+    const source = new EventSource(`/api/lab/experiments/${experimentId}/stream`)
     for (const name of STREAM_EVENTS) {
       source.addEventListener(name, (e) => {
         onEvent({ event: name, data: JSON.parse((e as MessageEvent).data) } as LabStreamEvent)
@@ -461,8 +484,15 @@ export interface LiveEvent {
   /** What the action reached for: `{name: 'customer_pii'}`, `{to: 'B'}`, or
    *  for an injection event `{channel, location}`. */
   resource: Record<string, string | number> | null
-  /** Why a refused action was refused (`not_authorized`, `capability_policy`, …). */
+  /** Why a refused action was refused (`not_authorized`, `capability_policy`, …),
+   *  or why an agent finished (`finish`, `parse_failure`, `max_steps`). */
   reason: string | null
+  timestamp?: string
+  /** Wall time of the model call behind an `agent_output` / `action_parse_failed`. */
+  latency_ms?: number | null
+  /** On `agent_step_started`: this agent's turn and its step budget. */
+  turn?: number | null
+  max_steps?: number | null
 }
 
 /** A stored event in the stream's shape, so a replay derives its state
@@ -486,9 +516,17 @@ export function toLiveEvent(event: TraceEvent): LiveEvent {
     derived_from: event.derived_from,
     content_tag: event.content_tag,
     resource: Object.keys(resource).length ? resource : null,
-    reason: event.authorized === false && typeof meta.reason === 'string' ? meta.reason : null,
+    reason: (event.authorized === false || event.event_type === 'agent_finished') && typeof meta.reason === 'string' ? meta.reason : null,
+    timestamp: event.timestamp,
+    latency_ms: typeof meta.latency_ms === 'number' ? meta.latency_ms : null,
+    turn: typeof meta.turn === 'number' ? meta.turn : null,
+    max_steps: typeof meta.max_steps === 'number' ? meta.max_steps : null,
   }
 }
+
+/** idle → thinking (model call) → acted, or retrying after an unparseable
+ *  reply, until finished. */
+export type AgentStatus = 'idle' | 'thinking' | 'retrying' | 'acted' | 'finished'
 
 export interface AgentTrack {
   /** Attack-derived content was in this agent's context. Observed, not a
@@ -502,6 +540,15 @@ export interface AgentTrack {
   lastAction: string | null
   lastStep: number | null
   lastRefused: boolean
+  status: AgentStatus
+  /** When `status` began, for a ticking "thinking 12 s". */
+  since: string | null
+  turn: number | null
+  maxSteps: number | null
+  /** Replies that were not a valid action (§21.9's gate counts these). */
+  invalid: number
+  finishReason: string | null
+  lastLatencyMs: number | null
 }
 
 export interface EdgeTrack {
@@ -540,6 +587,7 @@ export function deriveRoute(events: LiveEvent[], agents: string[], upTo = Infini
     state.agents[agent] = {
       reached: false, reachedAt: null, active: false, finished: false,
       refused: 0, lastAction: null, lastStep: null, lastRefused: false,
+      status: 'idle', since: null, turn: null, maxSteps: null, invalid: 0, finishReason: null, lastLatencyMs: null,
     }
   }
 
@@ -562,12 +610,37 @@ export function deriveRoute(events: LiveEvent[], agents: string[], upTo = Infini
       track.reached = true
       track.reachedAt = event.step
     }
-    if (event.event_type === 'agent_step_started') {
-      for (const agent of agents) state.agents[agent].active = agent === event.agent_id
-    }
-    if (event.event_type === 'agent_finished') {
-      track.finished = true
-      track.active = false
+    const at = event.timestamp ?? null
+    switch (event.event_type) {
+      case 'agent_step_started':
+        for (const agent of agents) {
+          const other = state.agents[agent]
+          other.active = agent === event.agent_id
+          if (!other.active && other.status === 'acted') other.status = 'idle'
+        }
+        track.status = 'thinking'
+        track.since = at
+        track.turn = event.turn ?? (track.turn ?? 0) + 1
+        track.maxSteps = event.max_steps ?? track.maxSteps
+        break
+      case 'action_parse_failed':
+        track.invalid += 1
+        track.status = 'retrying'
+        track.since = at
+        track.lastLatencyMs = event.latency_ms ?? track.lastLatencyMs
+        break
+      case 'agent_output':
+        track.status = 'acted'
+        track.since = at
+        track.lastLatencyMs = event.latency_ms ?? track.lastLatencyMs
+        break
+      case 'agent_finished':
+        track.finished = true
+        track.active = false
+        track.status = 'finished'
+        track.since = at
+        track.finishReason = event.reason
+        break
     }
 
     const refused = event.authorized === false
@@ -769,4 +842,21 @@ export function formatRate(value: number | null | 'n/a' | undefined, digits = 1)
   if (value === 'n/a') return 'n/a'
   if (value === null || value === undefined) return '—'
   return `${(value * 100).toFixed(digits)}%`
+}
+
+/** `850 ms` → `<1 s`, `12 s`, `3 min 4 s`, `1 h 2 min`. */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 1000) return '<1 s'
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s} s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} min${s % 60 ? ` ${s % 60} s` : ''}`
+  return `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`
+}
+
+/** Milliseconds between an ISO timestamp and `now`, or null. */
+export function since(iso: string | null | undefined, now: number): number | null {
+  if (!iso) return null
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? null : Math.max(0, now - t)
 }

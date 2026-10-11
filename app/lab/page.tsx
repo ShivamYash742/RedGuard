@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, ArrowRight, Loader2, Play } from 'lucide-react'
+import { AlertTriangle, ArrowRight, FlaskConical, Loader2, Play } from 'lucide-react'
 import {
   labService, Arm, CaseSummary, Experiment, Topology, DEFAULT_MAX_STEPS, FAMILY_LABELS, armName, deriveRoute,
 } from '@/lib/lab-service'
@@ -13,6 +13,12 @@ import { TableSkeleton } from '@/components/Skeletons'
 /** Model calls per clean/attack pair, measured against nemotron-3-super in
  *  the P7 pilots (MULTI_AGENT_LAB_PROGRESS.md). An estimate, labelled as one. */
 const CALLS_PER_PAIR = 59
+
+/** Local model the launcher offers first; `python -m core.lab.smoke` is how
+ *  a model is checked against the 10% parse-failure gate. */
+const DEFAULT_LOCAL_MODEL = 'granite3.3:2b'
+/** Scripted slow motion: slow enough to follow A → B → C in a demo. */
+const DEMO_STEP_DELAY_MS = 700
 
 const field = 'mt-1 w-full rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-base)] px-2.5 py-2 text-sm text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50'
 const label = 'text-xs font-semibold text-[var(--text-secondary)]'
@@ -30,9 +36,10 @@ export default function LabPage() {
   const [arm, setArm] = useState('attack')
   const [repetitions, setRepetitions] = useState(5)
   const [maxSteps, setMaxSteps] = useState(DEFAULT_MAX_STEPS)
-  const [scripted, setScripted] = useState(true)
-  const [provider, setProvider] = useState('nvidia')
-  const [model, setModel] = useState('')
+  const [scripted, setScripted] = useState(false)
+  const [slowMotion, setSlowMotion] = useState(true)
+  const [provider, setProvider] = useState('ollama')
+  const [model, setModel] = useState(DEFAULT_LOCAL_MODEL)
   const [launching, setLaunching] = useState(false)
 
   useEffect(() => {
@@ -52,12 +59,20 @@ export default function LabPage() {
   const toggle = (id: string) => setSelected((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]))
   const emptyRoute = useMemo(() => (topology ? deriveRoute([], topology.agents) : null), [topology])
 
-  const launch = async () => {
+  const launch = async (check = false) => {
     setError(null)
     setLaunching(true)
     try {
-      const created = await labService.createExperiment({
+      // A model check is one case, one pair, no defence: enough steps for
+      // the page's parse-failure gate to say whether the model can drive
+      // the harness, in minutes rather than a sweep's hours.
+      const created = await labService.createExperiment(check ? {
+        name: `Model check · ${provider} / ${model || 'provider default'}`,
+        arm: 'attack', cases: [cases[0]?.id ?? 'RGM-001'], repetitions: 1, max_steps: maxSteps,
+        provider, model: model || undefined,
+      } : {
         arm, cases: selected, repetitions, max_steps: maxSteps, scripted,
+        step_delay_ms: scripted && slowMotion ? DEMO_STEP_DELAY_MS : undefined,
         provider, model: model || undefined,
       })
       router.push(`/lab/experiments/${created.experiment_id}?run=1`)
@@ -135,9 +150,12 @@ export default function LabPage() {
             </label>
             <label className="block">
               <span className={label}>Provider</span>
-              <select value={provider} onChange={(e) => setProvider(e.target.value)} disabled={scripted} className={field}>
+              <select value={provider} onChange={(e) => {
+                setProvider(e.target.value)
+                setModel(e.target.value === 'ollama' ? DEFAULT_LOCAL_MODEL : '')
+              }} disabled={scripted} className={field}>
+                <option value="ollama">ollama (local)</option>
                 <option value="nvidia">nvidia</option>
-                <option value="ollama">ollama</option>
                 <option value="groq">groq</option>
               </select>
             </label>
@@ -147,14 +165,25 @@ export default function LabPage() {
             </label>
           </div>
 
-          <label className="flex items-start gap-2.5 text-sm text-[var(--text-secondary)]">
-            <input type="checkbox" checked={scripted} onChange={(e) => setScripted(e.target.checked)} className="mt-0.5 accent-[var(--primary)]" />
-            <span>
-              <span className="font-semibold text-[var(--text-primary)]">Scripted replay</span>: each case&apos;s compliant
-              script stands in for the model. It exercises the whole pipeline in seconds and costs nothing, and its
-              attacks never land, so it tests the harness, not a model.
-            </span>
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-start gap-2.5 text-sm text-[var(--text-secondary)]">
+              <input type="checkbox" checked={scripted} onChange={(e) => setScripted(e.target.checked)} className="mt-0.5 accent-[var(--primary)]" />
+              <span>
+                <span className="font-semibold text-[var(--text-primary)]">Instant demo (no model)</span>: each case&apos;s
+                compliant script stands in for the model. It exercises the whole pipeline and costs nothing, and its
+                attacks never land, so it tests the harness, not a model.
+              </span>
+            </label>
+            {scripted && (
+              <label className="ml-6 flex items-start gap-2.5 text-sm text-[var(--text-secondary)]">
+                <input type="checkbox" checked={slowMotion} onChange={(e) => setSlowMotion(e.target.checked)} className="mt-0.5 accent-[var(--primary)]" />
+                <span>
+                  <span className="font-semibold text-[var(--text-primary)]">Slow motion</span>: pause {DEMO_STEP_DELAY_MS / 1000} s
+                  per step so the run can be followed agent by agent.
+                </span>
+              </label>
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-4">
             <p className="text-sm text-[var(--text-secondary)]">
@@ -165,11 +194,19 @@ export default function LabPage() {
                 <> · about <span className="font-mono font-semibold tabular-nums text-[var(--text-primary)]">{(pairs * CALLS_PER_PAIR).toLocaleString()}</span> model calls at the rate the pilots measured</>
               )}
             </p>
-            <button onClick={launch} disabled={selected.length === 0 || launching}
-              className="inline-flex items-center gap-1.5 rounded-[var(--radius)] bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)] disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
-              {launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              Launch and watch
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {!scripted && (
+                <button onClick={() => launch(true)} disabled={launching} title="One case, one clean/attack pair: shows whether this model can emit valid actions before you spend a sweep on it"
+                  className="inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--text-secondary)] disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
+                  <FlaskConical className="h-4 w-4" /> Test model
+                </button>
+              )}
+              <button onClick={() => launch()} disabled={selected.length === 0 || launching}
+                className="inline-flex items-center gap-1.5 rounded-[var(--radius)] bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)] disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
+                {launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Launch and watch
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -219,7 +256,7 @@ export default function LabPage() {
           </Link>
         </div>
         {experiments.length === 0 ? (
-          <EmptyState title="No experiments yet" description="Launch one above. A scripted run costs nothing and shows the whole pipeline working." />
+          <EmptyState title="No experiments yet" description="Launch one above. The instant demo costs nothing and shows the whole pipeline working." />
         ) : (
           <ul className="divide-y divide-[var(--border-subtle)]">
             {experiments.map((e) => {
@@ -228,7 +265,15 @@ export default function LabPage() {
                 <li key={e.experiment_id}>
                   <Link href={`/lab/experiments/${e.experiment_id}`}
                     className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 px-4 py-3 hover:bg-[var(--surface-base)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--primary)] sm:grid-cols-[minmax(0,1fr)_11rem_minmax(0,14rem)_10rem_1rem]">
-                    <span className="min-w-0 truncate text-sm font-semibold text-[var(--text-primary)]">{e.name}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      {e.live && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-2 py-0.5 text-xs font-semibold text-[var(--primary)]">
+                          <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-pulse" aria-hidden />
+                          live · <span className="tabular-nums">{e.live.completed}/{e.live.total}</span>
+                        </span>
+                      )}
+                      <span className="truncate text-sm font-semibold text-[var(--text-primary)]">{e.name}</span>
+                    </span>
                     <span className="hidden text-sm text-[var(--text-secondary)] sm:block">{armName(e.arm)}</span>
                     <span className="hidden truncate font-mono text-xs text-[var(--text-secondary)] sm:block">{config.scripted ? 'scripted' : config.model?.model ?? 'model'}</span>
                     <span className="text-xs tabular-nums text-[var(--text-secondary)]">{new Date(e.created_at).toLocaleString()}</span>
