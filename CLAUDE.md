@@ -51,8 +51,12 @@ Layout:
   tiered scoring, benign controls, regex precision, measured leaderboard,
   lint/phone layout, v4.0.0, unused-code removal, first local results). Still
   open: hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
-- **630 tests pass** (~10 s, no LLM). `npm run typecheck` and `npm run lint`
+- **632 tests pass** (~10 s, no LLM). `npm run typecheck` and `npm run lint`
   are clean.
+- **First Mode A results** (granite3.3:2b via Ollama, pre-rewrite prompts):
+  attack success with the filter off 19.6% baseline / 13.0% hardened; see
+  `MODE_A_FIX_PLAN.md` for the table. Run real scans on local Ollama
+  (`ollama_local_agent`), not the hosted NVIDIA agents.
 - **Mode B has no real-model results yet.** Every number so far is scripted or
   synthetic. Next steps: a pilot on nemotron-3-super (1 arm, 3 cases, 2 reps),
   then the full sweep (9 cases × 5 reps per arm).
