@@ -43,6 +43,8 @@ export interface Probe {
   dataset_version?: string
   synthetic?: boolean
   research_notes?: string
+  benign_control?: boolean
+  canary?: string
 }
 
 export interface AttackFamilyMeta {
@@ -76,6 +78,10 @@ export type TierCounts = Record<OutcomeTier, number>
 
 export const emptyTierCounts = (): TierCounts => ({ FILTERED: 0, REFUSED: 0, IGNORED: 0, COMPROMISED: 0 })
 
+// Benign controls: FILTERED = regex false positive, OVER_REFUSED = model refused a harmless request
+export type ControlCounts = { FILTERED: number; OVER_REFUSED: number; HELPED: number }
+export const emptyControlCounts = (): ControlCounts => ({ FILTERED: 0, OVER_REFUSED: 0, HELPED: 0 })
+
 export interface BenchmarkRun {
   id: string
   sessionId: string
@@ -95,26 +101,115 @@ export interface BenchmarkRun {
   modelCompromised: number
 }
 
-export interface ModelComparisonResult {
-  rank: number
-  modelName: string
-  agentId: string
-  overallScore: number
-  bds: number // Behaviour Drift Score
-  asr: number // Attack Success Rate
-  securityScore: number
-  utilityScore: number
-  memoryResistance: number
-  planningResistance: number
-  toolResistance: number
-  familyScores: Record<string, number>
-  totalEvaluations: number
-  lastEvaluated: string
-  /** true = illustrative sample data, no real evaluation behind it. Never render as a measurement. */
-  synthetic: boolean
+export interface RateCI {
+  rate: number
+  lo: number
+  hi: number
+  n: number
 }
 
-const RAW_DATASETS: Record<string, any> = {
+// One measured row per (agent, prompt mode), from GET /api/leaderboard
+export interface LeaderboardRow {
+  rank: number
+  agentId: string
+  agentName: string
+  promptMode: string | null
+  runs: number
+  lastRun: string
+  attacks: number
+  tiers: TierCounts
+  asrModel: RateCI | null
+  asrDeployed: RateCI | null
+  families: Record<string, { total: number; compromised: number; modelCompromised: number }>
+  controls: { total: number; overRefused: number; filtered: number }
+  overRefusal: RateCI | null
+  bds: number | null
+}
+
+interface DatasetFile {
+  description?: string
+  entries: Probe[]
+}
+
+// Raw row shapes returned by the FastAPI backend
+interface ApiSession {
+  id: string
+  sessionId: string
+  agentId: string | null
+  agentName: string | null
+  startedAt: string
+  finishedAt: string | null
+  totalProbes: number
+  blocked: number
+  allowed: number
+  status: string | null
+  benchmarkVersion: string | null
+  promptMode: string | null
+  filtered: number
+  refused: number
+  ignored: number
+  compromised: number
+  modelCompromised: number
+}
+
+export interface Stats {
+  totalSessions: number
+  totalProbes: number
+  totalEvaluationsFired: number
+  totalBlocked: number
+  totalAllowed: number
+  overallBlockRate: number
+  coverageGap: number
+}
+
+export interface AgentInfo {
+  id: string
+  name?: string
+  description?: string
+}
+
+export interface ReportCategory {
+  category: string
+  probes: number
+  blocked: number
+  allowed: number
+  mismatches: number
+  highest_risk_score: number
+  // tiered runs only
+  filtered?: number
+  refused?: number
+  ignored?: number
+  model_compromised?: number
+}
+
+export interface ReportOverall {
+  total_probes: number
+  blocked: number
+  allowed: number
+  mismatches: number
+  block_rate: number
+  session_id: string
+  agent_id: string
+  agent_name: string
+  model_name: string
+  system_prompt: string
+  // tiered runs only
+  prompt_mode?: string | null
+  filtered?: number
+  refused?: number
+  ignored?: number
+  model_compromised?: number
+}
+
+export interface RunReport {
+  sessionId: string
+  generatedAt: string
+  reportMarkdown: string
+  manifestSha256: string
+  reportJson: { overall: ReportOverall; category_breakdown: ReportCategory[] }
+}
+
+const RAW_DATASETS: Record<string, DatasetFile> = {
   direct_injection: directInjection,
   content_injection: contentInjection,
   exfiltration: exfiltration,
@@ -192,7 +287,7 @@ export function normalizeFamily(fam: string): string {
 class BenchmarkDataService {
   private static instance: BenchmarkDataService
   private allProbes: Probe[] = []
-  private cache: Map<string, { data: any; timestamp: number }> = new Map()
+  private cache: Map<string, { data: unknown; timestamp: number }> = new Map()
   private CACHE_TTL_MS = 60 * 1000 // 1 minute in-memory cache
 
   private constructor() {
@@ -210,7 +305,7 @@ class BenchmarkDataService {
     const probes: Probe[] = []
     Object.entries(RAW_DATASETS).forEach(([familyKey, dataset]) => {
       if (dataset && Array.isArray(dataset.entries)) {
-        dataset.entries.forEach((entry: any) => {
+        dataset.entries.forEach(entry => {
           probes.push({
             id: entry.id,
             title: entry.title || entry.id,
@@ -232,11 +327,18 @@ class BenchmarkDataService {
             dataset_version: entry.dataset_version || '1.0.0',
             synthetic: entry.synthetic ?? true,
             research_notes: entry.research_notes,
+            benign_control: entry.benign_control ?? false,
+            canary: entry.canary,
           })
         })
       }
     })
     this.allProbes = probes
+  }
+
+  private cached<T>(key: string): T | undefined {
+    const entry = this.cache.get(key)
+    return entry && Date.now() - entry.timestamp < this.CACHE_TTL_MS ? (entry.data as T) : undefined
   }
 
   public invalidateCache() {
@@ -339,14 +441,10 @@ class BenchmarkDataService {
   }
 
   // API Call: Fetch Stats
-  public async fetchStats(): Promise<any> {
+  public async fetchStats(): Promise<Stats | null> {
     const key = 'api_stats'
-    if (this.cache.has(key)) {
-      const entry = this.cache.get(key)!
-      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
-        return entry.data
-      }
-    }
+    const hit = this.cached<Stats>(key)
+    if (hit) return hit
     try {
       const res = await fetch('/api/stats')
       if (res.ok) {
@@ -357,23 +455,19 @@ class BenchmarkDataService {
     } catch (e) {
       console.error('Failed to fetch stats:', e)
     }
-    return { totalSessions: 0, totalProbes: this.allProbes.length, totalBlocked: 0, totalAllowed: 0, overallBlockRate: 0 }
+    return { totalSessions: 0, totalProbes: this.allProbes.length, totalEvaluationsFired: 0, totalBlocked: 0, totalAllowed: 0, overallBlockRate: 0, coverageGap: 0 }
   }
 
   // API Call: Fetch Sessions
   public async fetchSessions(): Promise<BenchmarkRun[]> {
     const key = 'api_sessions'
-    if (this.cache.has(key)) {
-      const entry = this.cache.get(key)!
-      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
-        return entry.data
-      }
-    }
+    const hit = this.cached<BenchmarkRun[]>(key)
+    if (hit) return hit
     try {
       const res = await fetch('/api/sessions')
       if (res.ok) {
         const data = await res.json()
-        const formatted: BenchmarkRun[] = data.map((s: any) => ({
+        const formatted: BenchmarkRun[] = data.map((s: ApiSession) => ({
           id: s.id,
           sessionId: s.sessionId,
           agentId: s.agentId || 'nemotron_3_ultra',
@@ -402,14 +496,10 @@ class BenchmarkDataService {
   }
 
   // API Call: Fetch Report
-  public async fetchReport(sessionId: string): Promise<any> {
+  public async fetchReport(sessionId: string): Promise<RunReport | null> {
     const key = `api_report_${sessionId}`
-    if (this.cache.has(key)) {
-      const entry = this.cache.get(key)!
-      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
-        return entry.data
-      }
-    }
+    const hit = this.cached<RunReport>(key)
+    if (hit) return hit
     try {
       const res = await fetch(`/api/reports/${sessionId}`)
       if (res.ok) {
@@ -424,7 +514,7 @@ class BenchmarkDataService {
   }
 
   // API Call: Fetch Agents
-  public async fetchAgents(): Promise<any[]> {
+  public async fetchAgents(): Promise<AgentInfo[]> {
     try {
       const res = await fetch('/api/agents')
       if (res.ok) return await res.json()
@@ -434,138 +524,14 @@ class BenchmarkDataService {
     return []
   }
 
-  // Derived Leaderboard Data for Model Comparison
-  public getModelComparisons(sessions: BenchmarkRun[]): ModelComparisonResult[] {
-    const defaultModels: ModelComparisonResult[] = [
-      {
-        rank: 1,
-        modelName: 'Nemotron-3 Ultra (550B)',
-        agentId: 'nemotron_3_ultra',
-        overallScore: 94.2,
-        bds: 0.05,
-        asr: 5.8,
-        securityScore: 94.2,
-        utilityScore: 96.5,
-        memoryResistance: 95.0,
-        planningResistance: 92.8,
-        toolResistance: 96.0,
-        familyScores: { direct_injection: 98, content_injection: 92, exfiltration: 95, goal_diversion: 90, memory_poisoning: 96, autonomy: 94, planning: 91, tool_security: 97 },
-        totalEvaluations: 142,
-        lastEvaluated: '2026-08-04',
-        synthetic: true,
-      },
-      {
-        rank: 2,
-        modelName: 'Nemotron-3 Super (120B)',
-        agentId: 'nemotron_super_agent',
-        overallScore: 91.8,
-        bds: 0.08,
-        asr: 8.2,
-        securityScore: 91.8,
-        utilityScore: 95.0,
-        memoryResistance: 92.0,
-        planningResistance: 90.5,
-        toolResistance: 93.5,
-        familyScores: { direct_injection: 96, content_injection: 89, exfiltration: 92, goal_diversion: 88, memory_poisoning: 93, autonomy: 91, planning: 89, tool_security: 94 },
-        totalEvaluations: 110,
-        lastEvaluated: '2026-08-04',
-        synthetic: true,
-      },
-      {
-        rank: 3,
-        modelName: 'GPT OSS 20B',
-        agentId: 'llama_3_1_8b_agent',
-        overallScore: 89.4,
-        bds: 0.11,
-        asr: 10.6,
-        securityScore: 89.4,
-        utilityScore: 94.0,
-        memoryResistance: 88.5,
-        planningResistance: 89.0,
-        toolResistance: 91.2,
-        familyScores: { direct_injection: 94, content_injection: 86, exfiltration: 90, goal_diversion: 87, memory_poisoning: 89, autonomy: 90, planning: 88, tool_security: 92 },
-        totalEvaluations: 98,
-        lastEvaluated: '2026-08-03',
-        synthetic: true,
-      },
-      {
-        rank: 4,
-        modelName: 'GPT OSS 120B',
-        agentId: 'gpt_oss_120b_agent',
-        overallScore: 86.1,
-        bds: 0.14,
-        asr: 13.9,
-        securityScore: 86.1,
-        utilityScore: 95.2,
-        memoryResistance: 84.0,
-        planningResistance: 87.5,
-        toolResistance: 88.0,
-        familyScores: { direct_injection: 91, content_injection: 83, exfiltration: 88, goal_diversion: 84, memory_poisoning: 85, autonomy: 86, planning: 85, tool_security: 87 },
-        totalEvaluations: 76,
-        lastEvaluated: '2026-08-02',
-        synthetic: true,
-      },
-      {
-        rank: 5,
-        modelName: 'Ollama Local Agent',
-        agentId: 'ollama_local_agent',
-        overallScore: 78.5,
-        bds: 0.22,
-        asr: 21.5,
-        securityScore: 78.5,
-        utilityScore: 88.0,
-        memoryResistance: 76.0,
-        planningResistance: 79.0,
-        toolResistance: 80.5,
-        familyScores: { direct_injection: 85, content_injection: 74, exfiltration: 80, goal_diversion: 76, memory_poisoning: 77, autonomy: 78, planning: 77, tool_security: 81 },
-        totalEvaluations: 45,
-        lastEvaluated: '2026-08-01',
-        synthetic: true,
-      },
-    ]
-
-    sessions.forEach(session => {
-      if (!session.agentId || session.totalProbes === 0) return
-      let match = defaultModels.find(m => m.agentId === session.agentId)
-      const rate = (session.blocked / session.totalProbes) * 100
-      const score = parseFloat(rate.toFixed(1))
-      const asrVal = parseFloat((100 - rate).toFixed(1))
-      const bdsVal = parseFloat(((100 - rate) / 100).toFixed(2))
-      const dateStr = session.startedAt ? new Date(session.startedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-
-      if (match) {
-        match.overallScore = score
-        match.securityScore = score
-        match.asr = asrVal
-        match.bds = bdsVal
-        match.lastEvaluated = dateStr
-        match.totalEvaluations += 1
-        // A real session overwrote the headline numbers; the row is no longer a sample.
-        // Note: per-family/resistance breakdown still isn't independently measured —
-        // BenchmarkRun carries only aggregate totals, not a per-family split.
-        match.synthetic = false
-      } else {
-        defaultModels.push({
-          rank: defaultModels.length + 1,
-          modelName: session.agentName || session.agentId,
-          agentId: session.agentId,
-          overallScore: score,
-          bds: bdsVal,
-          asr: asrVal,
-          securityScore: score,
-          utilityScore: 90.0,
-          memoryResistance: score,
-          planningResistance: score,
-          toolResistance: score,
-          familyScores: { direct_injection: score, content_injection: score, exfiltration: score, goal_diversion: score, memory_poisoning: score, autonomy: score, planning: score, tool_security: score },
-          totalEvaluations: 1,
-          lastEvaluated: dateStr,
-          synthetic: false,
-        })
-      }
-    })
-
-    return defaultModels.sort((a, b) => b.overallScore - a.overallScore).map((m, idx) => ({ ...m, rank: idx + 1 }))
+  public async fetchLeaderboard(): Promise<LeaderboardRow[]> {
+    try {
+      const res = await fetch('/api/leaderboard')
+      if (res.ok) return await res.json()
+    } catch (e) {
+      console.error('Failed to fetch leaderboard:', e)
+    }
+    return []
   }
 }
 

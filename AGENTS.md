@@ -11,10 +11,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # RedGuard — Agent Instructions
 
 RedGuard is an AI agent security benchmark platform: a Next.js frontend and a
-FastAPI backend that run 50 adversarial "probes" (prompt injection, memory
-poisoning, tool hijacking, goal diversion, etc.) across 8 attack families and
-12 simulated scenarios against pluggable LLM agents, then score and report
-the results. See `README.md` for the full feature list and architecture
+FastAPI backend. Mode A runs 46 adversarial "probes" (prompt injection, memory
+poisoning, tool hijacking, goal diversion, etc.) plus 10 benign controls across
+8 attack families against pluggable LLM agents, then scores and reports the
+results; Mode B (`/lab`) tests a multi-agent system. See `README.md` for the full feature list and architecture
 diagram, and `CLAUDE.md` for Claude-Code-specific notes.
 
 ## Layout
@@ -23,9 +23,9 @@ diagram, and `CLAUDE.md` for Claude-Code-specific notes.
 - `backend/` — FastAPI service (`app.py`), scanner/inspector engine, Prisma
   ORM over SQLite (`backend/prisma/`), pluggable model agents
   (`backend/agents/*.py`).
-- `core/` — the actual benchmark library: probe/scenario definitions, the 50
-  probe JSON datasets, metrics, and reporting. Pure Python, imported by
-  `backend/` (not the reverse).
+- `core/` — pure Python, imported by `backend/` (not the reverse): the probe
+  JSON datasets (`core/datasets`), shared statistics (`core/benchmark`), and
+  the Mode B lab (`core/lab`).
 - `docs/` — architecture notes, benchmark spec, literature mapping.
 - `scripts/` — legacy standalone CLI tools (`redteam_agent.py`,
   `dashboard.py`, `audit_report.py`, `add_custom_probes.py`). These do **not**
@@ -67,7 +67,7 @@ in a browser plus `lint`/`typecheck`.
 
 ## Conventions & gotchas
 
-- **Probes are data.** The 50 probes live as JSON in `core/datasets/*.json`,
+- **Probes are data.** The probes live as JSON in `core/datasets/*.json`,
   validated against `core/datasets/schema.json`. Add/edit probes there rather
   than hardcoding attack text in application code. If you move or rename a
   dataset file, update both `core/datasets/loader.py` and
@@ -78,14 +78,15 @@ in a browser plus `lint`/`typecheck`.
   `AGENT_DESCRIPTION`, and an async `invoke(prompt)`. Copy
   `example_custom_agent.py` to add a new one rather than touching the loader.
 - **`backend/prisma/dev.db` is intentionally committed** (whitelisted in
-  `.gitignore` as demo seed data). Don't delete or regenerate it without
-  confirming — that seeded scan history is what the UI demos against.
+  `.gitignore` as demo seed data); regenerating it loses the seeded scan
+  history. If your clone flags it assume-unchanged, `git stash` replaces your
+  local copy with the committed one — copy it first.
 - **`backend/policy.yaml`** drives rule-based detection in the inspector,
   separate from the ML classifier (`CLASSIFIER_URL` in `.env`). Changing it
   changes detection behavior, not just configuration.
-- **Version numbers are centralized** in `core/version.py`
-  (`BENCHMARK_VERSION`, `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`). Bump
-  there — the README badges and dataset pages read from it, don't hand-edit
-  version strings elsewhere.
+- **Version numbers are canonical** in `core/version.py`
+  (`BENCHMARK_VERSION`, `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`). Nothing
+  reads them at runtime on the frontend, so after a bump also update the copies
+  listed in `CLAUDE.md` and run `python docs/spec_generator.py`.
 - Don't remove the Next.js-managed block above this section — `next dev`
   regenerates it on its own; everything below it is safe to edit freely.

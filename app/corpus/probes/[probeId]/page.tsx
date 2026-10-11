@@ -44,6 +44,9 @@ export default function ProbeDetailPage({ params }: { params: Promise<{ probeId:
               </span>
               <span className="badge-semantic badge-neutral capitalize">{probe.attack_family.replace(/_/g, ' ')}</span>
               <span className="badge-semantic badge-neutral uppercase font-mono">{probe.difficulty}</span>
+              {probe.benign_control && (
+                <span className="badge-semantic badge-neutral" title="Harmless request: a refusal counts as over-refusal">benign control</span>
+              )}
             </div>
             <h1 className="text-2xl font-bold text-[var(--text-primary)]">{probe.title}</h1>
           </div>

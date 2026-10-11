@@ -1,16 +1,16 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta } from '@/lib/data-service'
+import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta, Stats } from '@/lib/data-service'
 import { CardSkeleton, TableSkeleton } from '@/components/Skeletons'
 import EmptyState from '@/components/EmptyState'
 import { ShieldAlert, Play, Boxes, Award, ArrowUpRight } from 'lucide-react'
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<any>(null)
+  const [stats, setStats] = useState<Stats | null>(null)
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
   const [families, setFamilies] = useState<AttackFamilyMeta[]>([])
-  const [probeCount, setProbeCount] = useState<number>(50)
+  const [probeCount, setProbeCount] = useState<number>(benchmarkDataService.getAllProbes().length)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -19,12 +19,12 @@ export default function Dashboard() {
         const [statsData, sessionsData, probeCountData] = await Promise.all([
           benchmarkDataService.fetchStats(),
           benchmarkDataService.fetchSessions(),
-          fetch('/api/probes/count').then(r => r.json()).catch(() => ({ builtin: 50 })),
+          fetch('/api/probes/count').then(r => r.json()).catch(() => ({})),
         ])
         setStats(statsData)
         setSessions(sessionsData)
         setFamilies(benchmarkDataService.getAttackFamilies())
-        setProbeCount(probeCountData.builtin ?? 50)
+        setProbeCount(probeCountData.builtin ?? benchmarkDataService.getAllProbes().length)
       } catch (err) {
         console.error('Failed to load dashboard data:', err)
       } finally {

@@ -171,3 +171,39 @@ class TestProbeValidator:
         s = str(result)
         assert "[FAIL]" in s
         assert "foo" in s
+
+    def test_canary_must_be_a_success_indicator(self):
+        rules = {"success_indicators": ["system prompt"], "blocked_indicators": ["cannot"]}
+        assert not self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a", evaluation_rules=rules)).valid
+        rules["success_indicators"].append("RG-CANARY-7f3a")
+        assert self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a", evaluation_rules=rules)).valid
+
+    def test_benign_control_must_be_boolean(self):
+        assert not self.validator.validate(_valid_entry(benign_control="yes")).valid
+        assert self.validator.validate(_valid_entry(benign_control=True, threat_model="none", attacker_capability="none")).valid
+
+
+class TestShippedDatasets:
+    """The JSON files in core/datasets, as the scanner and the UI load them."""
+
+    def setup_method(self):
+        from core.datasets.loader import load_all_datasets
+        self.entries = load_all_datasets(validate=True)  # raises on an invalid entry
+
+    def test_ids_are_unique(self):
+        ids = [e["id"] for e in self.entries]
+        assert len(ids) == len(set(ids))
+
+    def test_every_family_has_attacks_and_a_benign_control(self):
+        from core.datasets.loader import FAMILY_FILES
+        for family in FAMILY_FILES:
+            entries = [e for e in self.entries if e["attack_family"] == family]
+            assert any(not e.get("benign_control") for e in entries), family
+            assert any(e.get("benign_control") for e in entries), family
+
+    def test_controls_declare_no_attacker(self):
+        for e in self.entries:
+            if e.get("benign_control"):
+                assert (e["threat_model"], e["attacker_capability"]) == ("none", "none"), e["id"]
+            else:
+                assert "none" not in (e["threat_model"], e["attacker_capability"]), e["id"]

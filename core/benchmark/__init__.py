@@ -1,21 +1,11 @@
 """
 RedGuard Benchmark Package
 ===========================
+Statistics shared by Mode A and Mode B:
 
-Comprehensive benchmarking framework for AI agent security evaluation.
+    bds.py              Behaviour Drift Score (run-to-run consistency)
+    statistics.py       Wilson confidence intervals and summaries
+    reproducibility.py  git/environment stamp for results
+
+Import the module you need, e.g. ``from core.benchmark.statistics import wilson_ci``.
 """
-
-from .runner import BenchmarkRunner, BenchmarkConfig, run_benchmark
-from .metrics import BenchmarkMetrics, MetricCalculator, compute_all_metrics
-from .reporting import BenchmarkReporter, generate_report
-
-__all__ = [
-    "BenchmarkRunner",
-    "BenchmarkConfig", 
-    "run_benchmark",
-    "BenchmarkMetrics",
-    "MetricCalculator",
-    "compute_all_metrics",
-    "BenchmarkReporter",
-    "generate_report",
-]

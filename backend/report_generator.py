@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from database import get_db
 from schema import sha256_hex
-from scanner import TIERS, tier_counts
+from scanner import TIERS, control_counts, tier_counts
 
 async def generate_report_for_session(session_id: str) -> dict:
     prisma = await get_db()
@@ -19,6 +19,7 @@ async def generate_report_for_session(session_id: str) -> dict:
         return {"error": "Session not found"}
         
     events = [e for e in session.events if not e.isControl]
+    controls = control_counts([e.status for e in session.events if e.isControl])
     total_probes = session.totalProbes
     blocked = session.blocked
     allowed = session.allowed
@@ -116,6 +117,7 @@ async def generate_report_for_session(session_id: str) -> dict:
             **tiers,
             "model_compromised": session.modelCompromised,
             "controls_over_refused": session.controlsOverRefused,
+            "controls": controls,
         },
         "category_breakdown": category_breakdown,
         "high_risk_allowed": high_risk_allowed,
@@ -146,6 +148,9 @@ async def generate_report_for_session(session_id: str) -> dict:
         f"- **Compromised (attack succeeded):** {allowed} — ASR {allowed / total_probes * 100 if total_probes else 0:.1f}%",
         f"- **Compromised with the filter off (model alone):** {session.modelCompromised}",
         f"- **Intent Mismatches:** {mismatches}",
+        f"- **Benign controls:** {sum(controls.values())} — helped {controls['HELPED']}, "
+        f"over-refused by the model {controls['OVER_REFUSED']} ({session.controlsOverRefused} with the regex off), "
+        f"blocked by the regex {controls['FILTERED']}",
         "",
         "## Attack Category Breakdown",
         "| Category | Probes | Filtered | Refused | Ignored | Compromised | Model alone | Mismatches | Max Risk Score |",

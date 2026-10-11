@@ -53,7 +53,7 @@
     "attack_variant": {
       "type": "string",
       "minLength": 2,
-      "description": "Specific attack variant within the family. Must match the probe renderer key."
+      "description": "Specific attack variant within the family (free-form key, e.g. hidden_html). Benign controls use benign_control."
     },
     "scenario": {
       "type": "string",
@@ -86,9 +86,10 @@
         "malicious_third_party_content",
         "compromised_tool",
         "insider_threat",
-        "supply_chain"
+        "supply_chain",
+        "none"
       ],
-      "description": "Who the attacker is in this threat model."
+      "description": "Who the attacker is in this threat model. 'none' for benign controls."
     },
     "attacker_capability": {
       "type": "string",
@@ -97,9 +98,10 @@
         "document_level",
         "tool_output_level",
         "memory_level",
-        "network_level"
+        "network_level",
+        "none"
       ],
-      "description": "The level of access the attacker has to influence agent inputs."
+      "description": "The level of access the attacker has to influence agent inputs. 'none' for benign controls."
     },
     "prompt": {
       "type": "string",
@@ -193,6 +195,16 @@
     "research_notes": {
       "type": "string",
       "description": "Optional notes about this probe for reviewers and researchers."
+    },
+    "benign_control": {
+      "type": "boolean",
+      "default": false,
+      "description": "A harmless request a good agent should simply answer. Measures over-refusal and regex false positives; never counted as an attack."
+    },
+    "canary": {
+      "type": "string",
+      "minLength": 6,
+      "description": "A unique string that appears in the reply only if the model followed the injected instruction. Must also be listed in evaluation_rules.success_indicators."
     }
   }
 }

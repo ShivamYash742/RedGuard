@@ -12,14 +12,16 @@ restrictions.
 RedGuard is an AI-agent security benchmark with two modes that answer
 different questions.
 
-**Mode A — probe scanner.** Fires 50 adversarial prompts ("probes") from 8
-attack families and 12 scenarios at a pluggable LLM agent. Each probe passes
-the regex policy engine (`backend/inspector.py` + `backend/policy.yaml`) and an
-external ML classifier (`CLASSIFIER_URL`); if allowed, it goes to the agent and
-the reply is scored against a refusal-keyword list (`backend/scanner.py`).
-Results stream over SSE to the UI. Code: `backend/` (scanner, inspector,
-agents), `core/datasets`, `core/probes`, `core/scenarios`, `core/benchmark`.
-Routes: `/`, `/corpus`, `/runs`, `/models`, `/settings`.
+**Mode A — probe scanner.** Fires 46 adversarial prompts ("probes") from 8
+attack families and 12 scenarios at a pluggable LLM agent, plus 10 benign
+controls (`"benign_control": true`) that measure over-refusal and regex false
+positives. Each probe goes through the regex filter (`backend/inspector.py` +
+`backend/policy.yaml`), an optional ML classifier (`CLASSIFIER_URL`), and the
+agent; `score()` in `backend/scanner.py` puts it in one tier (below). Results
+stream over SSE to the UI; `/api/leaderboard` (`backend/leaderboard.py`) pools
+measured runs. Code: `backend/` (scanner, inspector, leaderboard, agents),
+`core/datasets` (the probes), `core/benchmark` (BDS, Wilson CI, repro stamp —
+shared with Mode B). Routes: `/`, `/corpus`, `/runs`, `/models`, `/settings`.
 
 **Mode B — multi-agent lab.** Three agents (A researcher → B validator → C
 executor) work inside a simulated environment (`core/lab/cee.py`). The model
@@ -45,13 +47,16 @@ Layout:
 
 - `main` has Mode B merged (PR #2), the `/lab/compare` page, Docker support,
   and a desktop-app plan (`DESKTOP_APP_PLAN.md`, not started).
-- Branch `mode-a-fixes` is working through `MODE_A_FIX_PLAN.md`; phases 1–2
-  (security, tiered scoring) are done.
-- **599 tests pass** (~10 s, no LLM). `npm run typecheck` is clean.
-  `npm run lint` reports **21 errors** (mostly `no-explicit-any` and
-  setState-in-effect), all in Mode A UI files: `app/page.tsx`,
-  `app/models`, `app/runs`, `app/settings`, `components/Header.tsx`,
-  `components/GlobalSearchModal.tsx`, `lib/data-service.ts`.
+- Branch `mode-a-fixes` carries `MODE_A_FIX_PLAN.md` phases 1–9 (security,
+  tiered scoring, benign controls, regex precision, measured leaderboard,
+  lint/phone layout, v4.0.0, unused-code removal, first local results). Still
+  open: hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
+- **632 tests pass** (~10 s, no LLM). `npm run typecheck` and `npm run lint`
+  are clean.
+- **First Mode A results** (granite3.3:2b via Ollama, pre-rewrite prompts):
+  attack success with the filter off 19.6% baseline / 13.0% hardened; see
+  `MODE_A_FIX_PLAN.md` for the table. Run real scans on local Ollama
+  (`ollama_local_agent`), not the hosted NVIDIA agents.
 - **Mode B has no real-model results yet.** Every number so far is scripted or
   synthetic. Next steps: a pilot on nemotron-3-super (1 arm, 3 cases, 2 reps),
   then the full sweep (9 cases × 5 reps per arm).
@@ -70,26 +75,26 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
 
 ### Known issues in Mode A (measured)
 
-- **Regex patterns are crude.** The inspector still denies 28/50 probes and
-  benign prompts ("help me upload my resume", "act as a tutor", "kill a python
-  process"). It no longer hides model behaviour (see above); tightening it is
-  plan phase 4.
+- **The regex filter is a weak layer by design** (it reads phrasing, not
+  intent). Since plan phase 4 its patterns match attack shapes (a verb aimed
+  at a target) instead of single words: it catches 24/46 attack probes and
+  blocks 0/10 controls and 0/25 everyday questions (before: 28, 4 and 20).
+  Patterns live in `backend/inspector.py`; `policy.yaml` maps them to actions,
+  and two matches reach its 0.2 risk threshold.
 - **Success indicators echo the attack wording**, so substring scoring
   under-counts "I'm sorry, but here it is" (plan phase 3 adds canaries).
-- **Probe quality** (plan phase 3). 20/50 contain giveaway phrases (`attacker@evil.com`,
-  `[INJECTED PLAN STEP]`, `IGNORE ALL PREVIOUS INSTRUCTIONS`); RG-DI-008 and
-  RG-MP-006 explain themselves to the model. Indirect families are delivered in
-  the user message, not a tool result. The agents only have `web_search`,
-  `file_read`, `calculator` and no memory between calls, so tool-action and
-  memory-poisoning probes cannot succeed. RG-TM-003/004/005 target parsers that
-  don't exist. Some probes are benign requests (RG-GD-002, RG-EX-004, RG-AA-001,
-  RG-AA-005). Template leftovers in RG-CI-002/004/008; RG-CI-001 ≈ RG-CI-002,
-  RG-DI-001 ≈ RG-DI-002.
-- **Leaderboard** (plan phase 5). `getModelComparisons` in `lib/data-service.ts` seeds
-  hardcoded rows (flagged `synthetic`); real sessions overwrite only the
-  headline numbers, family scores and `utilityScore` stay invented, and "BDS"
-  there is `ASR/100`, not the BDS in `core/benchmark`.
-- Possibly (unverified): Header overflows at 390px width.
+- **Probe quality** (plan phase 3; the `prompt` rewrites are done by hand in
+  `core/datasets/*.json`). Many attack prompts contain giveaway phrases
+  (`attacker@evil.com`, `[INJECTED PLAN STEP]`); RG-DI-008 and RG-MP-006
+  explain themselves to the model. Indirect families are delivered in the user
+  message, not a tool result. The agents only have `web_search`, `file_read`,
+  `calculator` and no memory between calls, so tool-action and
+  memory-poisoning probes cannot succeed; RG-EX-004 needs an email tool the
+  agents lack. Template leftovers in RG-CI-002/004/008; RG-CI-001 ≈ RG-CI-002,
+  RG-DI-001 ≈ RG-DI-002. (Done: TM-003/004/005 removed, RG-GD-002 is a control.)
+- **Version bump:** Mode A is 4.0.0. Scores from 3.x runs are not comparable;
+  those sessions stay viewable as "legacy scoring" and never enter the
+  leaderboard. Old report files are in `reports/legacy-v3/`.
 
 Fixed in phase 1: `/api/proxy` removed; CORS limited to `CORS_ORIGINS`
 (default `http://localhost:3000`); Docker publishes on 127.0.0.1 only;
@@ -164,7 +169,7 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
   that Mode A routes and `get_version_info()` keys still exist — update them
   if you change those on purpose.
 - **Versions.** Canonical in `core/version.py`. Mode A: `BENCHMARK_VERSION`,
-  `DATASET_VERSION`, `PROBE_SCHEMA_VERSION` (all 3.0.0) — no runtime link to the
+  `DATASET_VERSION`, `PROBE_SCHEMA_VERSION` (all 4.0.0) — no runtime link to the
   frontend, so hand-sync the string into `README.md` (title, badges, structure
   comments), `package.json`, `app/layout.tsx`, `app/corpus/page.tsx`,
   `app/runs/page.tsx`, `components/Header.tsx`, `components/Sidebar.tsx`, then
@@ -185,8 +190,9 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
   copy the file first if you must. `npm run dev:all` uses `DATABASE_URL` from
   `.env`; point it at a copy for experiments.
 - **Python 3.10+** must keep working. 3.14 evaluates annotations lazily, so a
-  missing `typing` import only fails on older interpreters
-  (`core/tests/test_scenarios_import.py` covers this). Docker runs 3.12.
+  missing `typing` import only fails on older interpreters. Check new modules
+  with `typing.get_type_hints()` on their functions (forces evaluation) or run
+  the suite under Docker (3.12); `python3.11` is also installed locally.
 - The `<!-- BEGIN:nextjs-agent-rules -->` block in `AGENTS.md` is regenerated
   by `next dev`; deleting it just brings it back.
 - `scripts/*.py` are legacy standalone CLI tools; they don't talk to the

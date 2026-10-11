@@ -66,25 +66,35 @@ export default function SettingsPage() {
   )
 }
 
+interface Health {
+  status: string
+  db_connected: boolean
+}
+
+async function fetchHealth(): Promise<Health> {
+  try {
+    const res = await fetch('/api/health')
+    return res.ok ? await res.json() : { status: 'error', db_connected: false }
+  } catch {
+    return { status: 'offline', db_connected: false }
+  }
+}
+
 function SystemTab() {
-  const [health, setHealth] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+  const [health, setHealth] = useState<Health | null>(null)
+  const [loading, setLoading] = useState(true)
 
   const checkHealth = async () => {
     setLoading(true)
-    try {
-      const res = await fetch('/api/health')
-      if (res.ok) setHealth(await res.json())
-      else setHealth({ status: 'error', db_connected: false })
-    } catch {
-      setHealth({ status: 'offline', db_connected: false })
-    } finally {
-      setLoading(false)
-    }
+    setHealth(await fetchHealth())
+    setLoading(false)
   }
 
   useEffect(() => {
-    checkHealth()
+    fetchHealth().then(h => {
+      setHealth(h)
+      setLoading(false)
+    })
   }, [])
 
   return (
@@ -275,8 +285,24 @@ function PolicyTab() {
   )
 }
 
+interface AuditEvent {
+  id: string
+  timestamp: string
+  category: string
+  status: string
+  regexRiskScore: number
+  classifierVerdict: string | null
+  classifierScore: number | null
+  matchedRule: string | null
+  promptText: string
+  declaredIntent: string
+  detectedIntent: string
+  mismatch: boolean
+  eventHash: string
+}
+
 function AuditTab() {
-  const [events, setEvents] = useState<any[]>([])
+  const [events, setEvents] = useState<AuditEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
 
