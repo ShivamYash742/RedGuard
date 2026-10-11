@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Play, RefreshCw, FileText, Shield, Bot, Wrench, ArrowRight, History } from 'lucide-react'
 import { benchmarkDataService, normalizeFamily, KNOWN_AGENTS, KnownAgent, BenchmarkRun, OUTCOME_TIERS, TierCounts, emptyTierCounts, ControlCounts, emptyControlCounts } from '@/lib/data-service'
+import TierBar from '@/components/TierBar'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/Skeletons'
 
@@ -16,21 +17,6 @@ interface FamilyProgress {
 }
 
 type PromptMode = 'baseline' | 'hardened'
-
-function TierBar({ counts, total, height = 'h-3' }: { counts: TierCounts; total: number; height?: string }) {
-  return (
-    <div className={`${height} w-full flex bg-[var(--surface-base)] rounded-full overflow-hidden border border-[var(--border-subtle)]`}>
-      {OUTCOME_TIERS.map(t => (
-        <div
-          key={t.key}
-          title={`${t.label}: ${counts[t.key]}`}
-          className="h-full transition-all duration-300 ease-out"
-          style={{ width: `${total > 0 ? (counts[t.key] / total) * 100 : 0}%`, background: t.color }}
-        />
-      ))}
-    </div>
-  )
-}
 
 export default function RunsPage() {
   const [running, setRunning] = useState(false)

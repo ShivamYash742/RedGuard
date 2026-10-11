@@ -19,6 +19,7 @@ from core.version import BENCHMARK_VERSION
 
 from database import get_db, init_db, close_db
 from scanner import init_scan_session, run_family_scan, finalize_scan, session_prompt_mode
+from leaderboard import leaderboard_rows
 from report_generator import generate_report_for_session
 from agent_loader import list_agents, get_agent, DEFAULT_AGENT_ID
 from lab_api import router as lab_router
@@ -82,6 +83,13 @@ async def get_stats():
         "overallBlockRate": rate,
         "coverageGap": ta
     }
+
+@app.get("/api/leaderboard")
+async def get_leaderboard():
+    """Measured results per (agent, prompt mode); legacy runs are excluded."""
+    prisma = await get_db()
+    sessions = await prisma.session.find_many(include={"events": True})
+    return leaderboard_rows(sessions)
 
 @app.get("/api/sessions")
 async def list_sessions():

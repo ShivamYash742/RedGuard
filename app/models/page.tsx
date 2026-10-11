@@ -1,8 +1,9 @@
 "use client"
 import React, { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { benchmarkDataService, ModelComparisonResult, BenchmarkRun } from '@/lib/data-service'
-import { Award, BarChart2, TrendingUp, Info, FlaskConical } from 'lucide-react'
+import { benchmarkDataService, LeaderboardRow, RateCI, OUTCOME_TIERS } from '@/lib/data-service'
+import { Award, BarChart2, TrendingUp, Info } from 'lucide-react'
+import EmptyState from '@/components/EmptyState'
+import TierBar from '@/components/TierBar'
 import {
   Radar,
   RadarChart,
@@ -19,189 +20,171 @@ import {
   Legend,
 } from 'recharts'
 
+const pct = (x: number) => `${(x * 100).toFixed(1)}%`
+
+function Rate({ value, tone }: { value: RateCI | null; tone: string }) {
+  if (!value) return <span className="text-[var(--text-muted)]">n/a</span>
+  return (
+    <span className="font-mono">
+      <span className={`font-bold ${tone}`}>{pct(value.rate)}</span>
+      <span className="block text-[10px] text-[var(--text-muted)]">95% CI {pct(value.lo)}–{pct(value.hi)}</span>
+    </span>
+  )
+}
+
+const label = (r: LeaderboardRow) => `${r.agentName} · ${r.promptMode ?? 'agent default'}`
+const titleCase = (s: string) => s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+
 export default function ModelsPage() {
-  const [models, setModels] = useState<ModelComparisonResult[]>([])
+  const [rows, setRows] = useState<LeaderboardRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedModelsForRadar, setSelectedModelsForRadar] = useState<string[]>([])
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const sessions: BenchmarkRun[] = await benchmarkDataService.fetchSessions()
-        const comp = benchmarkDataService.getModelComparisons(sessions)
-        setModels(comp)
-        setSelectedModelsForRadar(comp.slice(0, 5).map(m => m.agentId))
-      } catch (err) {
-        console.error('Failed to load comparison models:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadData()
+    benchmarkDataService.fetchLeaderboard()
+      .then(setRows)
+      .finally(() => setLoading(false))
   }, [])
 
-  const familyKeys = ['direct_injection', 'content_injection', 'exfiltration', 'goal_diversion', 'memory_poisoning', 'autonomy', 'planning', 'tool_security']
-
-  const radarData = familyKeys.map(fam => {
-    const entry: Record<string, any> = { family: fam.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) }
-    models.forEach(m => {
-      if (selectedModelsForRadar.includes(m.agentId)) {
-        entry[m.modelName] = m.familyScores[fam] || 85
-      }
+  const radarRows = rows.slice(0, 5)
+  const families = Array.from(new Set(rows.flatMap(r => Object.keys(r.families)))).sort()
+  const radarData = families.map(fam => {
+    const entry: Record<string, string | number> = { family: titleCase(fam) }
+    radarRows.forEach(r => {
+      const f = r.families[fam]
+      if (f && f.total > 0) entry[label(r)] = Math.round(100 * (1 - f.modelCompromised / f.total))
     })
     return entry
   })
 
-  const stackedBarData = models.map(m => ({
-    name: m.modelName.split(' ')[0],
-    Resisted: m.overallScore,
-    Diverted: parseFloat((m.asr * 0.4).toFixed(1)),
-    Compromised: parseFloat((m.asr * 0.6).toFixed(1)),
-  }))
+  const tierShareData = rows.map(r => {
+    const entry: Record<string, string | number> = { name: label(r) }
+    OUTCOME_TIERS.forEach(t => { entry[t.label] = r.attacks > 0 ? Math.round((100 * r.tiers[t.key]) / r.attacks) : 0 })
+    return entry
+  })
 
   const colors = ['#9a6324', '#157a6e', '#a16207', '#c23616', '#44576b']
-  const hasSynthetic = models.some(m => m.synthetic)
 
-  if (loading) return <div className="p-8 text-center text-xs">Loading Model Leaderboard & Comparison Matrix...</div>
+  if (loading) return <div className="p-8 text-center text-xs">Loading model leaderboard...</div>
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="border-b border-[var(--border-subtle)] pb-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-[var(--primary)] uppercase tracking-wider mb-1">
           <Award className="h-4 w-4 text-amber-500" /> Model Security Leaderboard
         </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Models</h1>
         <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-          Comparative security evaluation of LLM agent architectures across Attack Success Rate (ASR), Behaviour Drift Score (BDS), & Tool Security.
+          Measured results only, one row per agent and system-prompt mode, pooled over its completed runs.
+          Ranked by attack success with the regex filter off (model alone); lower is better.
         </p>
       </div>
 
-      {hasSynthetic && (
-        <div className="research-card flex items-start gap-3 bg-[var(--warning-bg)]">
-          <FlaskConical className="h-4 w-4 text-[var(--warning)] mt-0.5 shrink-0" />
-          <div className="text-xs text-[var(--text-secondary)]">
-            <span className="font-semibold text-[var(--warning)]">Rows marked SAMPLE are illustrative, not measured.</span>{' '}
-            They show what the leaderboard looks like before any evaluation has run against that model. Run a benchmark from{' '}
-            <Link href="/runs" className="text-[var(--primary)] font-semibold hover:underline">Runs</Link> to replace a sample row with real results.
-          </div>
-        </div>
-      )}
-
-      {/* Main Sortable Leaderboard Table */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
-            Overall Model Ranking Matrix
-          </h2>
-        </div>
-
-        <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
-          <table className="research-table">
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Model / Agent Name</th>
-                <th>Overall Score</th>
-                <th>BDS (Drift)</th>
-                <th>ASR (Attack Success)</th>
-                <th>Security Score</th>
-                <th>Utility Score</th>
-                <th>Memory Res.</th>
-                <th>Planning Res.</th>
-                <th>Tool Res.</th>
-                <th>Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {models.map(m => (
-                <tr key={m.agentId} className="hover:bg-[var(--surface-base)] transition-colors">
-                  <td className="font-mono text-xs font-bold text-center">
-                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                      m.rank === 1 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' : 'bg-[var(--surface-base)] text-[var(--text-secondary)]'
-                    }`}>
-                      #{m.rank}
-                    </span>
-                  </td>
-                  <td className="font-bold text-xs text-[var(--text-primary)]">{m.modelName}</td>
-                  <td className="font-mono text-xs font-extrabold text-[var(--success)]">{m.overallScore}%</td>
-                  <td className="font-mono text-xs text-[var(--text-secondary)]">{m.bds.toFixed(2)}</td>
-                  <td className="font-mono text-xs font-bold text-[var(--danger)]">{m.asr}%</td>
-                  <td className="font-mono text-xs text-[var(--primary)] font-semibold">{m.securityScore}%</td>
-                  <td className="font-mono text-xs text-[var(--text-secondary)]">{m.utilityScore}%</td>
-                  <td className="font-mono text-xs text-center">{m.memoryResistance}%</td>
-                  <td className="font-mono text-xs text-center">{m.planningResistance}%</td>
-                  <td className="font-mono text-xs text-center font-semibold text-[var(--success)]">{m.toolResistance}%</td>
-                  <td>
-                    {m.synthetic ? (
-                      <span className="badge-semantic badge-warning">Sample</span>
-                    ) : (
-                      <span className="badge-semantic badge-success">Measured</span>
-                    )}
-                  </td>
+      {rows.length === 0 ? (
+        <EmptyState
+          title="No measured runs yet"
+          description="Runs from before tiered scoring are not comparable and are left out. Start an evaluation to see real numbers here."
+          actionLabel="Go to Runs"
+          actionHref="/runs"
+          icon="chart"
+        />
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+            <table className="research-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Agent · Prompt</th>
+                  <th>Runs</th>
+                  <th title="Share of attack probes the model complied with, filter off">ASR, model alone</th>
+                  <th title="Share of attack probes that succeeded with the regex filter in front">ASR, as deployed</th>
+                  <th>Outcome (F · R · I · C)</th>
+                  <th title="Share of harmless control prompts the model refused">Over-refusal</th>
+                  <th title="Behaviour Drift Score: 1 = same outcome every run. Needs 3+ runs.">BDS</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={`${r.agentId}-${r.promptMode}`} className="hover:bg-[var(--surface-base)] transition-colors">
+                    <td className="font-mono text-xs font-bold text-center">#{r.rank}</td>
+                    <td className="text-xs">
+                      <span className="font-bold text-[var(--text-primary)]">{r.agentName}</span>
+                      <span className="block text-[10px] text-[var(--text-muted)]">
+                        {r.promptMode ?? 'agent default'} · last run {new Date(r.lastRun).toLocaleDateString()}
+                      </span>
+                    </td>
+                    <td className="font-mono text-xs text-center">{r.runs}</td>
+                    <td className="text-xs"><Rate value={r.asrModel} tone="text-[var(--danger)]" /></td>
+                    <td className="text-xs"><Rate value={r.asrDeployed} tone="text-[var(--danger)]" /></td>
+                    <td className="font-mono text-xs min-w-[9rem]">
+                      <TierBar counts={r.tiers} total={r.attacks} height="h-1.5" />
+                      <span className="block mt-1 text-center">
+                        {r.tiers.FILTERED} · {r.tiers.REFUSED} · {r.tiers.IGNORED} · <span className="text-[var(--danger)] font-bold">{r.tiers.COMPROMISED}</span>
+                      </span>
+                    </td>
+                    <td className="text-xs"><Rate value={r.overRefusal} tone="text-[var(--warning)]" /></td>
+                    <td className="font-mono text-xs text-center">{r.bds === null ? <span className="text-[var(--text-muted)]">n/a</span> : r.bds.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      {/* Visualizations Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="research-card space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
-              <BarChart2 className="h-4 w-4 text-[var(--primary)]" /> Attack Family Resistance Profile
-            </h3>
-            <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] font-mono">
-              <Info className="h-3.5 w-3.5 text-[var(--warning)]" /> Max 5 Models
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="research-card space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+                  <BarChart2 className="h-4 w-4 text-[var(--primary)]" /> Resistance by attack family
+                </h3>
+                <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] font-mono">
+                  <Info className="h-3.5 w-3.5" /> % not compromised, model alone · top 5
+                </div>
+              </div>
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
+                    <PolarGrid stroke="var(--border-default)" opacity={0.4} />
+                    <PolarAngleAxis dataKey="family" tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 9 }} />
+                    {radarRows.map((r, idx) => (
+                      <Radar
+                        key={label(r)}
+                        name={label(r)}
+                        dataKey={label(r)}
+                        stroke={colors[idx % colors.length]}
+                        fill={colors[idx % colors.length]}
+                        fillOpacity={0.15}
+                      />
+                    ))}
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--surface-overlay)', borderColor: 'var(--border-default)', fontSize: '11px' }} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="research-card space-y-3">
+              <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+                <TrendingUp className="h-4 w-4 text-[var(--success)]" /> Where attacks ended (% of attack probes)
+              </h3>
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={tierShareData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                    <XAxis dataKey="name" tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
+                    <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} domain={[0, 100]} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--surface-overlay)', borderColor: 'var(--border-default)', fontSize: '11px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    {OUTCOME_TIERS.map(t => (
+                      <Bar key={t.key} dataKey={t.label} stackId="a" fill={t.color} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
-
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
-                <PolarGrid stroke="var(--border-default)" opacity={0.4} />
-                <PolarAngleAxis dataKey="family" tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 9 }} />
-                {models.slice(0, 5).map((m, idx) => (
-                  <Radar
-                    key={m.agentId}
-                    name={m.modelName}
-                    dataKey={m.modelName}
-                    stroke={colors[idx % colors.length]}
-                    fill={colors[idx % colors.length]}
-                    fillOpacity={0.15}
-                    strokeDasharray={m.synthetic ? '4 3' : undefined}
-                  />
-                ))}
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--surface-overlay)', borderColor: 'var(--border-default)', fontSize: '11px' }} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="research-card space-y-3">
-          <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
-            <TrendingUp className="h-4 w-4 text-[var(--success)]" /> Outcome Distribution Matrix
-          </h3>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stackedBarData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                <XAxis dataKey="name" tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
-                <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} domain={[0, 100]} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--surface-overlay)', borderColor: 'var(--border-default)', fontSize: '11px' }} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Bar dataKey="Resisted" stackId="a" fill="#157a6e" />
-                <Bar dataKey="Diverted" stackId="a" fill="#a16207" />
-                <Bar dataKey="Compromised" stackId="a" fill="#c23616" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }
