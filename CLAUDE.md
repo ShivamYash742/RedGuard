@@ -100,7 +100,8 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
   memory-poisoning probes cannot succeed; RG-EX-004 needs an email tool the
   agents lack. Template leftovers in RG-CI-002/004/008; RG-CI-001 ≈ RG-CI-002,
   RG-DI-001 ≈ RG-DI-002. (Done: TM-003/004/005 removed, RG-GD-002 is a control.)
-- **Version bump:** Mode A is 4.0.0. Scores from 3.x runs are not comparable;
+- **Version bump:** release 4.1.5, Mode A benchmark 4.0.0 (unchanged by the
+  4.1.5 Mode B work). Scores from 3.x runs are not comparable;
   those sessions stay viewable as "legacy scoring" and never enter the
   leaderboard. Old report files are in `reports/legacy-v3/`.
 
@@ -176,12 +177,18 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
   `core/tests/test_lab_cases.py::test_mode_a_version_info_is_unchanged` check
   that Mode A routes and `get_version_info()` keys still exist — update them
   if you change those on purpose.
-- **Versions.** Canonical in `core/version.py`. Mode A: `BENCHMARK_VERSION`,
-  `DATASET_VERSION`, `PROBE_SCHEMA_VERSION` (all 4.0.0) — no runtime link to the
-  frontend, so hand-sync the string into `README.md` (title, badges, structure
-  comments), `package.json`, `app/layout.tsx`, `app/corpus/page.tsx`,
-  `app/runs/page.tsx`, `components/Header.tsx`, `components/Sidebar.tsx`, then
-  regenerate `docs/benchmark_spec.md` with `python docs/spec_generator.py`.
+- **Versions.** Canonical in `core/version.py`, with no runtime link to the
+  frontend, so strings are hand-synced. Two kinds:
+  - **Release** 4.1.5 (`RELEASE_NAME`): `package.json` (+ lock, via
+    `npm version X --no-git-tag-version`), `README.md` title and version badge,
+    `app/layout.tsx`, `components/Sidebar.tsx`.
+  - **Benchmark** (Mode A scoring and probe set): `BENCHMARK_VERSION`,
+    `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`, all 4.0.0: `README.md` benchmark
+    and dataset badges, `components/Header.tsx`, `app/runs/page.tsx`,
+    `app/corpus/page.tsx`; then regenerate `docs/benchmark_spec.md` with
+    `python docs/spec_generator.py`. The leaderboard pools runs whose
+    `BENCHMARK_VERSION` matches exactly, so bump it only when scores stop being
+    comparable (a release-only change keeps it).
   Mode B: `LAB_SCHEMA_VERSION`, `CASE_SCHEMA_VERSION`, `CEE_VERSION`,
   `TOPOLOGY_VERSION`, `EVALUATOR_VERSION`, `METRIC_VERSION`, exposed via
   `get_lab_version_info()`. A `METRIC_VERSION` bump makes earlier numbers
@@ -218,6 +225,5 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
 - `docs/` — Mode A architecture, generated benchmark spec, literature mapping,
   research paper draft.
 - `PRODUCT.md` — product/design context. `DESKTOP_APP_PLAN.md` — packaging plan.
-- `graphify-out/` — knowledge graph of the repo (built 2026-09-23; run
-  `graphify update .` to refresh code nodes). Use it for context before
-  reading the large docs end to end.
+- `graphify-out/` — deleted 2026-10-11; rebuild with `/graphify` before relying
+  on it. Until then, read the docs above and the code directly.
