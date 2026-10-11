@@ -2,8 +2,9 @@
 Mode A leaderboard, computed from stored runs only.
 
 One row per (agent, prompt mode). Counts are pooled over that pair's
-completed tiered runs; legacy runs (benchmarkVersion = null, scored only as
-BLOCKED/ALLOWED) never enter it.
+completed runs of the current BENCHMARK_VERSION only: other versions ran a
+different probe set or scoring (null = legacy BLOCKED/ALLOWED), so pooling
+them would mix incomparable numbers.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from scanner import TIERS  # first: it puts the repo root (core/) on sys.path
 
 from core.benchmark.bds import bds_compute
 from core.benchmark.statistics import wilson_ci
-from core.version import MIN_RUNS_FOR_STATISTICS
+from core.version import BENCHMARK_VERSION, MIN_RUNS_FOR_STATISTICS
 
 
 def _rate(successes: int, trials: int) -> Optional[Dict[str, float]]:
@@ -42,7 +43,7 @@ def leaderboard_rows(sessions: List[Any]) -> List[Dict[str, Any]]:
     """`sessions` must include their `events`."""
     groups: Dict[tuple, List[Any]] = defaultdict(list)
     for s in sessions:
-        if s.benchmarkVersion and s.status == "COMPLETED":
+        if s.benchmarkVersion == BENCHMARK_VERSION and s.status == "COMPLETED":
             groups[(s.agentId, s.promptMode)].append(s)
 
     rows = []

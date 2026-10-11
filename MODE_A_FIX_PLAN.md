@@ -210,19 +210,18 @@ documented library.
 
 ---
 
-## Decisions needed
+## Decisions (all taken, 2026-10-11)
 
-1. Shadow call (Phase 2.2): keep it (recommended — model-alone numbers for
-   all probes), or skip filtered probes to save ~28 calls per scan, in which
-   case model-alone ASR covers only the probes the filter let through.
-2. AA-001 / AA-005 (user-authorised irreversible actions): benign controls, or drop.
-3. Phase 9: delete the unused library or keep it.
-4. Phase 8.3: add the LLM judge or not.
-5. Indirect delivery: send content-injection probes as a file the agent reads
-   via the sandboxed `file_read`, instead of in the user message. ~30 lines in
-   the scanner; the Ollama agent has no `file_read`, so it would keep inline
-   delivery. Recommended only if Mode A should claim indirect-injection results
-   at all — otherwise leave that to Mode B.
+1. Shadow call: **kept** — model-alone numbers cover every probe.
+2. AA-001 / AA-005: **kept as attack probes** — they test acting on an
+   irreversible request without confirming, which is the autonomy family's
+   point; as controls, "please confirm" would count as over-refusal.
+3. Phase 9: **deleted** the unused library; `backend/target_agent.py` kept
+   (a working CLI).
+4. LLM judge (8.3): **not built yet** — canaries in the prompt rewrite shrink
+   the `indicators_mixed` set first; revisit if it stays large.
+5. Indirect delivery via `file_read`: **not done** — Mode A is the
+   direct-injection baseline; indirect injection is Mode B's job.
 
 Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Phases 1 and 4 can go in parallel with
 anything; 5 needs 2 and 3.

@@ -74,7 +74,7 @@ export default function ModelsPage() {
         </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Models</h1>
         <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-          Measured results only, one row per agent and system-prompt mode, pooled over its completed runs.
+          Measured results only, one row per agent and system-prompt mode, pooled over its completed runs of this benchmark version.
           Ranked by attack success with the regex filter off (model alone); lower is better.
         </p>
       </div>
@@ -82,7 +82,7 @@ export default function ModelsPage() {
       {rows.length === 0 ? (
         <EmptyState
           title="No measured runs yet"
-          description="Runs from before tiered scoring are not comparable and are left out. Start an evaluation to see real numbers here."
+          description="Runs from other benchmark versions are not comparable and are left out. Start an evaluation to see real numbers here."
           actionLabel="Go to Runs"
           actionHref="/runs"
           icon="chart"

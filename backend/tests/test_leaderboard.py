@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from types import SimpleNamespace as NS
 
-from leaderboard import leaderboard_rows
+from leaderboard import leaderboard_rows  # first: puts core/ on sys.path
+from core.version import BENCHMARK_VERSION
 
 T0 = datetime(2026, 10, 11)
 
@@ -10,7 +11,7 @@ def _event(probe, status, model=None, control=False, category="DIRECT_INJECTION"
     return NS(probeId=probe, status=status, modelOutcome=model or status, isControl=control, category=category)
 
 
-def _session(agent, mode, events, version="3.0.0", status="COMPLETED", day=0):
+def _session(agent, mode, events, version=BENCHMARK_VERSION, status="COMPLETED", day=0):
     return NS(agentId=agent, agentName=agent.upper(), promptMode=mode, benchmarkVersion=version,
               status=status, startedAt=T0 + timedelta(days=day), events=events)
 
@@ -30,6 +31,7 @@ def test_rows_pool_completed_tiered_runs_only():
         _session("a", "baseline", _run(True, 0), day=0),
         _session("a", "baseline", _run(False, 1), day=1),
         _session("a", "baseline", _run(True, 2), version=None),          # legacy scoring
+        _session("a", "baseline", _run(True, 2), version="3.0.0"),       # older probe set
         _session("a", "baseline", _run(True, 3), status="FAILED: boom"),  # aborted
         _session("b", "hardened", [_event("P1", "REFUSED")]),
     ]

@@ -27,6 +27,10 @@ CLASSIFIER_URL = os.environ.get("CLASSIFIER_URL", "")
 # Default 0.5 s is safe for NVIDIA's 40 req/min limit across all families.
 SCAN_DELAY = float(os.environ.get("SCAN_DELAY_SECONDS", "0.5"))
 
+#: Seconds to wait before each retry of a failed agent call. Hosted models time
+#: out now and then; one timeout used to abort a whole 56-probe scan.
+AGENT_RETRY_DELAYS = (5, 15)
+
 #: Outcome tiers for attack probes, in the order they are checked. Every probe
 #: lands in exactly one: the filter decides FILTERED, the model's reply the rest.
 TIERS = ("FILTERED", "REFUSED", "IGNORED", "COMPROMISED")
@@ -258,11 +262,15 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
 
             # 4. The model always sees the probe, even when the filter denies it
             #    (shadow call), so model-alone results cover every probe.
-            response = await _invoke_agent(agent_id, prompt, model_name=model_name, prompt_mode=prompt_mode)
-
-            is_recursion_error = "Recursion limit" in response or "GraphRecursionError" in response
-            # Agents report transport failures as text; never score those as a reply.
-            agent_errored = response.startswith(("Agent error", "[OllamaAgent]", "[CustomAgent]"))
+            for retry_delay in (*AGENT_RETRY_DELAYS, None):
+                response = await _invoke_agent(agent_id, prompt, model_name=model_name, prompt_mode=prompt_mode)
+                is_recursion_error = "Recursion limit" in response or "GraphRecursionError" in response
+                # Agents report transport failures as text; never score those as a reply.
+                agent_errored = response.startswith(("Agent error", "[OllamaAgent]", "[CustomAgent]"))
+                if not agent_errored or is_recursion_error or retry_delay is None:
+                    break
+                print(f"[WARN] Probe {idx}: {response[:120]} -- retrying in {retry_delay}s")
+                await asyncio.sleep(retry_delay)
 
             if agent_errored and not is_recursion_error:
                 print(f"\n[ERROR] API non-200 / Agent failed! Details: {response} on probe {idx}! Aborting scan.")
