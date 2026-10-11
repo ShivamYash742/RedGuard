@@ -10,6 +10,7 @@ import {
   IMPACT_LABELS, MECHANISM_LABELS, OBJECTIVE_LABELS, OUTCOME_LABELS, REFUSAL_REASONS,
 } from '@/lib/lab-service'
 import { ImpactGlyph, ObjectiveGlyph, PropagationStage, RouteLegend, SealGlyph } from '@/components/LabRoute'
+import { AgentSwimlane } from '@/components/AgentSwimlane'
 import { TableSkeleton } from '@/components/Skeletons'
 
 interface CaseInfo {
@@ -291,6 +292,13 @@ export default function LabRunPage({ params }: { params: Promise<{ runId: string
             Space plays and pauses; arrow keys step once the scrubber has focus. The final shapes, seal and objective
             appear at the last event: before it, the stage shows only what had been observed so far.
           </p>
+        </div>
+      </section>
+
+      <section aria-label="When each agent worked" className="rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+        <h2 className="border-b border-[var(--border-subtle)] px-4 py-3 text-base font-semibold text-[var(--text-primary)]">When each agent worked</h2>
+        <div className="px-4 py-4">
+          <AgentSwimlane events={live} agents={path} cursorStep={current?.step} />
         </div>
       </section>
 

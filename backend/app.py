@@ -22,7 +22,7 @@ from scanner import init_scan_session, run_family_scan, finalize_scan, session_p
 from leaderboard import leaderboard_rows
 from report_generator import generate_report_for_session
 from agent_loader import list_agents, get_agent, DEFAULT_AGENT_ID
-from lab_api import router as lab_router
+from lab_api import router as lab_router, shutdown_jobs
 
 
 @asynccontextmanager
@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI):
     """Manage application lifecycle — connect DB on startup, disconnect on shutdown."""
     await init_db()
     yield
+    await shutdown_jobs()
     await close_db()
 
 app = FastAPI(title="RedGuard API", lifespan=lifespan)

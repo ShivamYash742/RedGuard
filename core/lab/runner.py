@@ -30,6 +30,7 @@ concurrent execution out of the MVP; the trace schema already accommodates it.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -283,9 +284,13 @@ class ScriptedClient:
     exercises the same prompt the model sees. Anything unscripted falls
     through to `finish`, so a short script ends its agent cleanly rather than
     burning the step budget.
+
+    `delay_ms` pauses before each reply so a demo run can be watched moving
+    through A → B → C; it changes timing only, never the trace.
     """
 
-    def __init__(self, script: Dict[str, Sequence[Any]]):
+    def __init__(self, script: Dict[str, Sequence[Any]], delay_ms: int = 0):
+        self.delay_ms = delay_ms
         self.script = {
             agent: [a if isinstance(a, str) else json.dumps(a) for a in actions]
             for agent, actions in script.items()
@@ -310,6 +315,8 @@ class ScriptedClient:
     async def complete(self, messages: Sequence[Dict[str, str]]) -> str:
         self.call_count += 1
         self.prompts.append(messages[-1]["content"])
+        if self.delay_ms:
+            await asyncio.sleep(self.delay_ms / 1000)
         match = _AGENT_RE.search(messages[0]["content"])
         agent = match.group(1) if match else "?"
 
@@ -560,19 +567,20 @@ class CaseRunner:
             self.steps += 1
             self.collector.emit(
                 EventCategory.AGENT, EventType.AGENT_STEP_STARTED, agent_id=agent,
+                metadata={"turn": turn, "max_steps": self.config.max_steps},
             )
 
             messages, contributors = self._build_context(agent, turn)
             attempt = await request_action(self.client, messages)
 
-            for raw_text, reason in attempt.failures:
+            for (raw_text, reason), latency_ms in zip(attempt.failures, attempt.latencies_ms):
                 self.parse_failures += 1
                 self.collector.emit(
                     EventCategory.AGENT, EventType.ACTION_PARSE_FAILED,
                     agent_id=agent,
                     result=raw_text,
                     derived_from=tuple(contributors),
-                    metadata={"reason": reason},
+                    metadata={"reason": reason, "latency_ms": latency_ms},
                 )
 
             if attempt.action is None:
@@ -590,6 +598,7 @@ class CaseRunner:
                 result=attempt.action.raw,
                 arguments=attempt.action.to_dict(),
                 derived_from=tuple(contributors),
+                metadata={"latency_ms": attempt.latencies_ms[-1]},
             )
 
             if self._dispatch(agent, attempt.action, output.step):

@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 from core.lab.model_client import (
+    ACTION_KINDS,
     ActionParseError,
     ActionAttempt,
     ModelClient,
@@ -500,6 +501,27 @@ class TestTokenBudget:
         config = ModelConfig(model="m", base_url="http://x.invalid/v1", max_tokens=1234)
         await ModelClient(config, transport=httpx.MockTransport(handler)).complete([])
         assert captured["payload"]["max_tokens"] == 1234
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("provider,json_mode", [("ollama", True), ("nvidia", False), ("groq", False)])
+    async def test_json_mode_is_requested_from_ollama_only(self, provider, json_mode):
+        """Small local models answer in prose without it; hosted providers
+        are left as measured."""
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _completion("{}")
+
+        config = ModelConfig(model="m", provider=provider, base_url="http://x.invalid/v1")
+        await ModelClient(config, transport=httpx.MockTransport(handler)).complete([])
+        assert ("response_format" in captured["payload"]) is json_mode
+        if json_mode:
+            # granite3.3:2b put the tool's name in `action` under plain JSON
+            # mode; the schema allows only the six action kinds there.
+            schema = captured["payload"]["response_format"]["json_schema"]["schema"]
+            assert set(schema["properties"]["action"]["enum"]) == set(ACTION_KINDS)
+            assert "db_query" in schema["properties"]["tool"]["enum"]
 
     @pytest.mark.asyncio
     async def test_truncated_reasoning_is_not_silently_accepted_as_an_action(self):

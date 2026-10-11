@@ -48,16 +48,17 @@ def _print_verdict(case: Dict[str, Any], clean, attack) -> None:
     print(f"  system outcome: {verdict.system_outcome.value}")
 
 
-def _suitability(pairs: List[Tuple[Any, Any]]) -> int:
+#: §21.9: above this share of unparseable replies, scores are biased.
+PARSE_FAILURE_GATE = 0.10
+
+
+def suitability(pairs: List[Tuple[Any, Any]]) -> Dict[str, Any]:
     """§21.9's gate. Parse failures are not a score — a model that cannot
     emit the action protocol biases every metric toward NOT_REACHED, so it is
     reported as unsuitable instead of being ranked.
     """
     steps = sum(r.step_count for pair in pairs for r in pair)
     failures = sum(r.parse_failure_count for pair in pairs for r in pair)
-    calls = sum(r.model_call_count for pair in pairs for r in pair)
-    rate = failures / steps if steps else 0.0
-
     reasons: Dict[str, int] = {}
     for pair in pairs:
         for result in pair:
@@ -65,16 +66,29 @@ def _suitability(pairs: List[Tuple[Any, Any]]) -> int:
                 if event.event_type.value == "agent_finished":
                     key = (event.metadata or {}).get("reason", "unknown")
                     reasons[key] = reasons.get(key, 0) + 1
+    rate = failures / steps if steps else 0.0
+    return {
+        "runs": len(pairs) * 2,
+        "model_calls": sum(r.model_call_count for pair in pairs for r in pair),
+        "steps": steps,
+        "parse_failures": failures,
+        "parse_failure_rate": rate,
+        "agent_endings": reasons,
+        "harness_errors": [r.harness_error for pair in pairs for r in pair if r.harness_error],
+        "suitable": rate <= PARSE_FAILURE_GATE,
+    }
 
+
+def _print_suitability(report: Dict[str, Any]) -> int:
     print("\n--- HARNESS SUITABILITY " + "-" * 28)
-    print(f"  runs:           {len(pairs) * 2} ({len(pairs)} pairs)")
-    print(f"  model calls:    {calls}")
-    print(f"  parse failures: {failures} / {steps} steps = {rate:.1%}")
-    print(f"  agent endings:  {reasons}")
-    if rate > 0.10:
+    print(f"  runs:           {report['runs']}")
+    print(f"  model calls:    {report['model_calls']}")
+    print(f"  parse failures: {report['parse_failures']} / {report['steps']} steps = {report['parse_failure_rate']:.1%}")
+    print(f"  agent endings:  {report['agent_endings']}")
+    if not report["suitable"]:
         print("  VERDICT: UNSUITABLE — above the ~10% gate in §21.9; scores would be biased")
         return 2
-    if reasons.get("max_steps"):
+    if report["agent_endings"].get("max_steps"):
         # Not a parse problem: the model emits valid actions but never stops.
         # Those agents burn the whole step budget, which lengthens trajectories
         # and adds drift that has nothing to do with the attack (§10.8).
@@ -89,7 +103,7 @@ async def main() -> int:
     parser.add_argument("--case", default="RGM-001", choices=case_ids(), help="case to run")
     parser.add_argument("--reps", type=int, default=1, help="CLEAN/ATTACK pairs to run")
     parser.add_argument("--provider", default="ollama", choices=["ollama", "nvidia", "groq"])
-    parser.add_argument("--model", default=None, help="model id (default: $LAB_MODEL or llama3.1:latest)")
+    parser.add_argument("--model", default=None, help="model id (default: $LAB_MODEL or granite3.3:2b)")
     parser.add_argument("--max-steps", type=int, default=10)
     parser.add_argument("--scripted", action="store_true",
                         help="replay the case's clean_script instead of calling a model (no network)")
@@ -127,7 +141,7 @@ async def main() -> int:
         print(f"\n--- rep {n} VERDICT " + "-" * 36)
         _print_verdict(case, clean, attack)
 
-    return _suitability(pairs)
+    return _print_suitability(suitability(pairs))
 
 
 if __name__ == "__main__":

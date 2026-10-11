@@ -34,7 +34,9 @@ one score. Defence arms: `attack`, `attack_validated`, `attack_bus_gateway`
 (oracle upper bound), `attack_capability_gateway` (CaMeL-style),
 `attack_permissive_tools`. Code: `core/lab/`, `backend/lab_api.py`,
 `backend/lab_store.py`, `backend/sweep.py`. Routes: `/lab`, `/lab/compare`,
-`/lab/experiments/[id]`, `/lab/runs/[id]`.
+`/lab/experiments/[id]`, `/lab/runs/[id]`. Experiments run as server-owned
+asyncio tasks (`_Job` in `lab_api.py`: `POST …/start|stop`, `GET …/stream`),
+so closing a tab does not stop one; one uvicorn worker only.
 
 Layout:
 - `app/`, `components/`, `lib/` — Next.js 16 / React 19 / TypeScript UI.
@@ -51,15 +53,18 @@ Layout:
   tiered scoring, benign controls, regex precision, measured leaderboard,
   lint/phone layout, v4.0.0, unused-code removal, first local results). Still
   open: hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
-- **632 tests pass** (~10 s, no LLM). `npm run typecheck` and `npm run lint`
+- **643 tests pass** (~15 s, no LLM). `npm run typecheck` and `npm run lint`
   are clean.
 - **First Mode A results** (granite3.3:2b via Ollama, pre-rewrite prompts):
   attack success with the filter off 19.6% baseline / 13.0% hardened; see
   `MODE_A_FIX_PLAN.md` for the table. Run real scans on local Ollama
   (`ollama_local_agent`), not the hosted NVIDIA agents.
 - **Mode B has no real-model results yet.** Every number so far is scripted or
-  synthetic. Next steps: a pilot on nemotron-3-super (1 arm, 3 cases, 2 reps),
-  then the full sweep (9 cases × 5 reps per arm).
+  synthetic. Real runs use local Ollama `granite3.3:2b` only (not hosted, not
+  llama3.1/qwen3). Branch `mode-b-live-view` carries `MODE_B_LIVE_PLAN.md`
+  phases 1–4 (server-owned runs, live agent cards/swimlane, Ollama JSON-schema
+  decoding: granite parse failures 85.7% → 0%); see its Status section.
+  Granite now emits valid actions but never calls `finish`.
 
 ### How Mode A scores (since `mode-a-fixes` phase 2)
 
