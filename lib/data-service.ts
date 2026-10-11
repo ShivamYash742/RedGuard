@@ -126,7 +126,90 @@ export interface LeaderboardRow {
   bds: number | null
 }
 
-const RAW_DATASETS: Record<string, any> = {
+interface DatasetFile {
+  description?: string
+  entries: Probe[]
+}
+
+// Raw row shapes returned by the FastAPI backend
+interface ApiSession {
+  id: string
+  sessionId: string
+  agentId: string | null
+  agentName: string | null
+  startedAt: string
+  finishedAt: string | null
+  totalProbes: number
+  blocked: number
+  allowed: number
+  status: string | null
+  benchmarkVersion: string | null
+  promptMode: string | null
+  filtered: number
+  refused: number
+  ignored: number
+  compromised: number
+  modelCompromised: number
+}
+
+export interface Stats {
+  totalSessions: number
+  totalProbes: number
+  totalEvaluationsFired: number
+  totalBlocked: number
+  totalAllowed: number
+  overallBlockRate: number
+  coverageGap: number
+}
+
+export interface AgentInfo {
+  id: string
+  name?: string
+  description?: string
+}
+
+export interface ReportCategory {
+  category: string
+  probes: number
+  blocked: number
+  allowed: number
+  mismatches: number
+  highest_risk_score: number
+  // tiered runs only
+  filtered?: number
+  refused?: number
+  ignored?: number
+  model_compromised?: number
+}
+
+export interface ReportOverall {
+  total_probes: number
+  blocked: number
+  allowed: number
+  mismatches: number
+  block_rate: number
+  session_id: string
+  agent_id: string
+  agent_name: string
+  model_name: string
+  system_prompt: string
+  // tiered runs only
+  prompt_mode?: string | null
+  filtered?: number
+  refused?: number
+  ignored?: number
+  model_compromised?: number
+}
+
+export interface RunReport {
+  sessionId: string
+  generatedAt: string
+  reportMarkdown: string
+  manifestSha256: string
+  reportJson: { overall: ReportOverall; category_breakdown: ReportCategory[] }
+}
+
+const RAW_DATASETS: Record<string, DatasetFile> = {
   direct_injection: directInjection,
   content_injection: contentInjection,
   exfiltration: exfiltration,
@@ -204,7 +287,7 @@ export function normalizeFamily(fam: string): string {
 class BenchmarkDataService {
   private static instance: BenchmarkDataService
   private allProbes: Probe[] = []
-  private cache: Map<string, { data: any; timestamp: number }> = new Map()
+  private cache: Map<string, { data: unknown; timestamp: number }> = new Map()
   private CACHE_TTL_MS = 60 * 1000 // 1 minute in-memory cache
 
   private constructor() {
@@ -222,7 +305,7 @@ class BenchmarkDataService {
     const probes: Probe[] = []
     Object.entries(RAW_DATASETS).forEach(([familyKey, dataset]) => {
       if (dataset && Array.isArray(dataset.entries)) {
-        dataset.entries.forEach((entry: any) => {
+        dataset.entries.forEach(entry => {
           probes.push({
             id: entry.id,
             title: entry.title || entry.id,
@@ -251,6 +334,11 @@ class BenchmarkDataService {
       }
     })
     this.allProbes = probes
+  }
+
+  private cached<T>(key: string): T | undefined {
+    const entry = this.cache.get(key)
+    return entry && Date.now() - entry.timestamp < this.CACHE_TTL_MS ? (entry.data as T) : undefined
   }
 
   public invalidateCache() {
@@ -353,14 +441,10 @@ class BenchmarkDataService {
   }
 
   // API Call: Fetch Stats
-  public async fetchStats(): Promise<any> {
+  public async fetchStats(): Promise<Stats | null> {
     const key = 'api_stats'
-    if (this.cache.has(key)) {
-      const entry = this.cache.get(key)!
-      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
-        return entry.data
-      }
-    }
+    const hit = this.cached<Stats>(key)
+    if (hit) return hit
     try {
       const res = await fetch('/api/stats')
       if (res.ok) {
@@ -371,23 +455,19 @@ class BenchmarkDataService {
     } catch (e) {
       console.error('Failed to fetch stats:', e)
     }
-    return { totalSessions: 0, totalProbes: this.allProbes.length, totalBlocked: 0, totalAllowed: 0, overallBlockRate: 0 }
+    return { totalSessions: 0, totalProbes: this.allProbes.length, totalEvaluationsFired: 0, totalBlocked: 0, totalAllowed: 0, overallBlockRate: 0, coverageGap: 0 }
   }
 
   // API Call: Fetch Sessions
   public async fetchSessions(): Promise<BenchmarkRun[]> {
     const key = 'api_sessions'
-    if (this.cache.has(key)) {
-      const entry = this.cache.get(key)!
-      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
-        return entry.data
-      }
-    }
+    const hit = this.cached<BenchmarkRun[]>(key)
+    if (hit) return hit
     try {
       const res = await fetch('/api/sessions')
       if (res.ok) {
         const data = await res.json()
-        const formatted: BenchmarkRun[] = data.map((s: any) => ({
+        const formatted: BenchmarkRun[] = data.map((s: ApiSession) => ({
           id: s.id,
           sessionId: s.sessionId,
           agentId: s.agentId || 'nemotron_3_ultra',
@@ -416,14 +496,10 @@ class BenchmarkDataService {
   }
 
   // API Call: Fetch Report
-  public async fetchReport(sessionId: string): Promise<any> {
+  public async fetchReport(sessionId: string): Promise<RunReport | null> {
     const key = `api_report_${sessionId}`
-    if (this.cache.has(key)) {
-      const entry = this.cache.get(key)!
-      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
-        return entry.data
-      }
-    }
+    const hit = this.cached<RunReport>(key)
+    if (hit) return hit
     try {
       const res = await fetch(`/api/reports/${sessionId}`)
       if (res.ok) {
@@ -438,7 +514,7 @@ class BenchmarkDataService {
   }
 
   // API Call: Fetch Agents
-  public async fetchAgents(): Promise<any[]> {
+  public async fetchAgents(): Promise<AgentInfo[]> {
     try {
       const res = await fetch('/api/agents')
       if (res.ok) return await res.json()

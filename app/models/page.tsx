@@ -142,7 +142,7 @@ export default function ModelsPage() {
               </div>
               <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
+                  <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData}>
                     <PolarGrid stroke="var(--border-default)" opacity={0.4} />
                     <PolarAngleAxis dataKey="family" tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 9 }} />

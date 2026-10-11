@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { Play, RefreshCw, FileText, Shield, Bot, Wrench, ArrowRight, History } from 'lucide-react'
 import { benchmarkDataService, normalizeFamily, KNOWN_AGENTS, KnownAgent, BenchmarkRun, OUTCOME_TIERS, TierCounts, emptyTierCounts, ControlCounts, emptyControlCounts } from '@/lib/data-service'
@@ -38,7 +38,7 @@ export default function RunsPage() {
     benchmarkDataService.fetchAgents().then(data => {
       if (data && data.length > 0) {
         // Merge real configured agents with the known badge/category metadata where ids match.
-        const merged: KnownAgent[] = data.map((a: any) => {
+        const merged: KnownAgent[] = data.map(a => {
           const known = KNOWN_AGENTS.find(k => k.id === a.id)
           return known || { id: a.id, name: a.name || a.id, badge: 'Configured Agent', category: 'custom' as const }
         })
@@ -61,15 +61,11 @@ export default function RunsPage() {
     loadHistory()
   }, [])
 
-  // Dynamically compute the total probes to evaluate based on selected families
-  useEffect(() => {
-    if (running) return
-    const allProbes = benchmarkDataService.getAllProbes()
-    const activeCount = allProbes.filter(p =>
-      selectedFamilies.length === 0 || selectedFamilies.some(f => normalizeFamily(f) === normalizeFamily(p.attack_family))
-    ).length
-    setProgress(p => ({ ...p, total: activeCount }))
-  }, [selectedFamilies, running])
+  // Probes the selected families will run; the server's count takes over once a run starts
+  const plannedTotal = useMemo(() => benchmarkDataService.getAllProbes().filter(p =>
+    selectedFamilies.length === 0 || selectedFamilies.some(f => normalizeFamily(f) === normalizeFamily(p.attack_family))
+  ).length, [selectedFamilies])
+  const displayTotal = running ? progress.total : plannedTotal
 
 
   const startScan = async () => {
@@ -141,7 +137,7 @@ export default function RunsPage() {
               const msgEvent = e as MessageEvent
               const payload = JSON.parse(msgEvent.data)
               console.error("Agent API error:", payload.message)
-            } catch (err) { }
+            } catch { }
             evtSource.close()
             resolve('error')
           })
@@ -338,7 +334,7 @@ export default function RunsPage() {
         <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-primary)]">
           <div className="flex items-center gap-2">
             <span>Evaluation Progress:</span>
-            <span className="font-mono text-sm font-bold text-[var(--primary)]">{progress.current} / {progress.total}</span>
+            <span className="font-mono text-sm font-bold text-[var(--primary)]">{progress.current} / {displayTotal}</span>
           </div>
         </div>
 

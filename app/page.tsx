@@ -1,13 +1,13 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta } from '@/lib/data-service'
+import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta, Stats } from '@/lib/data-service'
 import { CardSkeleton, TableSkeleton } from '@/components/Skeletons'
 import EmptyState from '@/components/EmptyState'
 import { ShieldAlert, Play, Boxes, Award, ArrowUpRight } from 'lucide-react'
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<any>(null)
+  const [stats, setStats] = useState<Stats | null>(null)
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
   const [families, setFamilies] = useState<AttackFamilyMeta[]>([])
   const [probeCount, setProbeCount] = useState<number>(50)

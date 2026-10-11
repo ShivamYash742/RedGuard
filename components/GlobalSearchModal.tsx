@@ -1,8 +1,8 @@
 "use client"
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { searchBenchmark, SearchResultItem } from '@/lib/search-index'
-import { Search, X, Shield, FileText, ArrowRight, CornerDownLeft } from 'lucide-react'
+import { Search, X, Shield, FileText, CornerDownLeft } from 'lucide-react'
 
 interface GlobalSearchModalProps {
   isOpen: boolean
@@ -11,19 +11,14 @@ interface GlobalSearchModalProps {
 
 export default function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModalProps) {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const router = useRouter()
+  const results: SearchResultItem[] = useMemo(() => (query.trim() ? searchBenchmark(query) : []), [query])
 
-  useEffect(() => {
-    if (query.trim()) {
-      const res = searchBenchmark(query)
-      setResults(res)
-      setSelectedIndex(0)
-    } else {
-      setResults([])
-    }
-  }, [query])
+  const updateQuery = (q: string) => {
+    setQuery(q)
+    setSelectedIndex(0)
+  }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -62,11 +57,11 @@ export default function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModal
             autoFocus
             placeholder="Search probes (RG-DI-001), attack families, scenarios, models..."
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => updateQuery(e.target.value)}
             className="w-full py-4 bg-transparent text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none"
           />
           {query && (
-            <button onClick={() => setQuery('')} className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+            <button onClick={() => updateQuery('')} className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               <X className="h-4 w-4" />
             </button>
           )}

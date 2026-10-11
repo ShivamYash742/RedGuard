@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { benchmarkDataService, BenchmarkRun, OUTCOME_TIERS } from '@/lib/data-service'
+import { benchmarkDataService, BenchmarkRun, OUTCOME_TIERS, RunReport, ReportCategory } from '@/lib/data-service'
 import { FileText, Download, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -10,7 +10,7 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
   const router = useRouter()
 
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
-  const [report, setReport] = useState<any>(null)
+  const [report, setReport] = useState<RunReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [showPrompt, setShowPrompt] = useState(false)
 
@@ -54,10 +54,10 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
     const headers = hasTiers
       ? ['Category', 'Probes', 'Filtered', 'Refused', 'Ignored', 'Compromised', 'ModelAloneCompromised', 'HighestRiskScore']
       : ['Category', 'Probes', 'Blocked', 'Allowed', 'HighestRiskScore']
-    const rows = categoryBreakdown.map((cb: any) => hasTiers
+    const rows = categoryBreakdown.map((cb: ReportCategory) => hasTiers
       ? [cb.category, cb.probes, cb.filtered, cb.refused, cb.ignored, cb.allowed, cb.model_compromised, cb.highest_risk_score || 0]
       : [cb.category, cb.probes, cb.blocked, cb.allowed, cb.highest_risk_score || 0])
-    const csvContent = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -225,7 +225,7 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
                   </tr>
                 </thead>
                 <tbody>
-                  {categoryBreakdown.map((cb: any, idx: number) => (
+                  {categoryBreakdown.map((cb: ReportCategory, idx: number) => (
                     <tr key={idx}>
                       <td className="font-bold capitalize text-xs text-[var(--text-primary)]">{cb.category.replace(/_/g, ' ')}</td>
                       <td className="font-mono text-xs text-center">{cb.probes}</td>
