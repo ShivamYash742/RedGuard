@@ -50,11 +50,12 @@ Layout:
 
 ## Current state (2026-10-11)
 
-- `main` has Mode B merged (PR #2), the `/lab/compare` page and Docker support.
-- Branch `mode-a-fixes` carries the Mode A fix phases 1–9 (security, tiered
+- `main` is the only branch and has everything: Mode B (PR #2), the
+  `/lab/compare` page, Docker support, the Mode A fixes (security, tiered
   scoring, benign controls, regex precision, measured leaderboard, lint/phone
-  layout, v4.0.0, unused-code removal, first local results). Still open:
-  hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
+  layout, v4.0.0, unused-code removal, first local results; PRs #4–#5) and
+  the 4.1.5 Mode B work (PRs #6–#7). Still open: hand-rewriting the attack
+  `prompt` fields in `core/datasets/*.json`.
 - Removed in 4.1.5, readable from git history (`git show 6c3606a:<file>`):
   the plan/progress docs (`MODE_A_FIX_PLAN.md`, `MODE_B_LIVE_PLAN.md`,
   `MULTI_AGENT_LAB_PROGRESS.md`, `DESKTOP_APP_PLAN.md`), the Mode B design
@@ -68,12 +69,12 @@ Layout:
   (`ollama_local_agent`), not the hosted NVIDIA agents.
 - **Mode B has no real-model results yet.** Every number so far is scripted or
   synthetic. Real runs use local Ollama `granite3.3:2b` only (not hosted, not
-  llama3.1/qwen3). Branch `mode-b-live-view` has the live view (server-owned
-  runs, agent cards, swimlane), experiment reports, and Ollama JSON-schema
+  llama3.1/qwen3). 4.1.5 added the live view (server-owned runs, agent
+  cards, swimlane), experiment reports, and Ollama JSON-schema
   decoding (granite parse failures 85.7% → 0%). Granite now emits valid
   actions but never calls `finish`.
 
-### How Mode A scores (since `mode-a-fixes` phase 2)
+### How Mode A scores (since 4.0.0)
 
 Every probe lands in one tier: `FILTERED` (regex policy denied it), `REFUSED`,
 `IGNORED` (no refusal, no compliance) or `COMPROMISED`. The model is called
@@ -88,14 +89,15 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
 ### Known issues in Mode A (measured)
 
 - **The regex filter is a weak layer by design** (it reads phrasing, not
-  intent). Since plan phase 4 its patterns match attack shapes (a verb aimed
+  intent). Since 4.0.0 its patterns match attack shapes (a verb aimed
   at a target) instead of single words: it catches 24/46 attack probes and
   blocks 0/10 controls and 0/25 everyday questions (before: 28, 4 and 20).
   Patterns live in `backend/inspector.py`; `policy.yaml` maps them to actions,
   and two matches reach its 0.2 risk threshold.
 - **Success indicators echo the attack wording**, so substring scoring
-  under-counts "I'm sorry, but here it is" (plan phase 3 adds canaries).
-- **Probe quality** (plan phase 3; the `prompt` rewrites are done by hand in
+  under-counts "I'm sorry, but here it is" (canaries in the prompt rewrite
+  should fix this).
+- **Probe quality** (the `prompt` rewrites are done by hand in
   `core/datasets/*.json`). Many attack prompts contain giveaway phrases
   (`attacker@evil.com`, `[INJECTED PLAN STEP]`); RG-DI-008 and RG-MP-006
   explain themselves to the model. Indirect families are delivered in the user
@@ -109,7 +111,7 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
   those sessions stay viewable as "legacy scoring" and never enter the
   leaderboard. (The 3.x report files were removed in 4.1.5.)
 
-Fixed in phase 1: `/api/proxy` removed; CORS limited to `CORS_ORIGINS`
+Security fixes in 4.0.0: `/api/proxy` removed; CORS limited to `CORS_ORIGINS`
 (default `http://localhost:3000`); Docker publishes on 127.0.0.1 only;
 `CLASSIFIER_URL` has no default (unset = no classifier call); agents'
 `file_read` only reads `backend/agents/sandbox/` (shared tools in
