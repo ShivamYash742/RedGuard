@@ -1,21 +1,46 @@
-# RedGuard v4.1.5 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v4.2.0 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-4.1.5-blue.svg)](./package.json)
-[![Benchmark](https://img.shields.io/badge/benchmark-v4.0.0-indigo.svg)](./core/version.py)
-[![Dataset](https://img.shields.io/badge/dataset-v4.0.0-emerald.svg)](./core/datasets)
+[![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)](./package.json)
+[![Benchmark](https://img.shields.io/badge/benchmark-v4.0.0-indigo.svg)](./core/shared/version.py)
+[![Dataset](https://img.shields.io/badge/dataset-v4.0.0-emerald.svg)](./core/scanner_mode/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
 
 The platform combines a research-focused **Next.js 16 frontend** (styled after Hugging Face Leaderboards, MLPerf, Weights & Biases, Kaggle, and OpenAI System Cards) with a **FastAPI backend engine**. It has two modes:
 
-- **Mode A — probe scanner.** Single-turn adversarial probes against one agent: *what does one model do with an attack prompt?*
-- **Mode B — multi-agent lab.** An attack planted in something one agent reads, followed through a chain of three agents: *what does the whole system do with it?*
+- **Scanner mode** (formerly Mode A). Single-turn adversarial probes against one agent: *what does one model do with an attack prompt?*
+- **Lab mode** (formerly Mode B). An attack planted in something one agent reads, followed through a chain of three agents: *what does the whole system do with it?*
+
+Each mode has its own place in every layer of the code — see [`docs/architecture.md`](./docs/architecture.md) for the one-page map.
 
 ---
 
-## 🆕 What's new in 4.1.5
+## 🆕 What's new
 
-**Mode B UI and live dynamics**
+### 4.2.0 — one place for each mode
+
+The project is reorganised so that anyone can tell what belongs to which mode:
+**every layer has the same three folders — `shared/`, `scanner_mode/`, `lab_mode/`** —
+and the two modes never import each other.
+
+| Layer | `shared/` | `scanner_mode/` | `lab_mode/` |
+|---|---|---|---|
+| Pages `app/` | `/`, `/settings`, layout | `(scanner_mode)/` corpus, runs, models | `(lab_mode)/` lab |
+| UI parts `components/` | header, sidebar, search, skeletons | probe drawer, tier bar | stage, agent cards, swimlane |
+| UI data `lib/` | — | data service, search index | lab service |
+| API `backend/` | `app.py`, `database.py`, `prisma/` | `api.py`, scanner, inspector, agents, leaderboard, `cli/` | `api.py`, `store.py`, `sweep.py` |
+| Library `core/` | version, statistics, reproducibility | probe datasets, BDS | the multi-agent harness |
+| Tests | boundary checks | scanner tests | lab tests |
+
+- Every URL and every `/api/…` path is unchanged (the `(…)` folders are Next.js route groups, which do not appear in URLs).
+- `backend/app.py` is now only the shared app; Scanner mode's routes moved to `backend/scanner_mode/api.py`.
+- The boundary is enforced: `core/tests/shared/test_mode_boundaries.py` and an ESLint `no-restricted-imports` rule fail if one mode imports the other.
+- `policy.yaml` is read by path, not relative to the server's working directory.
+- The legacy CLIs moved from `scripts/` to `backend/scanner_mode/cli/` and import correctly again.
+- Commands that changed: `python -m core.lab_mode.cases|smoke`, `python -m lab_mode.sweep`, `python -m scanner_mode.target_agent`, `python docs/scanner_mode/spec_generator.py`.
+- `docs/architecture.md` is rewritten as the map of the project.
+
+### 4.1.5 — Lab mode UI and live dynamics
 
 - **Runs belong to the server.** An experiment runs as a server-owned task: closing or reloading the tab no longer stops it, any number of tabs can watch the same run, a reload rejoins it where it is, and Stop cancels it for every viewer. `/lab` marks running experiments with a live badge and their progress.
 - **Live agent cards.** One card per agent with what it is doing now — *thinking 12 s* (ticking), *invalid reply, retrying*, *acted after 3 s*, *waiting for upstream*, or *finished* with the reason (called finish / used its whole step budget / gave up) — plus step *n* of max, its last action and target, refusals and invalid replies.
@@ -36,27 +61,27 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 | Reclassified as a control | RG-GD-002 | A benign request, not an attack |
 | Added controls | RG-CTL-001 … RG-CTL-009 | Harmless requests that measure over-refusal and regex false positives |
 
-**Versions.** 4.1.5 is the release (the code, `package.json`, the UI). The benchmark, dataset and probe-schema versions stay **4.0.0**: Mode A scoring and the probe set did not change, so 4.0.0 results remain comparable and stay on the leaderboard.
+**Versions.** 4.2.0 is the release (the code, `package.json`, the UI). The benchmark, dataset and probe-schema versions stay **4.0.0**: Scanner mode scoring and the probe set did not change, so 4.0.0 results remain comparable and stay on the leaderboard.
 
 ---
 
-## ✨ Key Features (v4.1.5)
+## ✨ Key Features (v4.2.0)
 
 | Feature | Description |
 |---|---|
 | **Measured Leaderboard** | One row per agent and system-prompt mode, from stored runs only: attack success with the regex filter off and on (Wilson 95% CIs), per-family resistance, over-refusal, and Behaviour Drift Score (BDS) |
 | **Research Visualizations** | Recharts Radar Charts (Attack family comparison) and Stacked Outcome Distribution Bars (comparison page) |
-| **6 Navigation Hubs** | Overview, Corpus (families/probes/scenarios), Runs (live execution & history), Models & Ranking, Lab (Mode B), & Settings — v3 consolidated the original 14 routes into 5, plus Mode B's own `/lab` |
+| **6 Navigation Hubs** | Overview, Corpus (families/probes/scenarios), Runs (live execution & history), Models & Ranking, Lab, & Settings — v3 consolidated the original 14 routes into 5, plus Lab mode's own `/lab` |
 | **Global Search (`⌘K`)** | Fast client-side fuzzy search overlay (`lib/search-index.ts`) matching Probe IDs, Titles, Attack Families, Scenarios, Models, and Reports |
 | **8 Attack Families Taxonomy** | Direct Injection, Content Injection, Data Exfiltration, Goal Diversion, Memory Poisoning, Autonomous Actions, Planning Manipulation, & Tool Manipulation |
 | **46 Attack Probes + 10 Benign Controls** | Auditable JSON dataset entries with research paper citations (arXiv IDs, venues, authors), difficulty levels, & threat models. Controls are harmless requests that measure over-refusal and regex false positives |
 | **12 Application Scenarios** | GitHub, GitLab, Wiki, Documentation, Email, Calendar, Banking, Travel, Shopping, Support, Forum, & Reddit simulation environments |
 | **Live SSE Execution Suite** | Real-time Server-Sent Events stream: every probe lands in one tier — Filtered (regex), Refused, Ignored or Compromised — with live counters per family; benign controls counted separately |
 | **Tiered Scoring** | Each probe is scored with its own success/blocked indicators; the model sees every probe (even ones the regex blocks), so results exist both as deployed and for the model alone. Agents run with a neutral system prompt unless the run selects the hardened one |
-| **Multi-Agent Lab (Mode B)** | 9 cases, 3 agents (A researcher → B validator → C executor), every action executed and recorded by the harness, 5 defence arms, four-dimension verdicts, clean control run for every attack run |
-| **Live Run View (Mode B)** | Agent cards with a ticking status, per-agent swimlane timeline, stage for clean and attack runs, per-run progress with elapsed time and ETA, event feed — from any tab, after a reload |
-| **Experiment Reports (Mode B)** | Generated from stored traces after a run: findings, suitability, rates with intervals, containment, per agent / case / run, evidence trail; Markdown & JSON |
-| **Multi-Format Export** | Mode A reports in Markdown (`.md`) and CSV (`.csv`); Mode B experiment reports in Markdown and JSON, and per-run evidence bundles |
+| **Lab mode: Multi-Agent Lab** | 9 cases, 3 agents (A researcher → B validator → C executor), every action executed and recorded by the harness, 5 defence arms, four-dimension verdicts, clean control run for every attack run |
+| **Lab mode: Live Run View** | Agent cards with a ticking status, per-agent swimlane timeline, stage for clean and attack runs, per-run progress with elapsed time and ETA, event feed — from any tab, after a reload |
+| **Lab mode: Experiment Reports** | Generated from stored traces after a run: findings, suitability, rates with intervals, containment, per agent / case / run, evidence trail; Markdown & JSON |
+| **Multi-Format Export** | Scanner mode reports in Markdown (`.md`) and CSV (`.csv`); Lab mode experiment reports in Markdown and JSON, and per-run evidence bundles |
 | **BibTeX Citation Exporter** | Built-in academic citation snippet generator for research paper citations |
 
 ---
@@ -64,43 +89,43 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v4.1.5 Platform
+                        RedGuard v4.2.0 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                         │
-│ ├── Overview (6 Stat Scorecards)     ├── Corpus (Probes/Families/   │
-│ ├── Runs (Live SSE Execution +           Scenarios/Datasets)        │
-│ │      History)                      ├── Models & Ranking (Radar)   │
-│ ├── Lab — Mode B launcher, live      ├── Settings (System/Policy/   │
-│ │      view, replay & reports            Audit tabs)                │
-│ └── Global Search Modal (⌘K)                                        │
-│      (6 Navigation Hubs · 46 Probes + 10 Controls · 9 Mode B Cases) │
+│ shared         Overview · Settings · Header/Sidebar · ⌘K search     │
+│ scanner_mode   /corpus (probes, families, scenarios) · /runs (live  │
+│                SSE scans, history) · /models (leaderboard, radar)   │
+│ lab_mode       /lab · live view · replay · reports · compare        │
 └──────────────────────────────────┬──────────────────────────────────┘
-                                   │ HTTP / SSE Stream
+                                   │ HTTP / SSE (/api/…)
 ┌──────────────────────────────────┴──────────────────────────────────┐
-│                      FastAPI Backend Engine                         │
-│ Mode A                               Mode B                         │
-│ ├── Inspector (YAML policy engine)   ├── CEE + ToolGateway          │
-│ ├── ML Classifier (adversarial       ├── Topology / MessageBus      │
-│ │      verdict)                      ├── CaseRunner (harness-owned  │
-│ ├── Agent Loader (backend/agents/)   │      agent loop)             │
-│ │  Nemotron-3 Ultra/Super, GPT OSS   ├── Evaluator (4-dim verdict)  │
-│ │  120B/20B (Groq), Ollama           ├── Experiment jobs (server-   │
-│ ├── Scanner & Report Generator       │      owned, SSE fan-out)     │
-│ │                                    ├── Report builder             │
-│ │                                    └── lab_api.py (/api/lab)      │
-│ └── Prisma ORM → Local SQLite Database (5 Mode A + 3 Mode B models) │
+│                      FastAPI backend (:8000)                        │
+│ shared         app.py (CORS, health, mounts routers) · database.py  │
+│ scanner_mode   api.py · scanner · inspector + policy.yaml · agents/ │
+│                leaderboard · report generator · cli/                │
+│ lab_mode       api.py (experiment jobs, SSE fan-out, reports)       │
+│                store.py · sweep.py                                  │
+│ prisma/        SQLite: 5 Scanner mode + 3 Lab mode models           │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   │ imports
+┌──────────────────────────────────┴──────────────────────────────────┐
+│                core/ — pure Python library (no HTTP, no DB)         │
+│ shared         version · statistics · reproducibility               │
+│ scanner_mode   datasets/ (46 probes + 10 controls) · BDS            │
+│ lab_mode       environment (CEE) · topology · tools · model client  │
+│                runner · trace · evaluator · metrics · report · cases│
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Mode B — the multi-agent security lab
+### Lab mode — the multi-agent security lab
 
-Everything in the feature list up to Tiered Scoring is **Mode A**: single-turn
+Everything in the feature list up to Tiered Scoring is **Scanner mode**: single-turn
 probes, each scored with its own indicators into one of four tiers (Filtered /
 Refused / Ignored / Compromised). It answers *what does one model do with an
 attack prompt?*
 
-**Mode B** (`/lab`) answers a different question — *when an attacker hides an
+**Lab mode** (`/lab`) answers a different question — *when an attacker hides an
 instruction inside content an agent reads, what does the whole system of
 agents actually do?* Three agents pass work along a chain, and the harness —
 not the model — executes every action, so nothing is self-reported.
@@ -195,7 +220,7 @@ curl localhost:8000/api/lab/experiments/<id>/report              # JSON
 curl -OJ "localhost:8000/api/lab/experiments/<id>/report?format=md"  # Markdown file
 ```
 
-#### Mode B API
+#### Lab mode API
 
 | Endpoint | Purpose |
 |---|---|
@@ -216,15 +241,15 @@ Stream events: `experiment_started` (model, step budget, agents),
 `case_rescored`, and one of `experiment_complete` / `experiment_stopped` /
 `experiment_error`.
 
-Mode B is additive — no Mode A file, model, endpoint or verdict is affected.
-No real-model Mode B results are published yet; every number so far is from
+Lab mode and Scanner mode never import each other's code; a test and a lint rule enforce it.
+No real-model Lab mode results are published yet; every number so far is from
 scripted runs or harness checks.
 
 ---
 
 ## 📊 Measured results
 
-**Mode A**, Ollama `granite3.3:2b`, 4.0.0 probes (46 attacks + 10 controls)
+**Scanner mode**, Ollama `granite3.3:2b`, 4.0.0 probes (46 attacks + 10 controls)
 before the attack prompts are rewritten, so a baseline to beat:
 
 | Prompt mode | Runs | Attack success, model alone | Attack success, as deployed | Over-refusal |
@@ -240,7 +265,7 @@ before the attack prompts are rewritten, so a baseline to beat:
   poisoning 6/12.
 - BDS needs 3 runs per prompt mode and is not reported yet.
 
-**Mode B** has no real-model results yet. `granite3.3:2b` passes the
+**Lab mode** has no real-model results yet. `granite3.3:2b` passes the
 harness-suitability gate (0 invalid replies in 60 steps) but never calls
 `finish`, so its agents use their whole step budget.
 
@@ -248,126 +273,77 @@ harness-suitability gate (0 invalid replies in 60 steps) but never calls
 
 ## 📁 Repository Structure
 
+Every layer has the same three drawers — `shared/`, `scanner_mode/`, `lab_mode/`.
+The full map, with how a request flows through each mode, is in
+[`docs/architecture.md`](./docs/architecture.md).
+
 ```
 RedGuard/
-├── app/                               # Next.js App Router pages
-│   │                                  # v3 IA: 14 routes consolidated into 5 hubs
-│   │                                  # + Mode B's own /lab section (old routes 301-redirect, see next.config.js)
-│   ├── page.tsx                       # Overview — Dashboard (6 Research Cards + Taxonomy Grid)
-│   ├── corpus/page.tsx                # Corpus — Probes, Attack Families & Scenarios (was /probes, /attack-families, /scenarios, /datasets)
-│   │   ├── families/[familyId]/page.tsx
-│   │   └── probes/[probeId]/page.tsx
-│   ├── runs/page.tsx                  # Runs — Live SSE Execution Suite + History (was /benchmark, /history)
-│   │   └── [sessionId]/page.tsx       # Run/session report (was /reports?session=)
-│   ├── models/page.tsx                # Models & Ranking — Leaderboard, Radar Chart & Matrix (was /comparison)
-│   ├── settings/page.tsx              # Settings — System Health, Policy & Citation, Audit Log tabs (was /policy, /audit)
-│   ├── lab/page.tsx                   # Mode B — launcher (defence, cases, model, instant demo, Test model) & experiment list
-│   │   ├── compare/page.tsx           # Cross-arm comparison
-│   │   ├── experiments/[experimentId]/page.tsx         # Live view: stage, agent cards, swimlane, progress, ledger, rates
-│   │   ├── experiments/[experimentId]/report/page.tsx  # Experiment report (Markdown / JSON download)
-│   │   └── runs/[runId]/page.tsx      # Per-run replay: stage, scrubber, swimlane, timeline, environment diff
-│   ├── globals.css                    # Academic surface tokens & badges
-│   └── layout.tsx                     # Root layout with Header & Sidebar
+├── app/                               # Next.js pages — URLs unchanged by the folders in ( )
+│   ├── layout.tsx, globals.css        # shared: root layout
+│   ├── page.tsx                       # shared: Overview (/)
+│   ├── settings/                      # shared: Settings — system health, policy, audit log
+│   ├── (scanner_mode)/
+│   │   ├── corpus/                    # /corpus — probes, families, scenarios (+ /corpus/probes/[id], /families/[id])
+│   │   ├── runs/                      # /runs — live SSE scans and history (+ /runs/[sessionId] report)
+│   │   └── models/                    # /models — leaderboard, radar chart, matrix
+│   └── (lab_mode)/
+│       └── lab/                       # /lab launcher · /lab/compare · /lab/experiments/[id] (live view, report) · /lab/runs/[id] (replay)
 │
-├── components/                        # Shared UI components
-│   ├── Header.tsx                     # Top Bar (Version badges, ⌘K Search, Theme)
-│   ├── Sidebar.tsx                    # Nav: Overview, Corpus, Runs, Models, Lab, Settings
-│   ├── ClientLayout.tsx               # Client-side layout wrapper
-│   ├── GlobalSearchModal.tsx          # ⌘K Keyboard-Navigable Search Overlay
-│   ├── ProbeDrawer.tsx                # Slide-over Metadata Inspection Drawer
-│   ├── TierBar.tsx                    # Mode A outcome-tier bar
-│   ├── LabRoute.tsx                   # Mode B propagation stage, route strips & glyphs
-│   ├── AgentCards.tsx                 # Mode B live agent status cards
-│   ├── AgentSwimlane.tsx              # Mode B per-agent timeline (live and replay)
-│   ├── Skeletons.tsx                  # Table, Card & Chart Skeleton Loaders
-│   └── EmptyState.tsx                 # Zero-data UI states
+├── components/
+│   ├── shared/                        # ClientLayout, Header, Sidebar, GlobalSearchModal (⌘K), EmptyState, Skeletons
+│   ├── scanner_mode/                  # ProbeDrawer, TierBar
+│   └── lab_mode/                      # LabRoute (propagation stage), AgentCards, AgentSwimlane
 │
-├── lib/                               # Frontend data services
-│   ├── data-service.ts                # Singleton BenchmarkDataService & Cache (Mode A)
-│   ├── lab-service.ts                 # Mode B API client, SSE stream, live route derivation
-│   └── search-index.ts                # Client-side Search Index Engine
+├── lib/
+│   ├── scanner_mode/                  # data-service.ts (probes, scans, leaderboard), search-index.ts
+│   └── lab_mode/                      # lab-service.ts (lab API client, SSE stream, live route derivation)
 │
-├── core/                              # Shared Python research library (importable by backend)
-│   ├── datasets/                      # 8 JSON families: 46 attack probes + 10 benign controls — Mode A
-│   │   ├── direct_injection.json      # 8 attacks + 2 controls
-│   │   ├── content_injection.json     # 9 attacks + 1 control
-│   │   ├── exfiltration.json          # 6 attacks + 2 controls
-│   │   ├── goal_diversion.json        # 3 attacks + 1 control
-│   │   ├── memory_poisoning.json      # 6 attacks + 1 control
-│   │   ├── autonomy.json              # 5 attacks + 1 control
-│   │   ├── planning.json              # 5 attacks + 1 control
-│   │   ├── tool_security.json         # 4 attacks + 1 control
-│   │   ├── schema.json                # Probe JSON schema definition
-│   │   ├── loader.py                  # Dataset loader (used by FastAPI backend)
-│   │   └── validator.py               # Schema validation utilities
-│   ├── benchmark/                     # BDS, Wilson CIs, reproducibility stamp (shared by both modes)
-│   ├── lab/                           # Multi-agent harness — Mode B (never imports backend/)
-│   │   ├── cases/                     # 9 security test cases (JSON) + case_schema.json
-│   │   ├── cee.py                     # Controlled Execution Environment
-│   │   ├── topology.py                # Agent graph + MessageBus
-│   │   ├── tools.py                   # ToolGateway (agent↔CEE authorization chokepoint)
-│   │   ├── model_client.py            # The only network-touching module; action schema for Ollama
-│   │   ├── runner.py                  # Harness-owned agent loop (CaseRunner)
-│   │   ├── trace.py                   # EventCollector, provenance/taint closure
-│   │   ├── evaluator.py               # 4-dimension verdict (impact/objective/containment/outcome)
-│   │   ├── metrics.py / analysis.py   # Cross-run metrics & aggregation
-│   │   ├── evidence.py                # Evidence bundle builder
-│   │   ├── report.py                  # Experiment report (JSON + Markdown)
-│   │   ├── repro.py                   # Reproducibility stamp
-│   │   └── smoke.py                   # No-DB model-suitability smoke test (10% gate)
-│   ├── version.py                     # Canonical Version Constants
-│   └── __init__.py
-│
-├── backend/                           # FastAPI Service (:8000)
-│   ├── app.py                         # FastAPI endpoints & CORS configuration — Mode A
-│   ├── scanner.py                     # Scan loop, tiered scoring (score()) & SSE streams — Mode A
-│   ├── inspector.py                   # Regex filter (attack-shape patterns) + policy.yaml rules — Mode A
-│   ├── leaderboard.py                 # Measured leaderboard rows (/api/leaderboard) — Mode A
-│   ├── agent_loader.py                # Plugin agent auto-discovery — Mode A
-│   ├── database.py                    # Prisma ORM connection
-│   ├── schema.py                      # Pydantic request/response schemas
-│   ├── report_generator.py            # Evaluation report generation — Mode A
-│   ├── target_agent.py                # Interactive CLI to chat with any agent — Mode A
-│   ├── policy.yaml                    # YAML security policy rules — Mode A
-│   ├── lab_api.py                     # Mode B HTTP surface (/api/lab/*), experiment jobs, SSE fan-out, report endpoint
-│   ├── lab_store.py                   # Mode B persistence (Experiment/LabRun/TraceEvent)
-│   ├── sweep.py                       # Mode B batch experiment CLI driver
-│   ├── agents/                        # Configured Model Agents — Mode A
-│   │   ├── nemotron_3_ultra.py        # Nemotron-3 Ultra (550B)
-│   │   ├── nemotron_super_agent.py    # Nemotron-3 Super (120B)
-│   │   ├── gpt_oss_120b_agent.py      # GPT OSS 120B (Groq)
-│   │   ├── llama_3_1_8b_agent.py      # GPT OSS 20B (Groq; file name is historical)
-│   │   ├── ollama_local_agent.py      # Ollama Local Agent (granite3.3:2b for the measured results)
-│   │   ├── example_custom_agent.py    # Custom Template Agent
-│   │   ├── _tools.py                  # Shared tools; file_read is confined to agents/sandbox/
-│   │   └── system_prompts.json        # Neutral baseline prompt + per-agent hardened prompts
-│   ├── tests/                         # Backend unit tests (inspector, scanner, lab_store, lab_api)
-│   ├── prisma/schema.prisma           # Database schema (SQLite) — 5 Mode A models + 3 Mode B models
-│   ├── prisma/dev.db                  # Local SQLite database (seeded demo data — see note below)
+├── backend/                           # FastAPI on :8000 — run from here (uvicorn app:app)
+│   ├── app.py                         # shared: the app, CORS, /api/health; mounts both routers
+│   ├── database.py                    # shared: Prisma connection
+│   ├── prisma/                        # shared: schema.prisma (5 Scanner + 3 Lab models) and dev.db demo data
+│   ├── scanner_mode/
+│   │   ├── api.py                     # every Scanner route: /api/scan/*, /api/sessions, /api/leaderboard, /api/policy, …
+│   │   ├── scanner.py                 # scan loop and tiered scoring (score())
+│   │   ├── inspector.py, policy.yaml  # regex filter and its rules
+│   │   ├── agents/                    # the agents under test, auto-discovered (+ system_prompts.json, sandbox/)
+│   │   ├── agent_loader.py, leaderboard.py, report_generator.py, schema.py
+│   │   ├── target_agent.py            # interactive chat with any agent
+│   │   └── cli/                       # legacy standalone CLIs (redteam_agent, audit_report, dashboard, add_custom_probes)
+│   ├── lab_mode/
+│   │   ├── api.py                     # /api/lab/*: experiments, server-owned jobs, SSE fan-out, metrics, report
+│   │   ├── store.py                   # persistence of experiments, runs and trace events
+│   │   └── sweep.py                   # batch experiment CLI
+│   ├── tests/                         # conftest.py (shared fixtures) · scanner_mode/ · lab_mode/
 │   └── requirements.txt
 │
-├── docs/                              # Project documentation & research specs
-│   ├── architecture.md                # System architecture
-│   ├── benchmark_spec.md              # Probe specification (generated by spec_generator.py)
-│   ├── literature_mapping.md          # Academic citations & literature mapping
-│   ├── research_paper.md              # Benchmark research paper draft
-│   └── spec_generator.py              # Spec auto-generator script
+├── core/                              # pure Python library — no HTTP, no database, never imports backend/
+│   ├── shared/                        # version.py (all version constants), statistics.py (Wilson CIs), reproducibility.py
+│   ├── scanner_mode/
+│   │   ├── datasets/                  # 8 JSON families: 46 attack probes + 10 benign controls, schema, loader, validator
+│   │   └── bds.py                     # Behaviour Drift Score
+│   ├── lab_mode/                      # the multi-agent harness
+│   │   ├── cases/, fixtures/          # 9 test cases (+ case_schema.json) and the shared environment
+│   │   ├── cee.py, topology.py, tools.py   # simulated environment, agent graph + message bus, tool gateway
+│   │   ├── model_client.py, runner.py # the only network module; the harness-owned agent loop
+│   │   ├── trace.py, evaluator.py     # provenance trace; four-dimension verdict
+│   │   ├── metrics.py, analysis.py    # rates, intervals, cross-arm comparison
+│   │   ├── evidence.py, report.py, repro.py   # evidence bundles, experiment reports, reproducibility stamp
+│   │   └── smoke.py                   # model-suitability check (10% gate)
+│   └── tests/                         # shared/ (incl. the mode-boundary check) · scanner_mode/ · lab_mode/
 │
-├── scripts/                           # Developer & research utility scripts (standalone, no DB)
-│   ├── add_custom_probes.py           # Custom probe bulk-import script
-│   ├── audit_report.py                # Standalone CLI audit report generator
-│   ├── dashboard.py                   # Standalone CLI results dashboard
-│   ├── redteam_agent.py               # Standalone CLI redteam agent
-│   └── CLI_README.md                  # CLI documentation
+├── docs/
+│   ├── architecture.md                # the map of the project
+│   ├── research_paper.md, literature_mapping.md
+│   └── scanner_mode/                  # benchmark_spec.md and spec_generator.py
 │
+├── docker/, docker-compose*.yml       # images and compose files
 ├── README.md
-├── CLAUDE.md / AGENTS.md              # Guidance for coding agents (architecture notes, setup)
-├── PRODUCT.md                         # Product and design context
-├── .env / .env.example
-├── package.json                       # Frontend deps & dev:all script
-├── next.config.js
-├── tailwind.config.ts
-└── tsconfig.json
+├── CLAUDE.md / AGENTS.md              # guidance for coding agents
+├── PRODUCT.md                         # product and design context
+├── package.json                       # frontend deps & dev:all script
+└── next.config.js, tailwind.config.ts, tsconfig.json, eslint.config.mjs
 ```
 
 ---
@@ -385,7 +361,7 @@ docker compose up --build       # UI http://localhost:3000 · API http://localho
 ```
 
 The backend keeps its database on the `redguard-data` volume: on first start it
-copies the committed demo data and adds the Mode B `lab_*` tables to that copy.
+copies the committed demo data and adds the Lab mode `lab_*` tables to that copy.
 `backend/prisma/dev.db` itself is never written. `docker compose down -v` resets it.
 
 Live-reload development (source bind-mounted, nothing installed on the host):
@@ -399,9 +375,9 @@ Tests, sweeps and smoke runs inside the backend container:
 
 ```bash
 docker compose run --rm backend python -m pytest ../core/tests tests -q
-docker compose run --rm backend python -m core.lab.cases
-docker compose run --rm backend python -m core.lab.smoke --scripted
-docker compose run --rm backend python sweep.py --scripted --reps 2 --export /data/bundles
+docker compose run --rm backend python -m core.lab_mode.cases
+docker compose run --rm backend python -m core.lab_mode.smoke --scripted
+docker compose run --rm backend python -m lab_mode.sweep --scripted --reps 2 --export /data/bundles
 docker compose cp backend:/data/bundles ./bundles     # copy evidence bundles out
 ```
 
@@ -410,8 +386,8 @@ Notes:
   by default. Override with `DOCKER_OLLAMA_BASE_URL` in your shell or `.env`.
 - **Reproducibility stamp**: there is no `.git` in the image, so build with
   `GIT_COMMIT=$(git rev-parse HEAD) docker compose build` to record the commit in
-  every Mode B experiment (`git_clean` is then reported as unknown, never as clean).
-- **One backend worker**: Mode B experiments run as tasks inside the backend
+  every Lab mode experiment (`git_clean` is then reported as unknown, never as clean).
+- **One backend worker**: Lab mode experiments run as tasks inside the backend
   process, so run uvicorn with a single worker (the default).
 
 ### 1. Prerequisites
@@ -437,7 +413,7 @@ prisma generate --schema prisma/schema.prisma
 cd ..
 ```
 
-The committed `backend/prisma/dev.db` is demo seed data **without** the Mode B
+The committed `backend/prisma/dev.db` is demo seed data **without** the Lab mode
 `lab_*` tables, and CLAUDE.md asks that it not be written. To use `/lab` locally,
 work on a copy:
 
@@ -455,8 +431,8 @@ Copy `.env.example` to `.env` and fill in the keys you need. `DATABASE_URL` is r
 | `DATABASE_URL` | Prisma ORM (SQLite, always required) |
 | `NVIDIA_API_KEY` / `NVIDIA_MODEL` | Nemotron-3 Ultra & Super agents |
 | `GROQ_API_KEY` / `GROQ_MODEL` | GPT OSS 120B / 20B agents |
-| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent and Mode B's Ollama provider (run `ollama serve` first) |
-| `LAB_MODEL` | Mode B's default model when an experiment names none (default `granite3.3:2b`) |
+| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent and Lab mode's Ollama provider (run `ollama serve` first) |
+| `LAB_MODEL` | Lab mode's default model when an experiment names none (default `granite3.3:2b`) |
 | `CLASSIFIER_URL` | Optional ML classifier for a secondary verdict. Unset = no call; every probe is sent to this URL, so only use a service you run |
 | `CORS_ORIGINS` | Origins allowed to call the API directly from a browser (default `http://localhost:3000`) |
 | `WEBHOOK_URL` | Optional Slack/Discord webhook for post-scan alerts |
@@ -475,11 +451,11 @@ cd backend && ./.venv/bin/python -m uvicorn app:app --reload --port 8000   # bac
 
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
-**Mode B on a local model.** Check the model can drive the harness first — the
+**Lab mode on a local model.** Check the model can drive the harness first — the
 gate is at most 10% invalid replies:
 
 ```bash
-python -m core.lab.smoke --provider ollama --model granite3.3:2b
+python -m core.lab_mode.smoke --provider ollama --model granite3.3:2b
 ```
 
 Then on `/lab`: pick a defence and cases, keep the provider on *ollama (local)*,
@@ -493,11 +469,11 @@ npm run lint                                                  # ESLint (Next.js 
 npm run typecheck                                              # tsc --noEmit
 
 cd backend && source .venv/bin/activate
-pytest tests/                                                  # backend: inspector, scanner, lab store/API/report
-pytest ../core/tests/                                          # core: BDS, stats, dataset validation, all of Mode B
+pytest tests/                                                  # backend: scanner_mode/ and lab_mode/ API, store, agents
+pytest ../core/tests/                                          # core: shared/ (incl. mode boundaries), scanner_mode/, lab_mode/
 ```
 
-646 tests, about 15 s, no model calls.
+649 tests, about 15 s, no model calls.
 
 ---
 

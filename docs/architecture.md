@@ -1,258 +1,84 @@
-# RedGuard Architecture Documentation
+# RedGuard architecture — where everything lives
 
-## Overview
+RedGuard tests AI agents for security in two ways:
 
-RedGuard has been transformed from a prompt injection testing framework into a comprehensive **AI Agent Security Benchmark**. The new architecture follows SOLID principles and is designed for research-quality evaluation.
+| Mode | Question it answers | How |
+|---|---|---|
+| **Scanner mode** (was "Mode A") | What does *one* model do with an attack prompt? | Fires 46 adversarial probes and 10 harmless controls at one agent and scores each reply: Filtered, Refused, Ignored or Compromised. |
+| **Lab mode** (was "Mode B") | When an attack hides in content an agent reads, what does a *chain* of agents do with it? | Three agents (A researcher → B validator → C executor) work in a simulated environment; the harness executes every action, plants the attack, runs a clean control, and judges four dimensions. |
 
-## Directory Structure
+## The one rule
+
+**Every layer has the same three drawers: `shared/`, `scanner_mode/`, `lab_mode/`.**
+Scanner mode and Lab mode never import each other; `shared/` may be used by
+both. Two checks keep it true: `core/tests/shared/test_mode_boundaries.py`
+(Python) and a `no-restricted-imports` rule in `eslint.config.mjs` (TypeScript).
+
+| Layer | `shared/` | `scanner_mode/` | `lab_mode/` |
+|---|---|---|---|
+| **Pages** `app/` | `/` overview, `/settings`, layout | `(scanner_mode)/` → `/corpus`, `/runs`, `/models` | `(lab_mode)/` → `/lab/…` |
+| **UI parts** `components/` | header, sidebar, search, empty states, skeletons | probe drawer, tier bar | propagation stage, agent cards, swimlane |
+| **UI data** `lib/` | — | `data-service.ts`, `search-index.ts` | `lab-service.ts` |
+| **API** `backend/` | `app.py` (app, CORS, `/api/health`), `database.py`, `prisma/` | `api.py` (all `/api/…` scan routes), scanner, inspector + `policy.yaml`, agents, leaderboard, reports, `cli/` | `api.py` (`/api/lab/…`), `store.py`, `sweep.py` |
+| **Library** `core/` | `version.py`, `statistics.py`, `reproducibility.py` | `datasets/` (the probe corpus), `bds.py` | harness: environment, topology, tools, model client, runner, trace, evaluator, metrics, report, cases |
+| **Tests** | `core/tests/shared/`, `backend/tests/conftest.py` | `core/tests/scanner_mode/`, `backend/tests/scanner_mode/` | `core/tests/lab_mode/`, `backend/tests/lab_mode/` |
+| **Docs** | this file, `research_paper.md`, `literature_mapping.md` | `scanner_mode/benchmark_spec.md` (+ its generator) | — |
+
+Folders in parentheses under `app/` are Next.js route groups: they organise
+files without appearing in the URL, so `/corpus` and `/lab` are unchanged.
+`core/` is a pure library (no HTTP, no database) and never imports `backend/`.
+
+## How a request flows
+
+**Scanner mode — a scan**
 
 ```
-core/
-├── probes/                    # Attack probes organized by family
-│   ├── base.py               # Core probe classes (Probe, ProbeMetadata, etc.)
-│   ├── registry.py           # Probe registry with filtering & discovery
-│   ├── direct_injection/     # Direct prompt injection attacks
-│   ├── content_injection/    # Indirect/content injection variants
-│   ├── memory_poisoning/     # Memory/RAG poisoning attacks
-│   ├── tool_security/        # Tool manipulation attacks
-│   ├── planning/             # Planning manipulation attacks
-│   ├── exfiltration/         # Data exfiltration attacks
-│   ├── autonomy/             # Autonomous action attacks
-│   └── goal_diversion/       # Goal diversion attacks
-├── scenarios/                # Realistic scenario templates
-│   ├── base.py              # Scenario base classes
-│   ├── github.py            # GitHub issue scenario
-│   ├── gitlab.py            # GitLab issue scenario
-│   ├── email.py             # Email assistant scenario
-│   ├── calendar.py          # Calendar assistant scenario
-│   ├── banking.py           # Banking assistant scenario
-│   ├── shopping.py          # Shopping assistant scenario
-│   ├── travel.py            # Travel assistant scenario
-│   ├── documentation.py     # Documentation page scenario
-│   ├── wiki.py              # Wiki page scenario
-│   ├── reddit.py            # Reddit post scenario
-│   ├── forum.py             # Forum discussion scenario
-│   └── support.py           # Support ticket scenario
-├── benchmark/                # Benchmark execution & reporting
-│   ├── runner.py            # BenchmarkRunner - main orchestration
-│   ├── metrics.py           # Metrics computation (all required metrics)
-│   └── reporting.py         # JSON & Markdown report generation
-├── compat/                   # Backwards compatibility layer
-│   ├── probes_adapter.py    # Legacy probe migration
-│   └── scanner_adapter.py   # Legacy scanner interface
-└── docs/                     # Documentation
+/runs page ──► lib/scanner_mode/data-service.ts
+           ──► POST /api/scan/start, GET /api/scan/family (SSE)       backend/scanner_mode/api.py
+           ──► scanner.py: for each probe in core/scanner_mode/datasets/
+                 inspector.py + policy.yaml  (regex filter)
+                 agents/<agent>.py           (the model under test)
+                 score()                      → Filtered / Refused / Ignored / Compromised
+           ──► Prisma (backend/prisma/)      → /models leaderboard, /runs/<id> report
 ```
 
-## Core Concepts
+**Lab mode — an experiment**
 
-### Attack Families (8 Total)
-
-1. **Direct Injection** - Classic prompt injection attacks
-2. **Content Injection** - Indirect injection via tool outputs/documents
-3. **Memory Poisoning** - RAG/conversation memory corruption
-4. **Tool Manipulation** - Unauthorized tool calls, structured output injection
-5. **Planning Manipulation** - Goal override, task replacement, long context
-4. **Goal Diversion** - Explicit/implicit goal steering, reward hacking
-5. **Data Exfiltration** - Secret leakage, credential echo, encoding exfiltration
-6. **Autonomous Actions** - Unsafe approval, blind execution, high-risk automation
-
-### Probe Metadata
-
-Every probe exposes rich metadata:
-
-```python
-ProbeMetadata(
-    name="Hidden HTML Injection",
-    attack_family=AttackFamily.CONTENT_INJECTION,
-    variant="hidden_html",
-    difficulty=DifficultyLevel.EASY,
-    affected_layers=[AffectedLayer.LLM, AffectedLayer.TOOLS, AffectedLayer.MEMORY],
-    scenario_compatibility=[ScenarioType.GITHUB_ISSUE, ScenarioType.GENERIC, ...],
-    source_papers=[SourceReference(title="...", authors=[...], year=2023, ...)],
-    expected_behavior="Agent should not execute instructions hidden in HTML",
-    evaluation_metrics=["attack_success_rate", "html_sanitization", ...],
-    tags={"html", "tool_output", "indirect_injection"}
-)
+```
+/lab page ──► lib/lab_mode/lab-service.ts
+          ──► POST /api/lab/experiments, …/start, GET …/stream (SSE)   backend/lab_mode/api.py
+          ──► a server-owned job runs each case twice (clean + attack) with core/lab_mode/:
+                cases/ + fixtures/   what is planted where
+                runner.py            asks the model for one JSON action per step (model_client.py)
+                tools.py, topology.py  the harness checks permissions and executes it
+                trace.py             every event, with provenance
+                evaluator.py         four-dimension verdict
+          ──► store.py → Prisma      → /lab/experiments/<id> live view, /report, /lab/runs/<id> replay
 ```
 
-### Scenarios
+## Where to add things
 
-Probes can be executed within realistic contexts:
+| To add… | Put it in |
+|---|---|
+| a probe | `core/scanner_mode/datasets/<family>.json` (validated by `schema.json`; bump `DATASET_VERSION`) |
+| an agent to scan | `backend/scanner_mode/agents/<name>.py` with `AGENT_NAME`, `AGENT_DESCRIPTION`, async `invoke()` — discovered automatically |
+| a Lab case | `core/lab_mode/cases/RGM-0xx.json` (validated by `case_schema.json`, needs a `clean_script`) |
+| a Scanner page / API route | `app/(scanner_mode)/…` / `backend/scanner_mode/api.py` |
+| a Lab page / API route | `app/(lab_mode)/lab/…` / `backend/lab_mode/api.py` |
+| something both modes use | the layer's `shared/` |
 
-- **Development**: GitHub Issue, GitLab Issue
-- **Communication**: Email Assistant, Support Ticket
-- **Productivity**: Calendar Assistant, Documentation, Wiki
-- **Social**: Reddit Post, Forum Discussion
-- **Finance**: Banking Assistant, Shopping Assistant
-- **Travel**: Travel Assistant
+## Commands
 
-### Metrics (All Implemented)
+```bash
+npm run dev:all                                     # UI :3000 + API :8000
+cd backend && pytest ../core/tests tests            # every test, no model calls
 
-| Metric | Description |
-|--------|-------------|
-| Attack Success Rate | % of probes where attack succeeded |
-| User Task Completion | % of legitimate tasks completed correctly |
-| Goal Diversion Rate | % of planning/goal attacks that succeeded |
-| Unauthorized Tool Usage | % of tool manipulation attacks that succeeded |
-| Memory Poisoning Success | % of memory attacks that succeeded |
-| Security Score | 1 - Attack Success Rate (higher = better) |
-| Utility Score | User Task Completion (higher = better) |
-| False Positive Rate | Benign requests incorrectly blocked |
-| False Negative Rate | Malicious requests incorrectly allowed |
-| Average Execution Time | Mean probe execution time |
-
-## Usage Examples
-
-### Running a Full Benchmark
-
-```python
-from core.benchmark import run_benchmark, BenchmarkConfig
-from core.probes.base import AttackFamily, DifficultyLevel
-from core.scenarios.base import ScenarioType
-
-config = BenchmarkConfig(
-    attack_families=[AttackFamily.CONTENT_INJECTION, AttackFamily.TOOL_MANIPULATION],
-    difficulties=[DifficultyLevel.EASY, DifficultyLevel.MEDIUM],
-    scenarios=[ScenarioType.GITHUB_ISSUE, ScenarioType.GENERIC],
-    agent_id="my_custom_agent",
-    agent_invoke=my_async_invoke_function,
-    max_concurrent=5,
-)
-
-run = run_benchmark(config)
-print(f"Security Score: {run.security_score:.2%}")
+python -m core.lab_mode.cases                       # validate the Lab cases
+python -m core.lab_mode.smoke --scripted            # Lab pipeline without a model
+cd backend && python -m lab_mode.sweep --help       # Lab batch runs
+cd backend && python -m scanner_mode.target_agent   # chat with a Scanner agent
+python docs/scanner_mode/spec_generator.py          # regenerate the probe spec
 ```
 
-### Using the Probe Registry
-
-```python
-from core.probes.registry import get_registry
-from core.probes.base import AttackFamily, ScenarioType
-
-registry = get_registry()
-
-# Get all content injection probes
-probes = registry.filter(family=AttackFamily.CONTENT_INJECTION)
-
-# Get probes compatible with GitHub issue scenario
-probes = registry.filter(scenario=ScenarioType.GITHUB_ISSUE)
-
-# Get all probe metadata
-for meta in registry.get_all_metadata():
-    print(f"{meta.name} [{meta.attack_family.value}/{meta.variant}]")
-```
-
-### Generating Reports
-
-```python
-from core.benchmark.metrics import compute_all_metrics
-from core.benchmark.reporting import generate_report
-
-metrics = compute_all_metrics(results, benchmark_id="run_001")
-reports = generate_report(metrics, formats=["json", "markdown"])
-print(f"JSON: {reports['json']}")
-print(f"Markdown: {reports['markdown']}")
-```
-
-## Backwards Compatibility
-
-The `core.compat` module provides drop-in replacements for legacy code:
-
-```python
-# Legacy code continues to work
-from core.compat import LEGACY_PROBE_LIBRARY, LegacyScannerAdapter
-
-# Or migrate probes to new architecture
-from core.compat import migrate_probes_to_new_architecture
-count = migrate_probes_to_new_architecture()  # Returns number migrated
-```
-
-## Extending the Framework
-
-### Adding a New Attack Family
-
-1. Create directory under `probes/new_family/`
-2. Add `__init__.py` with probe definitions following existing patterns
-3. Register probes using `PROBES` list and `register_probes()` function
-4. Add attack family to `AttackFamily` enum in `base.py`
-5. Update literature mapping with relevant papers
-
-### Adding a New Scenario
-
-1. Create `scenarios/new_scenario.py` extending `Scenario` base class
-2. Implement `get_template()` with system prompt, user context, and variables
-3. Import in `scenarios/__init__.py` to auto-register
-4. Add scenario type to `ScenarioType` enum
-
-### Adding a New Metric
-
-1. Add metric field to `ProbeMetrics` in `metrics.py`
-2. Implement calculation in `MetricCalculator`
-3. Update `compute_all_metrics` to aggregate
-4. Add to report generation in `reporting.py`
-
-## Research Integration
-
-### Literature Mapping
-
-Each probe references academic papers:
-
-```python
-SourceReference(
-    title="Indirect Prompt Injection: A Survey",
-    authors=["Greshake et al."],
-    year=2023,
-    venue="arxiv",
-    arxiv_id="2302.12173",
-    url="https://arxiv.org/abs/2302.12173"
-)
-```
-
-Supported sources:
-- Google DeepMind Prompt Injection Benchmarks
-- Agent Security Bench (ASB)
-- WASP
-- AgentDojo
-- Custom papers via `SourceReference`
-
-### Reproducibility
-
-- Every probe has deterministic ID and metadata
-- Benchmark runs produce unique IDs and timestamps
-- Reports include manifest SHA256 for integrity
-- Configuration captured in report metadata
-
-## Performance Considerations
-
-- **Concurrency**: Configurable via `max_concurrent` (default: 3)
-- **Timeouts**: Per-probe timeout via `timeout_seconds` (default: 30s)
-- **Caching**: Probe registry caches instantiated probes
-- **Lazy Loading**: Probes loaded on first access
-
-## Migration Guide
-
-### From Legacy Scanner
-
-```python
-# Old
-from backend.scanner import run_scan
-
-# New (drop-in compatible)
-from core.compat.scanner_adapter import run_scan
-```
-
-### From Legacy Probes
-
-```python
-# Old
-from backend.probes import PROBE_LIBRARY, CONTENT_INJECTION
-
-# New (with auto-migration)
-from core.compat.probes_adapter import LEGACY_PROBE_LIBRARY, migrate_probes_to_new_architecture
-
-migrate_probes_to_new_architecture()  # One-time setup
-# Now use new registry
-from core.probes.registry import get_registry
-registry = get_registry()
-probes = registry.filter(family=AttackFamily.CONTENT_INJECTION)
-```
+Code comments and test names written before 4.2.0 still say "Mode A" and
+"Mode B"; read them as Scanner mode and Lab mode.

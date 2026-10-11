@@ -17,6 +17,20 @@ const eslintConfig = defineConfig([
     "**/.venv/**",
     "backend/prisma/**",
   ]),
+  // Scanner mode and Lab mode never import each other (docs/architecture.md);
+  // shared/ may use either.
+  {
+    files: ["app/(scanner_mode)/**", "components/scanner_mode/**", "lib/scanner_mode/**"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [{ group: ["**/lab_mode/**"], message: "Scanner mode must not import Lab mode." }] }],
+    },
+  },
+  {
+    files: ["app/(lab_mode)/**", "components/lab_mode/**", "lib/lab_mode/**"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [{ group: ["**/scanner_mode/**"], message: "Lab mode must not import Scanner mode." }] }],
+    },
+  },
 ]);
 
 export default eslintConfig;

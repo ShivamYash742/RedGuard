@@ -1,9 +1,9 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta, Stats } from '@/lib/data-service'
-import { CardSkeleton, TableSkeleton } from '@/components/Skeletons'
-import EmptyState from '@/components/EmptyState'
+import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta, Stats } from '@/lib/scanner_mode/data-service'
+import { CardSkeleton, TableSkeleton } from '@/components/shared/Skeletons'
+import EmptyState from '@/components/shared/EmptyState'
 import { ShieldAlert, Play, Boxes, Award, ArrowUpRight } from 'lucide-react'
 
 export default function Dashboard() {

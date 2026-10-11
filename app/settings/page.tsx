@@ -6,9 +6,9 @@ import {
   BookOpen, Save, Copy, Check, Code,
   ChevronDown, ChevronUp,
 } from 'lucide-react'
-import { KNOWN_AGENTS } from '@/lib/data-service'
-import { TableSkeleton } from '@/components/Skeletons'
-import EmptyState from '@/components/EmptyState'
+import { KNOWN_AGENTS } from '@/lib/scanner_mode/data-service'
+import { TableSkeleton } from '@/components/shared/Skeletons'
+import EmptyState from '@/components/shared/EmptyState'
 
 type Tab = 'system' | 'policy' | 'audit'
 

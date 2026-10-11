@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
-import ClientLayout from '@/components/ClientLayout'
+import ClientLayout from '@/components/shared/ClientLayout'
 
 const plexSans = IBM_Plex_Sans({
   subsets: ['latin'],
@@ -18,7 +18,7 @@ const plexMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'RedGuard v4.1.5 | AI Agent Security Benchmark',
+  title: 'RedGuard v4.2.0 | AI Agent Security Benchmark',
   description: 'Academic AI Agent Security Evaluation Platform based on DeepMind Traps Taxonomy',
   icons: {
     icon: '/shield.svg',
