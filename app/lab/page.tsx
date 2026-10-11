@@ -11,7 +11,7 @@ import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/Skeletons'
 
 /** Model calls per clean/attack pair, measured against nemotron-3-super in
- *  the P7 pilots (MULTI_AGENT_LAB_PROGRESS.md). An estimate, labelled as one. */
+ *  the P7 pilots. An estimate, labelled as one. */
 const CALLS_PER_PAIR = 59
 
 /** Local model the launcher offers first; `python -m core.lab.smoke` is how

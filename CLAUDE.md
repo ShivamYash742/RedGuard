@@ -50,24 +50,28 @@ Layout:
 
 ## Current state (2026-10-11)
 
-- `main` has Mode B merged (PR #2), the `/lab/compare` page, Docker support,
-  and a desktop-app plan (`DESKTOP_APP_PLAN.md`, not started).
-- Branch `mode-a-fixes` carries `MODE_A_FIX_PLAN.md` phases 1–9 (security,
-  tiered scoring, benign controls, regex precision, measured leaderboard,
-  lint/phone layout, v4.0.0, unused-code removal, first local results). Still
-  open: hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
+- `main` has Mode B merged (PR #2), the `/lab/compare` page and Docker support.
+- Branch `mode-a-fixes` carries the Mode A fix phases 1–9 (security, tiered
+  scoring, benign controls, regex precision, measured leaderboard, lint/phone
+  layout, v4.0.0, unused-code removal, first local results). Still open:
+  hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
+- Removed in 4.1.5, readable from git history (`git show 6c3606a:<file>`):
+  the plan/progress docs (`MODE_A_FIX_PLAN.md`, `MODE_B_LIVE_PLAN.md`,
+  `MULTI_AGENT_LAB_PROGRESS.md`, `DESKTOP_APP_PLAN.md`), the Mode B design
+  spec and guide (`MULTI_AGENT_LAB_PLAN.md`, `MULTI_AGENT_LAB_EXPLAINED.md`)
+  and the stale v3 `RedGuard_Architecture.md/.pdf`.
 - **646 tests pass** (~15 s, no LLM). `npm run typecheck` and `npm run lint`
   are clean.
 - **First Mode A results** (granite3.3:2b via Ollama, pre-rewrite prompts):
-  attack success with the filter off 19.6% baseline / 13.0% hardened; see
-  `MODE_A_FIX_PLAN.md` for the table. Run real scans on local Ollama
+  attack success with the filter off 19.6% baseline / 13.0% hardened; the
+  table is in README "Measured results". Run real scans on local Ollama
   (`ollama_local_agent`), not the hosted NVIDIA agents.
 - **Mode B has no real-model results yet.** Every number so far is scripted or
   synthetic. Real runs use local Ollama `granite3.3:2b` only (not hosted, not
-  llama3.1/qwen3). Branch `mode-b-live-view` carries `MODE_B_LIVE_PLAN.md`
-  phases 1–4 (server-owned runs, live agent cards/swimlane, Ollama JSON-schema
-  decoding: granite parse failures 85.7% → 0%); see its Status section.
-  Granite now emits valid actions but never calls `finish`.
+  llama3.1/qwen3). Branch `mode-b-live-view` has the live view (server-owned
+  runs, agent cards, swimlane), experiment reports, and Ollama JSON-schema
+  decoding (granite parse failures 85.7% → 0%). Granite now emits valid
+  actions but never calls `finish`.
 
 ### How Mode A scores (since `mode-a-fixes` phase 2)
 
@@ -103,7 +107,7 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
 - **Version bump:** release 4.1.5, Mode A benchmark 4.0.0 (unchanged by the
   4.1.5 Mode B work). Scores from 3.x runs are not comparable;
   those sessions stay viewable as "legacy scoring" and never enter the
-  leaderboard. Old report files are in `reports/legacy-v3/`.
+  leaderboard. (The 3.x report files were removed in 4.1.5.)
 
 Fixed in phase 1: `/api/proxy` removed; CORS limited to `CORS_ORIGINS`
 (default `http://localhost:3000`); Docker publishes on 127.0.0.1 only;
@@ -216,14 +220,11 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
 
 ## Docs map
 
-- `MULTI_AGENT_LAB_PLAN.md` — Mode B design (§ numbers cited in code).
-- `MULTI_AGENT_LAB_PROGRESS.md` (~120 KB) — what's built, bugs found, test
-  inventory; section "2026-09-30 — what changed, and what is left" is the
-  latest status.
-- `MULTI_AGENT_LAB_EXPLAINED.md` — Mode B in plain language.
-- `RedGuard_Architecture.md` / `.pdf` — full architecture write-up.
-- `docs/` — Mode A architecture, generated benchmark spec, literature mapping,
-  research paper draft.
-- `PRODUCT.md` — product/design context. `DESKTOP_APP_PLAN.md` — packaging plan.
+- `MULTI_AGENT_LAB_PLAN.md` — the Mode B design spec that the `§N` comments in
+  code cite. Removed in 4.1.5 with its plain-language guide; read it from git
+  history: `git show 6c3606a:MULTI_AGENT_LAB_PLAN.md`.
+- `docs/` — also Mode A architecture, generated benchmark spec, literature
+  mapping, research paper draft.
+- `PRODUCT.md` — product/design context.
 - `graphify-out/` — deleted 2026-10-11; rebuild with `/graphify` before relying
   on it. Until then, read the docs above and the code directly.

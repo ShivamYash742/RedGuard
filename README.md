@@ -56,7 +56,7 @@ The platform combines a research-focused **Next.js 16 frontend** (styled after H
 | **Multi-Agent Lab (Mode B)** | 9 cases, 3 agents (A researcher → B validator → C executor), every action executed and recorded by the harness, 5 defence arms, four-dimension verdicts, clean control run for every attack run |
 | **Live Run View (Mode B)** | Agent cards with a ticking status, per-agent swimlane timeline, stage for clean and attack runs, per-run progress with elapsed time and ETA, event feed — from any tab, after a reload |
 | **Experiment Reports (Mode B)** | Generated from stored traces after a run: findings, suitability, rates with intervals, containment, per agent / case / run, evidence trail; Markdown & JSON |
-| **Multi-Format Export** | Mode A reports in Markdown (`.md`) and CSV (`.csv`); Mode B experiment reports in Markdown and JSON, and per-run §12 evidence bundles |
+| **Multi-Format Export** | Mode A reports in Markdown (`.md`) and CSV (`.csv`); Mode B experiment reports in Markdown and JSON, and per-run evidence bundles |
 | **BibTeX Citation Exporter** | Built-in academic citation snippet generator for research paper citations |
 
 ---
@@ -179,7 +179,7 @@ including after a resume or a rescore, and never calls a model:
 | Summary | plain-language findings, each traceable to a number below |
 | Setup | arm and its description, model, step budget, cases × repetitions, git commit, component versions |
 | Execution | pairs completed / failed / unfinished, run statuses, total and mean run time, mean model call |
-| Harness suitability | invalid replies against the 10% gate (§21.9), how agent turns ended |
+| Harness suitability | invalid replies against the 10% gate, how agent turns ended |
 | Results | ICR, ASR, partial, CPR, containment rate with 95% intervals and per-case means |
 | Where attacks stopped | agent × mechanism over all valid attack runs |
 | Agents | impact counts, steps, actions, tools, refusals, invalid replies, endings, model latency |
@@ -207,7 +207,7 @@ curl -OJ "localhost:8000/api/lab/experiments/<id>/report?format=md"  # Markdown 
 | `GET /api/lab/experiments/{id}/metrics` | ICR, ASR, CPR, containment, drift, per case |
 | `GET /api/lab/experiments/{id}/report` | the report (JSON; `?format=md` for Markdown) |
 | `GET /api/lab/compare?experiments=a,b` | cross-arm comparison with paired, per-case differences |
-| `GET /api/lab/runs/{id}` · `/evidence` | one run's full trace · its §12 evidence bundle |
+| `GET /api/lab/runs/{id}` · `/evidence` | one run's full trace · its evidence bundle |
 | `GET /api/lab/cases` · `/topologies` · `/fixtures` · `/arms` | the catalog |
 
 Stream events: `experiment_started` (model, step budget, agents),
@@ -216,15 +216,33 @@ Stream events: `experiment_started` (model, step budget, agents),
 `case_rescored`, and one of `experiment_complete` / `experiment_stopped` /
 `experiment_error`.
 
-Mode B docs:
-- Design: [`MULTI_AGENT_LAB_PLAN.md`](./MULTI_AGENT_LAB_PLAN.md)
-- In plain language: [`MULTI_AGENT_LAB_EXPLAINED.md`](./MULTI_AGENT_LAB_EXPLAINED.md)
-- What's built, bugs found, test inventory: [`MULTI_AGENT_LAB_PROGRESS.md`](./MULTI_AGENT_LAB_PROGRESS.md)
-- Live view and server-owned runs: [`MODE_B_LIVE_PLAN.md`](./MODE_B_LIVE_PLAN.md)
-
 Mode B is additive — no Mode A file, model, endpoint or verdict is affected.
 No real-model Mode B results are published yet; every number so far is from
 scripted runs or harness checks.
+
+---
+
+## 📊 Measured results
+
+**Mode A**, Ollama `granite3.3:2b`, 4.0.0 probes (46 attacks + 10 controls)
+before the attack prompts are rewritten, so a baseline to beat:
+
+| Prompt mode | Runs | Attack success, model alone | Attack success, as deployed | Over-refusal |
+|---|---|---|---|---|
+| baseline | 2 (92 attacks) | 19.6% (95% CI 12.7–28.8) | 12.0% (6.8–20.2) | 10% (2.8–30.1) |
+| hardened | 1 (46 attacks) | 13.0% (6.1–25.7) | 6.5% (2.2–17.5) | 30% (10.8–60.3) |
+
+- The regex filter decides 24 of 46 attacks per run, which is why "as
+  deployed" is about half of "model alone".
+- The hardened prompt lowers attack success but triples over-refusal; the
+  intervals overlap, so with this sample the difference is not significant.
+- Weakest families (baseline, model alone): tool manipulation 6/8, memory
+  poisoning 6/12.
+- BDS needs 3 runs per prompt mode and is not reported yet.
+
+**Mode B** has no real-model results yet. `granite3.3:2b` passes the
+harness-suitability gate (0 invalid replies in 60 steps) but never calls
+`finish`, so its agents use their whole step budget.
 
 ---
 
@@ -335,8 +353,6 @@ RedGuard/
 │   ├── research_paper.md              # Benchmark research paper draft
 │   └── spec_generator.py              # Spec auto-generator script
 │
-├── reports/                           # Generated benchmark reports; legacy-v3/ holds pre-4.0 reports
-│
 ├── scripts/                           # Developer & research utility scripts (standalone, no DB)
 │   ├── add_custom_probes.py           # Custom probe bulk-import script
 │   ├── audit_report.py                # Standalone CLI audit report generator
@@ -344,9 +360,9 @@ RedGuard/
 │   ├── redteam_agent.py               # Standalone CLI redteam agent
 │   └── CLI_README.md                  # CLI documentation
 │
-├── MULTI_AGENT_LAB_*.md               # Mode B design, plain-language guide, progress log
-├── MODE_A_FIX_PLAN.md / MODE_B_LIVE_PLAN.md   # Work plans with measured results
 ├── README.md
+├── CLAUDE.md / AGENTS.md              # Guidance for coding agents (architecture notes, setup)
+├── PRODUCT.md                         # Product and design context
 ├── .env / .env.example
 ├── package.json                       # Frontend deps & dev:all script
 ├── next.config.js
