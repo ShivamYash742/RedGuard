@@ -746,3 +746,44 @@ class TestRunsDoNotDependOnTheTab:
         assert client.get(f"/api/lab/experiments/{experiment_id}/stream").status_code == 409
         assert client.get("/api/lab/experiments/nope/stream").status_code == 404
         assert client.post("/api/lab/experiments/nope/start").status_code == 404
+
+
+class TestExperimentReport:
+    """Mode B had per-run evidence bundles but no whole-experiment report;
+    it is built from stored traces and must agree with `/metrics`."""
+
+    def test_report_agrees_with_metrics_and_covers_every_pair(self, client):
+        experiment_id = _run_to_completion(client, cases=["RGM-001", "RGM-003"], repetitions=2)["experiment"]["experiment_id"]
+        report = client.get(f"/api/lab/experiments/{experiment_id}/report").json()
+        metrics = client.get(f"/api/lab/experiments/{experiment_id}/metrics").json()
+
+        assert report["complete"] and not report["running"]
+        assert report["results"]["n_attack_runs"] == metrics["n_attack_runs"] == 4
+        assert report["results"]["aggregate"]["asr"] == metrics["aggregate"]["asr"]
+        assert report["execution"]["pairs_completed"] == report["execution"]["pairs_planned"] == 4
+        assert [c["id"] for c in report["cases"]] == ["RGM-001", "RGM-003"]
+        assert len(report["runs"]) == 4 and all(r["attack"]["steps"] > 0 for r in report["runs"])
+        # Contained by non-compliance cites no events; the trail still shows
+        # where the attack content went, starting from the plant.
+        assert all(r["attack_trail"][0].split()[2] == "artifact_planted" for r in report["runs"])
+        assert set(report["agents"]) == {"A", "B", "C"}
+        assert report["suitability"]["applies"] is False  # scripted
+        assert any("scripted replay" in f for f in report["findings"])
+
+    def test_markdown_download(self, client):
+        experiment_id = _run_to_completion(client)["experiment"]["experiment_id"]
+        response = client.get(f"/api/lab/experiments/{experiment_id}/report?format=md")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/markdown")
+        assert "attachment" in response.headers["content-disposition"]
+        body = response.text
+        for heading in ("## Summary", "## Setup", "## Results", "## Agents", "## Cases", "## Runs", "## Caveats"):
+            assert heading in body
+        assert "RGM-001" in body
+
+    def test_an_unfinished_experiment_says_so(self, client):
+        experiment_id = _create_experiment(client, repetitions=2)["experiment_id"]
+        report = client.get(f"/api/lab/experiments/{experiment_id}/report").json()
+        assert not report["complete"] and report["runs"] == []
+        assert any("Only 0 of 2 pairs" in c for c in report["caveats"])
+        assert client.get("/api/lab/experiments/nope/report").status_code == 404

@@ -2,7 +2,7 @@
 import React, { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronDown, Play, Square } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, FileText, Play, Square } from 'lucide-react'
 import {
   labService, Arm, CaseSummary, Experiment, ExperimentMetrics, LabStreamEvent, LiveEvent, RateWithCI,
   Topology, Verdict, armName, containmentLabel, deriveRoute, describeEvent, formatDuration, formatRate, since,
@@ -228,6 +228,8 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
   const [board, setBoard] = useState<Board | null>(null)
   const [running, setRunning] = useState(false)
   const [stopping, setStopping] = useState(false)
+  /** This page watched the experiment finish: point at its report. */
+  const [finishedHere, setFinishedHere] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -269,6 +271,7 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
       setStopping(false)
       flush()
       if (event.event === 'experiment_error') setError(event.data.error)
+      if (event.event === 'experiment_complete') setFinishedHere(true)
       if (event.event === 'experiment_stopped') setBoard((prev) => (prev ? stopped(prev) : prev))
       refresh().catch(() => undefined)
       return
@@ -373,6 +376,12 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
           {arm && <p className="mt-1 max-w-3xl text-xs text-[var(--text-secondary)]">{arm.description}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {!running && board.order.some((id) => board.pairs[id].phase === 'done') && (
+            <Link href={`/lab/experiments/${experimentId}/report`}
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]">
+              <FileText className="h-3.5 w-3.5" /> Report
+            </Link>
+          )}
           {running ? (
             <button onClick={stop} disabled={stopping} className="inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--text-secondary)] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]">
               <Square className="h-3.5 w-3.5" /> {stopping ? 'Stopping…' : 'Stop'}
@@ -386,6 +395,16 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
       </header>
 
       {error && <ErrorLine message={error} />}
+
+      {finishedHere && !running && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--radius)] border border-[var(--success)]/40 bg-[var(--success-bg)] p-3 text-sm text-[var(--text-primary)]">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-[var(--success)]" />
+          <span className="flex-1">Experiment finished. The full report covers every run, agent and case, with the trace evidence behind each verdict.</span>
+          <Link href={`/lab/experiments/${experimentId}/report`} className="inline-flex items-center gap-1 font-semibold text-[var(--primary)] hover:underline">
+            Read the report <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
 
       {!config.scripted && parse.steps >= 10 && parse.failures / parse.steps > PARSE_FAILURE_GATE && (
         <div role="status" className="flex items-start gap-2 rounded-[var(--radius)] border border-[var(--warning)]/40 bg-[var(--warning-bg)] p-3 text-sm text-[var(--text-primary)]">

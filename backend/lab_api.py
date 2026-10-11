@@ -36,6 +36,7 @@ import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
 # Same parent-path insert as app.py / scanner.py — core/ is a sibling of backend/.
@@ -76,6 +77,7 @@ from core.lab.metrics import (
 )
 from core.lab.model_client import ModelClient, ModelConfig
 from core.lab.repro import reproducibility_stamp
+from core.lab.report import build_report, to_markdown
 from core.lab.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, run_case
 from core.lab.tools import TOOLS
 from core.lab.trace import EventCategory, EventType, TraceEvent
@@ -791,6 +793,42 @@ async def experiment_metrics(experiment_id: str):
         "trajectory_drift": await _drift(db, runs),
         "run_counts": _count_by(runs, lambda r: r.status),
     }
+
+
+@router.get("/experiments/{experiment_id}/report")
+async def experiment_report(experiment_id: str, format: str = "json"):
+    """The whole experiment in one document (`core/lab/report.py`): setup,
+    harness suitability, rates with intervals, containment, per agent, per
+    case, run by run, and the trace events each verdict cites.
+
+    Built on demand from stored traces and the metrics above, so it always
+    matches the experiment page — including after a resume or a rescore.
+    `?format=md` returns it as Markdown for download.
+    """
+    db = await get_db()
+    experiment = await _experiment_or_404(experiment_id)
+    runs = await lab_store.list_runs(db, experiment_id)
+    row = _experiment_row(experiment, runs)
+    cases: Dict[str, Any] = {}
+    for case_id in row["config"].get("cases") or []:
+        try:
+            cases[case_id] = load_case(case_id)
+        except (FileNotFoundError, ValueError):
+            pass  # a case removed since the run: its rows still report, untitled
+    report = build_report(
+        experiment=row,
+        runs=row["runs"],
+        events_by_run={r.id: await lab_store.load_run_events(db, r.id) for r in runs},
+        metrics=await experiment_metrics(experiment_id),
+        cases=cases,
+        arm_description=ARMS.get(experiment.armKey, {}).get("description", ""),
+        running=experiment_id in _JOBS,
+    )
+    if format == "md":
+        return PlainTextResponse(to_markdown(report), media_type="text/markdown; charset=utf-8", headers={
+            "Content-Disposition": f'attachment; filename="redguard-lab-{experiment_id}.md"',
+        })
+    return report
 
 
 async def _drift(db: Any, runs: List[Any]) -> Dict[str, Any]:

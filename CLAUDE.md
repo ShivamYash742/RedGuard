@@ -36,7 +36,10 @@ one score. Defence arms: `attack`, `attack_validated`, `attack_bus_gateway`
 `backend/lab_store.py`, `backend/sweep.py`. Routes: `/lab`, `/lab/compare`,
 `/lab/experiments/[id]`, `/lab/runs/[id]`. Experiments run as server-owned
 asyncio tasks (`_Job` in `lab_api.py`: `POST …/start|stop`, `GET …/stream`),
-so closing a tab does not stop one; one uvicorn worker only.
+so closing a tab does not stop one; one uvicorn worker only. Each experiment
+has a report (`core/lab/report.py`, `GET …/report`, `?format=md` for Markdown,
+page `/lab/experiments/[id]/report`), built on demand from stored traces and
+the `/metrics` numbers, so it always matches the experiment page.
 
 Layout:
 - `app/`, `components/`, `lib/` — Next.js 16 / React 19 / TypeScript UI.
@@ -53,7 +56,7 @@ Layout:
   tiered scoring, benign controls, regex precision, measured leaderboard,
   lint/phone layout, v4.0.0, unused-code removal, first local results). Still
   open: hand-rewriting the attack `prompt` fields in `core/datasets/*.json`.
-- **643 tests pass** (~15 s, no LLM). `npm run typecheck` and `npm run lint`
+- **646 tests pass** (~15 s, no LLM). `npm run typecheck` and `npm run lint`
   are clean.
 - **First Mode A results** (granite3.3:2b via Ollama, pre-rewrite prompts):
   attack success with the filter off 19.6% baseline / 13.0% hardened; see

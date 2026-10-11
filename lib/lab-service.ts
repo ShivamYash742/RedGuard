@@ -290,6 +290,71 @@ export interface CompareResult {
   warnings: string[]
 }
 
+/** `GET /api/lab/experiments/{id}/report` (`core/lab/report.py`). */
+export interface ReportRunBrief {
+  events: number
+  duration_ms: number | null
+  steps: number
+  invalid_replies: number
+  refused: number
+  attack_derived_events: number
+  harness_error: string | null
+  endings: Record<string, string | null>
+}
+
+export interface ExperimentReport {
+  report_version: string
+  generated_at: string
+  complete: boolean
+  running: boolean
+  experiment: {
+    id: string; name: string; arm: string; arm_description: string; scripted: boolean
+    provider: string | null; model: string | null; temperature: number | null; max_steps: number
+    topology: string | null; validation_mode: string | null; cases: string[]; repetitions: number
+    created_at: string; versions: ReproStamp
+  }
+  execution: {
+    pairs_planned: number; pairs_completed: number; pairs_failed: number; pairs_not_finished: number
+    runs_recorded: number; run_status: Record<string, number>
+    first_event_at: string | null; last_event_at: string | null
+    total_run_time_ms: number | null; mean_run_time_ms: number | null; mean_model_latency_ms: number | null
+  }
+  suitability: {
+    applies: boolean; steps: number; invalid_replies: number; invalid_rate: number | null
+    gate: number; suitable: boolean | null; agent_endings: Record<string, number>
+  }
+  results: {
+    n_attack_runs: number
+    n_failed_pairs: number
+    aggregate: Partial<ExperimentMetrics['aggregate']>
+    macro: { icr?: number | null; asr?: number | null; partial_rate?: number | null }
+  }
+  agents: Record<string, {
+    impact: Record<AgentImpactLevel, number>
+    steps: { attack: number; clean: number }
+    actions: Record<string, number>; tools: Record<string, number>; refused: Record<string, number>
+    endings: Record<string, number>; invalid_replies: number; mean_latency_ms: number | null
+  }>
+  containment: { status: string; agent: string | null; mechanism: string | null; runs: number }[]
+  cases: {
+    id: string; title: string | null; family: string | null; channel: string | null; injection_point: string | null
+    severity: string | null; objective: string | null; n: number
+    icr: number | null; asr: number | null; partial_rate: number | null; cpr: number | 'n/a' | null; soc: number | null
+    objectives: Record<string, number>; stopped_at: Record<string, number>
+    drift: { attack: number | null; null: number | null; separated?: boolean | null } | null
+  }[]
+  runs: {
+    pair_id: string; case_id: string; repetition: number; attack_run_id: string | null; clean_run_id: string | null
+    status: string | null; invalid_reason: string | null; objective: ObjectiveLevel | null
+    containment: string | null; containment_status: string | null; containment_agent: string | null; containment_mechanism: string | null
+    system_outcome: SystemOutcome | null; agent_impact: Record<string, AgentImpactLevel>; baseline_runs: number | null
+    attack: ReportRunBrief | null; clean: ReportRunBrief | null
+    evidence: string[]; attack_trail: string[]; attack_trail_total: number
+  }[]
+  findings: string[]
+  caveats: string[]
+}
+
 export interface CreateExperimentRequest {
   name?: string
   arm?: string
@@ -410,6 +475,14 @@ class LabService {
 
   public async fetchMetrics(experimentId: string): Promise<ExperimentMetrics> {
     return getJSON(`/api/lab/experiments/${experimentId}/metrics`)
+  }
+
+  public async fetchReport(experimentId: string): Promise<ExperimentReport> {
+    return getJSON(`/api/lab/experiments/${experimentId}/report`)
+  }
+
+  public reportUrl(experimentId: string, format: 'json' | 'md'): string {
+    return `/api/lab/experiments/${experimentId}/report${format === 'md' ? '?format=md' : ''}`
   }
 
   /** Rejects with the backend's reason when the experiments differ in more
