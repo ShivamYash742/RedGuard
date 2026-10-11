@@ -101,6 +101,7 @@ VALID_THREAT_MODELS = {
     "compromised_tool",
     "insider_threat",
     "supply_chain",
+    "none",  # benign controls
 }
 
 VALID_ATTACKER_CAPABILITIES = {
@@ -109,6 +110,7 @@ VALID_ATTACKER_CAPABILITIES = {
     "tool_output_level",
     "memory_level",
     "network_level",
+    "none",  # benign controls
 }
 
 ID_PATTERN = re.compile(r"^RG-[A-Z]{2,4}-\d{3}$")
@@ -206,6 +208,8 @@ class ProbeValidator:
       11. evaluation_rules has required sub-fields with at least one indicator each
       12. references has at least one entry, each with title and year
       13. probe_version and dataset_version are valid semver strings
+      14. benign_control is a boolean; canary is a non-empty string that is
+          also listed in evaluation_rules.success_indicators
     """
 
     def validate(self, entry: Dict[str, Any]) -> ValidationResult:
@@ -340,6 +344,16 @@ class ProbeValidator:
                 errors.append(
                     f"'{ver_field}' value '{ver}' is not a valid semver string (X.Y.Z)"
                 )
+
+        # 14. Benign control flag and canary
+        if "benign_control" in entry and not isinstance(entry["benign_control"], bool):
+            errors.append("'benign_control' must be true or false")
+        if "canary" in entry:
+            canary = entry["canary"]
+            if not isinstance(canary, str) or not canary.strip():
+                errors.append("'canary' must be a non-empty string")
+            elif isinstance(rules, dict) and canary not in rules.get("success_indicators", []):
+                errors.append("'canary' must also appear in evaluation_rules.success_indicators")
 
         # Warnings (non-fatal)
         if not entry.get("synthetic"):

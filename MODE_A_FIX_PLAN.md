@@ -6,9 +6,13 @@ cannot do harm, after a regex filter has already removed 28 of 50 of them.
 
 Work on a branch (`mode-a-fixes`). Mode B is untouched except where noted.
 
-**Status (2026-10-11):** Phases 1 and 2 done on `mode-a-fixes` (uncommitted).
-Tests 582 → 599. One deviation from the text below: in `score()` an explicit
-refusal beats a success indicator (see Phase 2.1).
+**Status (2026-10-11):** Phases 1 and 2 done on `mode-a-fixes`. Phase 3:
+schema/validator support for `benign_control` and `canary`, TM-003/004/005
+removed, RG-GD-002 turned into a control, 9 controls added (RG-CTL-001…009,
+one or more per family), controls counted apart from the attack tiers. **Still
+open in phase 3: rewriting the attack `prompt` fields (items 1, 3, 5, 6) —
+done by hand in `core/datasets/*.json`, not by Claude.** Tests 582 → 604.
+In `score()` an explicit refusal beats a success indicator (see Phase 2.1).
 Every phase ends green: `pytest ../core/tests tests`, `npm run typecheck`.
 
 ---

@@ -303,7 +303,8 @@ async def start_scan(request: Request):
         "model": model_name,
         "promptMode": prompt_mode,
         "total_probes": init_data["total_probes"],
-        "families": init_data["families"]
+        "families": init_data["families"],
+        "controls": init_data["controls"]
     }
 
 @app.get("/api/scan/family")

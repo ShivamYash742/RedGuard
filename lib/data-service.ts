@@ -43,6 +43,8 @@ export interface Probe {
   dataset_version?: string
   synthetic?: boolean
   research_notes?: string
+  benign_control?: boolean
+  canary?: string
 }
 
 export interface AttackFamilyMeta {
@@ -75,6 +77,10 @@ export type OutcomeTier = (typeof OUTCOME_TIERS)[number]['key']
 export type TierCounts = Record<OutcomeTier, number>
 
 export const emptyTierCounts = (): TierCounts => ({ FILTERED: 0, REFUSED: 0, IGNORED: 0, COMPROMISED: 0 })
+
+// Benign controls: FILTERED = regex false positive, OVER_REFUSED = model refused a harmless request
+export type ControlCounts = { FILTERED: number; OVER_REFUSED: number; HELPED: number }
+export const emptyControlCounts = (): ControlCounts => ({ FILTERED: 0, OVER_REFUSED: 0, HELPED: 0 })
 
 export interface BenchmarkRun {
   id: string
@@ -232,6 +238,8 @@ class BenchmarkDataService {
             dataset_version: entry.dataset_version || '1.0.0',
             synthetic: entry.synthetic ?? true,
             research_notes: entry.research_notes,
+            benign_control: entry.benign_control ?? false,
+            canary: entry.canary,
           })
         })
       }

@@ -12,8 +12,10 @@ restrictions.
 RedGuard is an AI-agent security benchmark with two modes that answer
 different questions.
 
-**Mode A — probe scanner.** Fires 50 adversarial prompts ("probes") from 8
-attack families and 12 scenarios at a pluggable LLM agent. Each probe passes
+**Mode A — probe scanner.** Fires 46 adversarial prompts ("probes") from 8
+attack families and 12 scenarios at a pluggable LLM agent, plus 10 benign
+controls (`"benign_control": true`) that measure over-refusal and regex false
+positives. Each probe passes
 the regex policy engine (`backend/inspector.py` + `backend/policy.yaml`) and an
 external ML classifier (`CLASSIFIER_URL`); if allowed, it goes to the agent and
 the reply is scored against a refusal-keyword list (`backend/scanner.py`).
@@ -76,15 +78,15 @@ system prompt unless the scan asks for `hardened` (`promptMode`).
   plan phase 4.
 - **Success indicators echo the attack wording**, so substring scoring
   under-counts "I'm sorry, but here it is" (plan phase 3 adds canaries).
-- **Probe quality** (plan phase 3). 20/50 contain giveaway phrases (`attacker@evil.com`,
-  `[INJECTED PLAN STEP]`, `IGNORE ALL PREVIOUS INSTRUCTIONS`); RG-DI-008 and
-  RG-MP-006 explain themselves to the model. Indirect families are delivered in
-  the user message, not a tool result. The agents only have `web_search`,
-  `file_read`, `calculator` and no memory between calls, so tool-action and
-  memory-poisoning probes cannot succeed. RG-TM-003/004/005 target parsers that
-  don't exist. Some probes are benign requests (RG-GD-002, RG-EX-004, RG-AA-001,
-  RG-AA-005). Template leftovers in RG-CI-002/004/008; RG-CI-001 ≈ RG-CI-002,
-  RG-DI-001 ≈ RG-DI-002.
+- **Probe quality** (plan phase 3; the `prompt` rewrites are done by hand in
+  `core/datasets/*.json`). Many attack prompts contain giveaway phrases
+  (`attacker@evil.com`, `[INJECTED PLAN STEP]`); RG-DI-008 and RG-MP-006
+  explain themselves to the model. Indirect families are delivered in the user
+  message, not a tool result. The agents only have `web_search`, `file_read`,
+  `calculator` and no memory between calls, so tool-action and
+  memory-poisoning probes cannot succeed; RG-EX-004 needs an email tool the
+  agents lack. Template leftovers in RG-CI-002/004/008; RG-CI-001 ≈ RG-CI-002,
+  RG-DI-001 ≈ RG-DI-002. (Done: TM-003/004/005 removed, RG-GD-002 is a control.)
 - **Leaderboard** (plan phase 5). `getModelComparisons` in `lib/data-service.ts` seeds
   hardcoded rows (flagged `synthetic`); real sessions overwrite only the
   headline numbers, family scores and `utilityScore` stay invented, and "BDS"

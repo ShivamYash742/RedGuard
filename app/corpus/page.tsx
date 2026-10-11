@@ -192,7 +192,7 @@ function CorpusContent() {
                 onClick={() => setSelectedProbe(p)}
                 className="cursor-pointer hover:bg-[var(--surface-base)] transition-colors"
               >
-                <td className="font-mono text-xs font-semibold text-[var(--primary)]">{p.id}</td>
+                <td className="font-mono text-xs font-semibold text-[var(--primary)]">{p.id} {p.benign_control && <span className="badge-semantic badge-neutral ml-1">control</span>}</td>
                 <td className="font-medium text-xs text-[var(--text-primary)]">{p.title}</td>
                 <td className="capitalize text-xs text-[var(--text-secondary)]">{p.attack_family.replace(/_/g, ' ')}</td>
                 <td className="capitalize text-xs text-[var(--text-secondary)]">{p.scenario.replace(/_/g, ' ')}</td>

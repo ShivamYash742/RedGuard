@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Play, RefreshCw, FileText, Shield, Bot, Wrench, ArrowRight, History } from 'lucide-react'
-import { benchmarkDataService, normalizeFamily, KNOWN_AGENTS, KnownAgent, BenchmarkRun, OUTCOME_TIERS, TierCounts, emptyTierCounts } from '@/lib/data-service'
+import { benchmarkDataService, normalizeFamily, KNOWN_AGENTS, KnownAgent, BenchmarkRun, OUTCOME_TIERS, TierCounts, emptyTierCounts, ControlCounts, emptyControlCounts } from '@/lib/data-service'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/Skeletons'
 
@@ -10,7 +10,9 @@ interface FamilyProgress {
   name: string
   total: number
   current: number
+  controls: number
   counts: TierCounts
+  controlCounts: ControlCounts
 }
 
 type PromptMode = 'baseline' | 'hardened'
@@ -103,7 +105,14 @@ export default function RunsPage() {
       if (data.families) {
         fams = Object.entries(data.families)
           .filter(([name]) => selectedFamilies.length === 0 || selectedFamilies.some(f => normalizeFamily(f) === normalizeFamily(name)))
-          .map(([name, total]) => ({ name, total: total as number, current: 0, counts: emptyTierCounts() }))
+          .map(([name, total]) => ({
+            name,
+            total: total as number,
+            current: 0,
+            controls: data.controls?.[name] ?? 0,
+            counts: emptyTierCounts(),
+            controlCounts: emptyControlCounts(),
+          }))
         setFamilies(fams)
       }
 
@@ -125,7 +134,7 @@ export default function RunsPage() {
 
             setFamilies(prev => {
               const updated = [...prev]
-              updated[i] = { ...updated[i], current: payload.index, counts: payload.counts }
+              updated[i] = { ...updated[i], current: payload.index, counts: payload.counts, controlCounts: payload.controls }
               return updated
             })
           })
@@ -134,7 +143,7 @@ export default function RunsPage() {
             const payload = JSON.parse(e.data)
             setFamilies(prev => {
               const updated = [...prev]
-              updated[i] = { ...updated[i], counts: payload.counts }
+              updated[i] = { ...updated[i], counts: payload.counts, controlCounts: payload.controls }
               return updated
             })
             evtSource.close()
@@ -183,6 +192,13 @@ export default function RunsPage() {
     OUTCOME_TIERS.forEach(t => { acc[t.key] += f.counts[t.key] })
     return acc
   }, emptyTierCounts())
+  const attackTotal = families.reduce((acc, f) => acc + f.total - f.controls, 0)
+  const controlTotal = families.reduce((acc, f) => acc + f.controls, 0)
+  const overallControls = families.reduce((acc, f) => ({
+    FILTERED: acc.FILTERED + f.controlCounts.FILTERED,
+    OVER_REFUSED: acc.OVER_REFUSED + f.controlCounts.OVER_REFUSED,
+    HELPED: acc.HELPED + f.controlCounts.HELPED,
+  }), emptyControlCounts())
   const agentsByCategory = agents.filter(a => a.category === activeCategory)
 
   return (
@@ -340,7 +356,7 @@ export default function RunsPage() {
           </div>
         </div>
 
-        <TierBar counts={overallCounts} total={progress.total} />
+        <TierBar counts={overallCounts} total={attackTotal} />
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {OUTCOME_TIERS.map(t => (
@@ -354,6 +370,12 @@ export default function RunsPage() {
             </div>
           ))}
         </div>
+
+        {controlTotal > 0 && (
+          <p className="text-[11px] text-[var(--text-secondary)] font-mono">
+            Benign controls ({controlTotal}): {overallControls.HELPED} helped · {overallControls.OVER_REFUSED} over-refused by the model · {overallControls.FILTERED} blocked by the regex
+          </p>
+        )}
       </div>
 
       {families.length > 0 && (
@@ -367,7 +389,7 @@ export default function RunsPage() {
                   <span className="font-mono text-[11px] text-[var(--text-muted)]">{f.current} / {f.total}</span>
                 </div>
                 <div className="mb-3">
-                  <TierBar counts={f.counts} total={f.total} height="h-2" />
+                  <TierBar counts={f.counts} total={f.total - f.controls} height="h-2" />
                 </div>
                 <div className="grid grid-cols-4 gap-1 text-[11px] font-mono text-center">
                   {OUTCOME_TIERS.map(t => (
