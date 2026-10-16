@@ -19,3 +19,7 @@ venv/
 graphify-out/
 
 
+
+# Local progress reports and exported documents
+/*.pdf
+/*.pptx

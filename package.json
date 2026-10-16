@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:all": "concurrently \"npm run dev\" \"cd backend && ./.venv/bin/dotenv -f ../.env run -- ./.venv/bin/prisma db push --schema prisma/schema.prisma --skip-generate && PYTHONPATH=$(pwd)/.. ./.venv/bin/python -m uvicorn app:app --env-file ../.env --port 8000\"",
+    "dev:all": "concurrently \"npm run dev\" \"cd backend && PYTHONPATH=$(pwd)/.. ./.venv/bin/python -m uvicorn app:app --env-file ../.env --port 8000\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

@@ -10,7 +10,11 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
+<<<<<<< Updated upstream
         destination: `${backendUrl}/api/:path*`, // Proxy to FastAPI backend
+=======
+        destination: 'http://localhost:8015/api/:path*', // Proxy to FastAPI backend
+>>>>>>> Stashed changes
       },
     ]
   },
