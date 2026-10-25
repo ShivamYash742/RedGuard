@@ -332,12 +332,11 @@ def compute_bds_report(
 
 
 def bds_from_probe_results(results: list) -> BDSReport:
-    """Compute BDS from a list of ProbeResult objects.
-
-    Convenience function for integration with the benchmark runner.
+    """Compute BDS from a list of probe results.
 
     Args:
-        results: List of redguard.probes.base.ProbeResult objects.
+        results: Objects with `probe_id`, `probe_name`, `attack_family` and
+            `success` (bool). Nothing in this repository produces them.
 
     Returns:
         BDSReport.

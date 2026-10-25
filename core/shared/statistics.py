@@ -156,10 +156,12 @@ def compute_statistics(values: List[float]) -> StatisticalSummary:
 
 
 def compute_run_statistics(results: list) -> RunStatistics:
-    """Compute full statistics from a list of ProbeResult objects.
+    """Compute full statistics from a list of probe results.
 
     Args:
-        results: List of redguard.probes.base.ProbeResult objects.
+        results: Objects with `success` (bool), `attack_family` (str) and
+            `scenario` (str or None). Nothing in this repository produces
+            them; the Scanner and Lab modes store their results elsewhere.
 
     Returns:
         RunStatistics with overall and per-dimension breakdowns.
@@ -226,7 +228,8 @@ def export_csv(results: list, filepath: str) -> Path:
     be compatible with R, Julia, pandas, and Excel without transformation.
 
     Args:
-        results: List of redguard.probes.base.ProbeResult objects.
+        results: Objects with the CSV_COLUMNS attributes (see
+            compute_run_statistics for where they come from).
         filepath: Output path (created if it doesn't exist).
 
     Returns:

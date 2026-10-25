@@ -429,8 +429,8 @@ Copy `.env.example` to `.env` and fill in the keys you need. `DATABASE_URL` is r
 | Variable | Used By |
 |---|---|
 | `DATABASE_URL` | Prisma ORM (SQLite, always required) |
-| `NVIDIA_API_KEY` / `NVIDIA_MODEL` | Nemotron-3 Ultra & Super agents |
-| `GROQ_API_KEY` / `GROQ_MODEL` | GPT OSS 120B / 20B agents |
+| `NVIDIA_API_KEY` | Nemotron-3 Ultra & Super agents (the models are fixed in the agent files) |
+| `GROQ_API_KEY` | GPT OSS 120B / 20B agents |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent and Lab mode's Ollama provider (run `ollama serve` first) |
 | `LAB_MODEL` | Lab mode's default model when an experiment names none (default `granite3.3:2b`) |
 | `CLASSIFIER_URL` | Optional ML classifier for a secondary verdict. Unset = no call; every probe is sent to this URL, so only use a service you run |
