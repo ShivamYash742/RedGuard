@@ -28,6 +28,11 @@ from __future__ import annotations
 #: metric definitions, or evaluation methodology.
 BENCHMARK_VERSION: str = "5.0.0"
 
+#: Earlier benchmark versions whose stored results are still shown, apart from
+#: the current ones and labelled "measured before the audit fixes". Their scoring,
+#: prompts and tools differ, so they are never pooled with BENCHMARK_VERSION runs.
+PRE_AUDIT_BENCHMARK_VERSIONS: tuple = ("4.0.0",)
+
 #: Version of the benchmark dataset (JSON files in core/scanner_mode/datasets/).
 #: Bump when probes are added, removed, or their prompts change materially.
 DATASET_VERSION: str = "4.0.0"

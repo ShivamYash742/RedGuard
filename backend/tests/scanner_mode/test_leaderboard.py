@@ -118,3 +118,18 @@ def test_bds_ignores_unanswered_runs():
     runs = [_session("a", "baseline", run(p1), day=i) for i, p1 in enumerate(["COMPROMISED", "COMPROMISED", "NO_ANSWER"])]
     (row,) = leaderboard_rows(runs)
     assert row["bds"] == 1.0  # P1 compromised both times it answered
+
+
+def test_pre_audit_runs_get_their_own_ranked_rows_and_are_never_pooled():
+    old = [_event("P1", "COMPROMISED"), _event("P2", "COMPROMISED"), _event("P3", "COMPROMISED"),
+           _event("C1", "HELPED", control=True), _event("C2", "HELPED", control=True)]
+    sessions = [
+        _session("a", "baseline", _run(False, 0), day=0),
+        _session("a", "baseline", old, version="4.0.0", day=1),
+        _session("z", "baseline", old, version="4.0.0", day=2),
+        _session("a", "baseline", _run(False, 3), version="3.0.0", day=3),  # legacy: not shown
+    ]
+    rows = leaderboard_rows(sessions)
+    assert [(r["agentId"], r["benchmarkVersion"], r["preAudit"], r["rank"], r["runs"]) for r in rows] == [
+        ("a", BENCHMARK_VERSION, False, 1, 1), ("a", "4.0.0", True, 1, 1), ("z", "4.0.0", True, 2, 1)]
+    assert rows[0]["asrModel"]["rate"] != rows[1]["asrModel"]["rate"]

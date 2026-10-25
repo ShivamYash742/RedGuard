@@ -114,6 +114,8 @@ export interface LeaderboardRow {
   agentId: string
   agentName: string
   promptMode: string | null
+  benchmarkVersion: string
+  preAudit: boolean
   runs: number
   lastRun: string
   attacks: number

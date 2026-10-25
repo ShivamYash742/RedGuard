@@ -1,10 +1,11 @@
 """
 Mode A leaderboard, computed from stored runs only.
 
-One row per (agent, prompt mode). Counts are pooled over that pair's
-completed runs of the current BENCHMARK_VERSION only: other versions ran a
-different probe set or scoring (null = legacy BLOCKED/ALLOWED), so pooling
-them would mix incomparable numbers. A run also has to contain every built-in
+One row per (agent, prompt mode, benchmark version). Counts are pooled over a
+row's completed runs of that one version: versions differ in scoring, prompts
+and tools (null = legacy BLOCKED/ALLOWED), so pooling them would mix
+incomparable numbers. Only the current version and the PRE_AUDIT versions get
+rows; the latter are flagged `preAudit` and ranked apart. A run also has to contain every built-in
 attack and control probe exactly once (a partial or doubled run would weight
 some probes more than others). Custom probes are counted apart, never pooled.
 """
@@ -18,7 +19,7 @@ from scanner_mode.scanner import NO_ANSWER, TIERS, builtin_probe_ids  # first: i
 
 from core.scanner_mode.bds import bds_compute
 from core.shared.statistics import wilson_ci
-from core.shared.version import BENCHMARK_VERSION, MIN_RUNS_FOR_STATISTICS
+from core.shared.version import BENCHMARK_VERSION, MIN_RUNS_FOR_STATISTICS, PRE_AUDIT_BENCHMARK_VERSIONS
 
 
 def _rate(successes: int, trials: int) -> Optional[Dict[str, float]]:
@@ -45,14 +46,15 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
     """`sessions` must include their `events`. `probe_ids` is the probe set a
     run has to cover (default: the built-in corpus)."""
     wanted = Counter(probe_ids if probe_ids is not None else builtin_probe_ids())
+    shown = (BENCHMARK_VERSION, *PRE_AUDIT_BENCHMARK_VERSIONS)
     groups: Dict[tuple, List[Any]] = defaultdict(list)
     for s in sessions:
         complete = Counter(e.probeId for e in s.events if e.probeId) == wanted
-        if s.benchmarkVersion == BENCHMARK_VERSION and s.status == "COMPLETED" and complete:
-            groups[(s.agentId, s.promptMode)].append(s)
+        if s.benchmarkVersion in shown and s.status == "COMPLETED" and complete:
+            groups[(s.agentId, s.promptMode, s.benchmarkVersion)].append(s)
 
     rows = []
-    for (agent_id, prompt_mode), group in groups.items():
+    for (agent_id, prompt_mode, version), group in groups.items():
         all_events = [e for s in group for e in s.events]
         events = [e for e in all_events if e.probeId]
         custom = [e for e in all_events if not e.probeId]
@@ -81,6 +83,8 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
             "agentId": agent_id,
             "agentName": latest.agentName or agent_id,
             "promptMode": prompt_mode,
+            "benchmarkVersion": version,
+            "preAudit": version != BENCHMARK_VERSION,
             "runs": len(group),
             "lastRun": latest.startedAt.isoformat(),
             "attacks": n,
@@ -99,8 +103,12 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
             "bds": _mean_bds(all_attacks, len(group)),
         })
 
-    # Lowest model-alone attack success first; rows without attacks last.
-    rows.sort(key=lambda r: (r["asrModel"] is None, r["asrModel"]["rate"] if r["asrModel"] else 0, r["agentName"]))
-    for rank, row in enumerate(rows, start=1):
-        row["rank"] = rank
+    # Current version first; within a version, lowest model-alone attack success
+    # first and rows without attacks last. Ranks restart for each version.
+    rows.sort(key=lambda r: (r["preAudit"], r["benchmarkVersion"], r["asrModel"] is None,
+                             r["asrModel"]["rate"] if r["asrModel"] else 0, r["agentName"]))
+    ranked: Counter = Counter()
+    for row in rows:
+        ranked[row["benchmarkVersion"]] += 1
+        row["rank"] = ranked[row["benchmarkVersion"]]
     return rows

@@ -35,6 +35,56 @@ function Rate({ value, tone }: { value: RateCI | null; tone: string }) {
 const label = (r: LeaderboardRow) => `${r.agentName} · ${r.promptMode ?? 'agent default'}`
 const titleCase = (s: string) => s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 
+function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
+  return (
+    <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
+      <table className="research-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Agent · Prompt</th>
+            <th>Runs</th>
+            <th title="Share of attack probes the model complied with, filter off">ASR, model alone</th>
+            <th title="Share of attack probes that succeeded with the regex filter in front">ASR, as deployed</th>
+            <th>Outcome (F · R · I · C)</th>
+            <th title="Share of harmless control prompts the model refused">Over-refusal</th>
+            <th title="Behaviour Drift Score: 1 = same outcome every run. Needs 3+ runs.">BDS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={`${r.agentId}-${r.promptMode}`} className="hover:bg-[var(--surface-base)] transition-colors">
+              <td className="font-mono text-xs font-bold text-center">#{r.rank}</td>
+              <td className="text-xs">
+                <span className="font-bold text-[var(--text-primary)]">{r.agentName}</span>
+                <span className="block text-[10px] text-[var(--text-muted)]">
+                  {r.promptMode ?? 'agent default'} · last run {new Date(r.lastRun).toLocaleDateString()}
+                </span>
+              </td>
+              <td className="font-mono text-xs text-center">{r.runs}</td>
+              <td className="text-xs"><Rate value={r.asrModel} tone="text-[var(--danger)]" /></td>
+              <td className="text-xs"><Rate value={r.asrDeployed} tone="text-[var(--danger)]" /></td>
+              <td className="font-mono text-xs min-w-[9rem]">
+                <TierBar counts={r.tiers} total={r.attacks} height="h-1.5" />
+                <span className="block mt-1 text-center">
+                  {r.tiers.FILTERED} · {r.tiers.REFUSED} · {r.tiers.IGNORED} · <span className="text-[var(--danger)] font-bold">{r.tiers.COMPROMISED}</span>
+                </span>
+                {r.noAnswer.attacks + r.noAnswer.controls > 0 && (
+                  <span className="block text-center text-[10px] text-[var(--text-muted)]" title="The agent never answered; left out of every rate">
+                    no answer: {r.noAnswer.attacks} attacks · {r.noAnswer.controls} controls
+                  </span>
+                )}
+              </td>
+              <td className="text-xs"><Rate value={r.overRefusal} tone="text-[var(--warning)]" /></td>
+              <td className="font-mono text-xs text-center">{r.bds === null ? <span className="text-[var(--text-muted)]">n/a</span> : r.bds.toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function ModelsPage() {
   const [rows, setRows] = useState<LeaderboardRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,8 +95,11 @@ export default function ModelsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const radarRows = rows.slice(0, 5)
-  const families = Array.from(new Set(rows.flatMap(r => Object.keys(r.families)))).sort()
+  const current = rows.filter(r => !r.preAudit)
+  const preAudit = rows.filter(r => r.preAudit)
+
+  const radarRows = current.slice(0, 5)
+  const families = Array.from(new Set(current.flatMap(r => Object.keys(r.families)))).sort()
   const radarData = families.map(fam => {
     const entry: Record<string, string | number> = { family: titleCase(fam) }
     radarRows.forEach(r => {
@@ -56,7 +109,7 @@ export default function ModelsPage() {
     return entry
   })
 
-  const tierShareData = rows.map(r => {
+  const tierShareData = current.map(r => {
     const entry: Record<string, string | number> = { name: label(r) }
     OUTCOME_TIERS.forEach(t => { entry[t.label] = r.attacks > 0 ? Math.round((100 * r.tiers[t.key]) / r.attacks) : 0 })
     return entry
@@ -74,7 +127,7 @@ export default function ModelsPage() {
         </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Models</h1>
         <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-          Measured results only, one row per agent and system-prompt mode, pooled over its completed runs of this benchmark version.
+          Measured results only, one row per agent and system-prompt mode, pooled over its completed runs of one benchmark version.
           Ranked by attack success with the regex filter off (model alone); lower is better.
         </p>
       </div>
@@ -82,58 +135,14 @@ export default function ModelsPage() {
       {rows.length === 0 ? (
         <EmptyState
           title="No measured runs yet"
-          description="Runs from other benchmark versions are not comparable and are left out. Start an evaluation to see real numbers here."
+          description="Start an evaluation to see real numbers here. Runs from older benchmark versions are not comparable and are not pooled."
           actionLabel="Go to Runs"
           actionHref="/runs"
           icon="chart"
         />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
-            <table className="research-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Agent · Prompt</th>
-                  <th>Runs</th>
-                  <th title="Share of attack probes the model complied with, filter off">ASR, model alone</th>
-                  <th title="Share of attack probes that succeeded with the regex filter in front">ASR, as deployed</th>
-                  <th>Outcome (F · R · I · C)</th>
-                  <th title="Share of harmless control prompts the model refused">Over-refusal</th>
-                  <th title="Behaviour Drift Score: 1 = same outcome every run. Needs 3+ runs.">BDS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <tr key={`${r.agentId}-${r.promptMode}`} className="hover:bg-[var(--surface-base)] transition-colors">
-                    <td className="font-mono text-xs font-bold text-center">#{r.rank}</td>
-                    <td className="text-xs">
-                      <span className="font-bold text-[var(--text-primary)]">{r.agentName}</span>
-                      <span className="block text-[10px] text-[var(--text-muted)]">
-                        {r.promptMode ?? 'agent default'} · last run {new Date(r.lastRun).toLocaleDateString()}
-                      </span>
-                    </td>
-                    <td className="font-mono text-xs text-center">{r.runs}</td>
-                    <td className="text-xs"><Rate value={r.asrModel} tone="text-[var(--danger)]" /></td>
-                    <td className="text-xs"><Rate value={r.asrDeployed} tone="text-[var(--danger)]" /></td>
-                    <td className="font-mono text-xs min-w-[9rem]">
-                      <TierBar counts={r.tiers} total={r.attacks} height="h-1.5" />
-                      <span className="block mt-1 text-center">
-                        {r.tiers.FILTERED} · {r.tiers.REFUSED} · {r.tiers.IGNORED} · <span className="text-[var(--danger)] font-bold">{r.tiers.COMPROMISED}</span>
-                      </span>
-                      {r.noAnswer.attacks + r.noAnswer.controls > 0 && (
-                        <span className="block text-center text-[10px] text-[var(--text-muted)]" title="The agent never answered; left out of every rate">
-                          no answer: {r.noAnswer.attacks} attacks · {r.noAnswer.controls} controls
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-xs"><Rate value={r.overRefusal} tone="text-[var(--warning)]" /></td>
-                    <td className="font-mono text-xs text-center">{r.bds === null ? <span className="text-[var(--text-muted)]">n/a</span> : r.bds.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <LeaderboardTable rows={current} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="research-card space-y-3">
@@ -188,6 +197,18 @@ export default function ModelsPage() {
               </div>
             </div>
           </div>
+
+          {preAudit.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                Measured before the audit fixes (benchmark {preAudit[0].benchmarkVersion})
+              </h2>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Earlier scoring, prompts and agent tools. These are not comparable with the rows above and are never pooled with them.
+              </p>
+              <LeaderboardTable rows={preAudit} />
+            </div>
+          )}
         </>
       )}
     </div>
