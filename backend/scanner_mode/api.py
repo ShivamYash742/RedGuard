@@ -8,6 +8,7 @@ Mounted by `backend/app.py` with no prefix, so every path is unchanged.
 """
 
 import json
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
@@ -18,8 +19,9 @@ from core.shared.version import BENCHMARK_VERSION
 
 from database import get_db
 from scanner_mode.agent_loader import DEFAULT_AGENT_ID, get_agent, list_agents
-from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError
+from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError, parse_policy
 from scanner_mode.leaderboard import leaderboard_rows
+from scanner_mode.schema import sha256_hex
 from scanner_mode.report_generator import generate_report_for_session
 from scanner_mode.scanner import finalize_scan, init_scan_session, run_family_scan, session_prompt_mode
 
@@ -166,10 +168,17 @@ async def get_policy():
 @router.put("/api/policy")
 async def update_policy(request: Request):
     data = await request.json()
-    yaml_content = data.get("yaml", "")
-    with open(POLICY_PATH, "w") as f:
-        f.write(yaml_content)
-    return {"status": "success"}
+    yaml_content = data.get("yaml") if isinstance(data, dict) else None
+    if not isinstance(yaml_content, str):
+        raise HTTPException(status_code=400, detail='body must be {"yaml": "<policy text>"}')
+    try:
+        parse_policy(yaml_content)
+    except PolicyError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid policy: {exc}")
+    tmp = POLICY_PATH.with_name(POLICY_PATH.name + ".tmp")
+    tmp.write_text(yaml_content)
+    os.replace(tmp, POLICY_PATH)  # atomic: a scan never reads half a policy
+    return {"status": "success", "sha256": sha256_hex(yaml_content)}
 
 # ── Custom Probes ────────────────────────────────────────────────────────────
 @router.get("/api/probes")

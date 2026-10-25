@@ -33,6 +33,7 @@ model Session {
   compromised         Int     @default(0)
   modelCompromised    Int     @default(0) @map("model_compromised")
   controlsOverRefused Int     @default(0) @map("controls_over_refused")
+  policySha256        String? @map("policy_sha256")
   events      ProbeEvent[]
   report      Report?
   policy      PolicySnapshot?

@@ -179,14 +179,9 @@ async def _invoke_agent(agent_id: str, prompt: str, model_name: str = None, prom
 async def init_scan_session(session_id: str) -> Dict[str, Any]:
     prisma = await get_db()
 
-    # Save policy snapshot
-    policy_yaml = ""
-    try:
-        with open(POLICY_PATH, "r") as f:
-            policy_yaml = f.read()
-    except:
-        pass
-
+    # Save policy snapshot; the session keeps the hash of the exact text filtered with.
+    policy_yaml = POLICY_PATH.read_text()
+    await prisma.session.update(where={"id": session_id}, data={"policySha256": sha256_hex(policy_yaml)})
     await prisma.policysnapshot.create(
         data={
             "session": {"connect": {"id": session_id}},

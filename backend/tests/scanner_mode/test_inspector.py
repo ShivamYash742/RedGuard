@@ -1,5 +1,5 @@
 import pytest
-from scanner_mode.inspector import Inspector, PolicyError
+from scanner_mode.inspector import Inspector, PolicyError, parse_policy
 
 def test_inspector_benign_prompt():
     inspector = Inspector()
@@ -90,3 +90,33 @@ def test_unloadable_policy_fails_closed(tmp_path, body):
 def test_missing_policy_fails_closed(tmp_path):
     with pytest.raises(PolicyError):
         Inspector(str(tmp_path / "missing.yaml"))
+
+
+RULE = "name: r\n    priority: 1\n    action: DENY\n    conditions:\n      - field: risk_score\n        match_type: threshold\n        value: 0.2\n"
+
+
+def _policy(rule_yaml=RULE, head="default_action: ALLOW\n"):
+    return f"{head}ingress_rules:\n  - {rule_yaml}"
+
+
+def test_a_minimal_policy_is_valid():
+    assert parse_policy(_policy())["ingress_rules"][0]["name"] == "r"
+
+
+@pytest.mark.parametrize("text", [
+    "default_action: ALLOW\n",                                          # no ingress_rules
+    "ingress_rules: {}\n",                                              # not a list
+    "default_action: BLOCK\ningress_rules: []\n",                      # unknown default action
+    _policy(RULE.replace("name: r\n    ", "")),                         # no name
+    _policy(RULE.replace("priority: 1", "priority: high")),
+    _policy(RULE.replace("action: DENY", "action: BLOCK")),
+    _policy(RULE.replace("conditions:", "conditions: []\n    x:")),     # would match every prompt
+    _policy(RULE.replace("risk_score", "risk_scroe")),                   # typo'd field never matches
+    _policy(RULE.replace("threshold", "regex")),
+    _policy(RULE.replace("value: 0.2", "value: high")),                  # threshold needs a number
+    _policy(RULE.replace("threshold", "boolean")),                       # boolean needs true/false
+    "- not\n- a mapping\n",
+])
+def test_invalid_policies_are_rejected(text):
+    with pytest.raises(PolicyError):
+        parse_policy(text)

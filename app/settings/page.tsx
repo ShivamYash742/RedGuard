@@ -202,13 +202,14 @@ function PolicyTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ yaml }),
       })
-      setMessage(res.ok ? 'Policy saved successfully.' : 'Failed to save policy.')
+      const detail = res.ok ? '' : (await res.json().catch(() => null))?.detail
+      setMessage(res.ok ? 'Policy saved successfully.' : String(detail ?? 'Failed to save policy.'))
     } catch (err) {
       setMessage('Error saving policy.')
       console.error(err)
     } finally {
       setSaving(false)
-      setTimeout(() => setMessage(''), 3000)
+      setTimeout(() => setMessage(''), 8000)
     }
   }
 
