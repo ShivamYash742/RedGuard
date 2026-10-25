@@ -19,3 +19,6 @@ venv/
 graphify-out/
 
 
+
+# audit scratch (DB copies, re-analysis inputs)
+scratch/
