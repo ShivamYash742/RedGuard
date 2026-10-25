@@ -98,7 +98,7 @@ async def generate_report_for_session(session_id: str) -> dict:
         agent_name = getattr(mod, "AGENT_NAME", agent_name)
         model_name = getattr(mod, "MODEL_NAME", "N/A")
         if prompt_mode in PROMPT_MODES:
-            system_prompt = build_system_prompt(agent_id, prompt_mode)
+            system_prompt = build_system_prompt(prompt_mode)
     except Exception:
         pass
 

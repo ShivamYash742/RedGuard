@@ -34,7 +34,7 @@ async def run_agent(agent_id: str, make_llm: Callable[[], Any], prompt: str, pro
         _compiled[key] = create_react_agent(
             model=make_llm(),
             tools=TOOLS,
-            prompt=build_system_prompt(agent_id, prompt_mode),
+            prompt=build_system_prompt(prompt_mode),
         )
     result = await _compiled[key].ainvoke(
         {"messages": [{"role": "user", "content": prompt}]},

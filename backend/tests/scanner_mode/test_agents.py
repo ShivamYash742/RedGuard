@@ -32,8 +32,8 @@ def test_open_proxy_route_is_gone():
 
 
 def test_baseline_prompt_does_not_describe_the_attacks():
-    baseline = build_system_prompt("nemotron_super_agent").lower()
-    hardened = build_system_prompt("nemotron_super_agent", "hardened").lower()
+    baseline = build_system_prompt().lower()
+    hardened = build_system_prompt("hardened").lower()
     for phrase in ("ignore previous instructions", "system override", "internal note"):
         assert phrase not in baseline
         assert phrase in hardened
@@ -104,7 +104,18 @@ async def test_every_agent_has_the_same_tools_and_baseline_prompt(monkeypatch, s
     built = await _build_every_agent(monkeypatch, spy_graph, "baseline")
     assert len(built) == len(AGENT_IDS) >= 6
     assert {tuple(b.tools) for b in built.values()} == {("web_search", "file_read", "calculator")}
-    assert {b.prompt for b in built.values()} == {build_system_prompt("nemotron_3_ultra")}
+    assert {b.prompt for b in built.values()} == {build_system_prompt()}
+
+
+@pytest.mark.asyncio
+async def test_every_agent_gets_the_identical_hardened_prompt(monkeypatch, spy_graph):
+    built = await _build_every_agent(monkeypatch, spy_graph, "hardened")
+    (prompt,) = {b.prompt for b in built.values()}
+    assert prompt == build_system_prompt("hardened")
+    # the hardened prompt adds security content to the baseline; it does not replace the persona
+    assert prompt.startswith(build_system_prompt())
+    for persona in ("maximally helpful", "as-is", "Nemotron", "GPT OSS", "air-gapped", "Return tool outputs directly"):
+        assert persona not in prompt, persona
 
 
 def test_no_agent_filters_or_extends_the_prompt_on_its_own():
