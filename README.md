@@ -1,8 +1,8 @@
-# RedGuard v5.0.0 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v6.0.0 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)](./package.json)
-[![Benchmark](https://img.shields.io/badge/benchmark-v5.0.0-indigo.svg)](./core/shared/version.py)
-[![Dataset](https://img.shields.io/badge/dataset-v5.0.0-emerald.svg)](./core/scanner_mode/datasets)
+[![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](./package.json)
+[![Benchmark](https://img.shields.io/badge/benchmark-v6.0.0-indigo.svg)](./core/shared/version.py)
+[![Dataset](https://img.shields.io/badge/dataset-v6.0.0-emerald.svg)](./core/scanner_mode/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
 
@@ -16,6 +16,34 @@ Each mode has its own place in every layer of the code — see [`docs/architectu
 ---
 
 ## 🆕 What's new
+
+### 6.0.0 — an evaluation that can support its claims
+
+5.0.0 fixed how a probe is scored. It did not fix what the scores are allowed to claim: 46 attacks in 8 families
+(3 to 9 each) cannot rank two agents, the hardened prompt named the test, and nobody had measured the scorer.
+6.0.0 changes the evaluation, not only the code. Plan: [`docs/evaluation_plan.md`](./docs/evaluation_plan.md);
+how to produce a publishable result: [`docs/evaluation_protocol.md`](./docs/evaluation_protocol.md).
+
+- **Dev / test split.** Every probe and case has `split`. The 56 hand-written probes and 10 cases are **dev**:
+  the filter, prompts, indicators and evaluator were built against them. **160 new attacks** (20 per family, all
+  scored from a tool call or a canary, none by wording) with 97 matched controls, and **30 new Lab cases**, are
+  **test**. They are generated (`scripts/gen_test_probes.py`, `scripts/gen_test_cases.py`) and a test checks the
+  files equal the generator's output. Numbers are quoted from the test split.
+- **Frozen.** `scanner_mode/manifest.py` and `core/lab_mode/manifest.py` hash the filter, prompts, tools, scorer,
+  evaluator and both case sets; a test fails if they change without a deliberate re-freeze, and every session and
+  run stores its digest.
+- **General hardened prompt.** Six principles that name no attack phrase, family or scenario.
+- **Claims need evidence.** Leaderboard rows list which other rows they cannot be told apart from (paired per-probe
+  test, `/api/leaderboard/compare`); Lab arm comparisons give a sign-flip p, a verdict, an underpowered flag, the
+  cost to the benign task and Holm-adjusted p. `python -m scripts.power` says how many items a question needs.
+- **Exposure.** Scanner rows report attack success among attacks the agent actually met. Lab has
+  `exposure=forced`: the harness performs the entry agent's read of the planted location (`sweep --exposure forced`).
+- **Gates.** A Lab model must pass three suitability gates before it is compared with another.
+- **Labelling.** `scripts/reanalysis/labels.py export --per-method N` builds a sheet (prompt, reply, tool calls,
+  scoring method) for two people; `agree` reports kappa and the scorer's accuracy and recall per method.
+
+Still true: **no model has been run under 6.0.0**, the scorer has no measured accuracy yet, and the 11
+phrase-scored probes live in the dev split only.
 
 ### 5.0.0 — fixes from an external audit
 
@@ -102,11 +130,11 @@ and the two modes never import each other.
 | Reclassified as a control | RG-GD-002 | A benign request, not an attack |
 | Added controls | RG-CTL-001 … RG-CTL-009 | Harmless requests that measure over-refusal and regex false positives |
 
-**Versions.** 5.0.0 is the release. Scanner mode's benchmark, dataset and probe-schema versions are **5.0.0** (agents, prompts, tools, scoring and probes changed), and Lab mode's evaluator, metrics, case-schema and environment versions are **2.0.0**. Results from 4.0.0 (Scanner) and 1.2.0 (Lab) are not comparable with them: they are shown in their own section, labelled "Measured before the audit fixes", and never pooled.
+**Versions.** 6.0.0 is the release. Scanner mode's benchmark, dataset and probe-schema versions are **6.0.0** (the probe set, the hardened prompt and the leaderboard changed), Lab mode's evaluator, metrics and environment versions are **2.0.0** and its case schema **2.1.0** (the `split` field). Results from 4.0.0 (Scanner) and 1.2.0 (Lab) are not comparable with them: they are shown in their own section, labelled "Measured before the audit fixes", and never pooled.
 
 ---
 
-## ✨ Key Features (v5.0.0)
+## ✨ Key Features (v6.0.0)
 
 | Feature | Description |
 |---|---|
@@ -130,7 +158,7 @@ and the two modes never import each other.
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v5.0.0 Platform
+                        RedGuard v6.0.0 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                         │
@@ -296,7 +324,7 @@ scripted runs or harness checks.
 
 ## 📊 Measured results
 
-**There are no results under benchmark 5.0.0 or Lab 2.0.0 yet.** The agents, prompts, tools, scoring and
+**There are no results under benchmark 6.0.0 or Lab 2.0.0 yet.** The agents, prompts, tools, scoring and
 probes all changed, so no earlier number carries over. Run a scan and the numbers appear on `/models`.
 
 ### Measured before the audit fixes
