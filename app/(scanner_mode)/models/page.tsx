@@ -53,7 +53,7 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
             <th title="Share of attack probes that succeeded with the regex filter in front">ASR, as deployed</th>
             <th>Outcome (F · R · I · C)</th>
             <th title="Share of harmless control prompts the model refused">Over-refusal</th>
-            <th title="Behaviour Drift Score: 1 = same outcome every run. Needs 3+ runs.">BDS</th>
+            <th title="Behaviour Drift Score: share of runs that agree on the majority outcome (1 = same every run, 0.5 = a coin flip). Needs 3+ runs.">BDS</th>
           </tr>
         </thead>
         <tbody>
