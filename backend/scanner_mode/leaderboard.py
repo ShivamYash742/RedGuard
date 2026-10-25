@@ -4,15 +4,17 @@ Mode A leaderboard, computed from stored runs only.
 One row per (agent, prompt mode). Counts are pooled over that pair's
 completed runs of the current BENCHMARK_VERSION only: other versions ran a
 different probe set or scoring (null = legacy BLOCKED/ALLOWED), so pooling
-them would mix incomparable numbers.
+them would mix incomparable numbers. A run also has to contain every built-in
+attack and control probe exactly once (a partial or doubled run would weight
+some probes more than others). Custom probes are counted apart, never pooled.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional
 
-from scanner_mode.scanner import TIERS  # first: it puts the repo root (core/) on sys.path
+from scanner_mode.scanner import TIERS, builtin_probe_ids  # first: it puts the repo root (core/) on sys.path
 
 from core.scanner_mode.bds import bds_compute
 from core.shared.statistics import wilson_ci
@@ -39,16 +41,21 @@ def _mean_bds(attack_events: List[Any], runs: int) -> Optional[float]:
     return sum(scores) / len(scores) if scores else None
 
 
-def leaderboard_rows(sessions: List[Any]) -> List[Dict[str, Any]]:
-    """`sessions` must include their `events`."""
+def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None) -> List[Dict[str, Any]]:
+    """`sessions` must include their `events`. `probe_ids` is the probe set a
+    run has to cover (default: the built-in corpus)."""
+    wanted = Counter(probe_ids if probe_ids is not None else builtin_probe_ids())
     groups: Dict[tuple, List[Any]] = defaultdict(list)
     for s in sessions:
-        if s.benchmarkVersion == BENCHMARK_VERSION and s.status == "COMPLETED":
+        complete = Counter(e.probeId for e in s.events if e.probeId) == wanted
+        if s.benchmarkVersion == BENCHMARK_VERSION and s.status == "COMPLETED" and complete:
             groups[(s.agentId, s.promptMode)].append(s)
 
     rows = []
     for (agent_id, prompt_mode), group in groups.items():
-        events = [e for s in group for e in s.events]
+        all_events = [e for s in group for e in s.events]
+        events = [e for e in all_events if e.probeId]
+        custom = [e for e in all_events if not e.probeId]
         attacks = [e for e in events if not e.isControl]
         controls = [e for e in events if e.isControl]
         n = len(attacks)
@@ -71,6 +78,7 @@ def leaderboard_rows(sessions: List[Any]) -> List[Dict[str, Any]]:
             "tiers": {t: sum(1 for e in attacks if e.status == t) for t in TIERS},
             "asrModel": _rate(sum(1 for e in attacks if e.modelOutcome == "COMPROMISED"), n),
             "asrDeployed": _rate(sum(1 for e in attacks if e.status == "COMPROMISED"), n),
+            "custom": {"total": len(custom), "compromised": sum(1 for e in custom if e.status == "COMPROMISED")},
             "families": dict(families),
             "controls": {
                 "total": len(controls),

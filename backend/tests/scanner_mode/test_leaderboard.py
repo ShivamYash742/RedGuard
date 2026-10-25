@@ -1,8 +1,15 @@
 from datetime import datetime, timedelta
 from types import SimpleNamespace as NS
 
-from scanner_mode.leaderboard import leaderboard_rows  # first: puts core/ on sys.path
+from functools import partial
+
+from scanner_mode.leaderboard import leaderboard_rows as _rows  # first: puts core/ on sys.path
+from scanner_mode.scanner import builtin_probe_ids
 from core.shared.version import BENCHMARK_VERSION
+
+#: The probe set these synthetic runs have to cover to be pooled.
+IDS = frozenset({"P1", "P2", "P3", "C1", "C2"})
+leaderboard_rows = partial(_rows, probe_ids=IDS)
 
 T0 = datetime(2026, 10, 11)
 
@@ -33,7 +40,8 @@ def test_rows_pool_completed_tiered_runs_only():
         _session("a", "baseline", _run(True, 2), version=None),          # legacy scoring
         _session("a", "baseline", _run(True, 2), version="3.0.0"),       # older probe set
         _session("a", "baseline", _run(True, 3), status="FAILED: boom"),  # aborted
-        _session("b", "hardened", [_event("P1", "REFUSED")]),
+        _session("b", "hardened", [_event("P1", "REFUSED"), _event("P2", "REFUSED"), _event("P3", "IGNORED"),
+                                   _event("C1", "HELPED", control=True), _event("C2", "HELPED", control=True)]),
     ]
     rows = leaderboard_rows(sessions)
     a = next(r for r in rows if r["agentId"] == "a")
@@ -58,3 +66,29 @@ def test_bds_needs_enough_runs():
     (row,) = leaderboard_rows(runs)
     # P1 flips every run (BDS < 1); P2 and P3 never change (BDS = 1)
     assert row["bds"] is not None and 0 < row["bds"] < 1
+
+
+def test_only_runs_covering_every_builtin_probe_once_are_pooled():
+    full = _run(True, 0)
+    sessions = [
+        _session("a", "baseline", full, day=0),
+        _session("a", "baseline", full[:-1], day=1),                       # missing C2
+        _session("a", "baseline", full + [_event("P1", "COMPROMISED")], day=2),  # P1 twice
+        _session("a", "baseline", full + [_event("X9", "COMPROMISED")], day=3),  # not a built-in ID
+    ]
+    (row,) = leaderboard_rows(sessions)
+    assert (row["runs"], row["attacks"]) == (1, 3)
+
+
+def test_custom_probes_never_enter_the_benchmark_numbers():
+    custom = [_event(None, "COMPROMISED", category="CUSTOM") for _ in range(3)]
+    (row,) = leaderboard_rows([_session("a", "baseline", _run(False, 0) + custom)])
+    assert row["attacks"] == 3 and row["tiers"]["COMPROMISED"] == 0
+    assert row["asrDeployed"]["rate"] == 0 and "CUSTOM" not in row["families"]
+    assert row["custom"] == {"total": 3, "compromised": 3}
+
+
+def test_a_run_of_the_real_corpus_is_pooled_by_default():
+    events = [_event(pid, "REFUSED") for pid in sorted(builtin_probe_ids())]
+    (row,) = _rows([_session("a", "baseline", events)])
+    assert row["runs"] == 1 and row["attacks"] == len(events)

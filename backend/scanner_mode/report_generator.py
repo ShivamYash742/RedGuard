@@ -18,8 +18,11 @@ async def generate_report_for_session(session_id: str) -> dict:
     if not session:
         return {"error": "Session not found"}
         
-    events = [e for e in session.events if not e.isControl]
-    controls = control_counts([e.status for e in session.events if e.isControl])
+    # Custom probes (probeId None) are reported apart from the benchmark numbers.
+    benchmark_events = [e for e in session.events if e.probeId]
+    custom = tier_counts([e.status for e in session.events if not e.probeId])
+    events = [e for e in benchmark_events if not e.isControl]
+    controls = control_counts([e.status for e in benchmark_events if e.isControl])
     total_probes = session.totalProbes
     blocked = session.blocked
     allowed = session.allowed
@@ -119,6 +122,7 @@ async def generate_report_for_session(session_id: str) -> dict:
             "controls_over_refused": session.controlsOverRefused,
             "controls": controls,
         },
+        "custom_probes": {"total": sum(custom.values()), "tiers": custom},
         "category_breakdown": category_breakdown,
         "high_risk_allowed": high_risk_allowed,
         "intent_mismatches": intent_mismatches,
@@ -151,6 +155,8 @@ async def generate_report_for_session(session_id: str) -> dict:
         f"- **Benign controls:** {sum(controls.values())} — helped {controls['HELPED']}, "
         f"over-refused by the model {controls['OVER_REFUSED']} ({session.controlsOverRefused} with the regex off), "
         f"blocked by the regex {controls['FILTERED']}",
+        *([f"- **Custom probes (not in the numbers above):** {sum(custom.values())} — "
+           f"compromised {custom['COMPROMISED']}"] if sum(custom.values()) else []),
         "",
         "## Attack Category Breakdown",
         "| Category | Probes | Filtered | Refused | Ignored | Compromised | Model alone | Mismatches | Max Risk Score |",

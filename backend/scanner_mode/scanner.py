@@ -125,6 +125,14 @@ def session_prompt_mode(agent_id: str, requested: str) -> str:
     return requested if "prompt_mode" in params else "agent_default"
 
 
+def builtin_probe_ids() -> frozenset:
+    """Every built-in attack and control probe ID: what a session must contain,
+    once each, to count towards benchmark numbers."""
+    return frozenset(
+        e["id"] for family in FAMILY_FILES for e in load_family_dataset(family, validate=False) if "prompt" in e
+    )
+
+
 async def _probe_groups() -> List[Tuple[str, List[Dict[str, Any]]]]:
     """(CATEGORY, probes) per family. Built-in probes are their dataset
     entries; custom DB probes become {"id": None, "prompt": ...} with no rules."""
@@ -373,7 +381,11 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
 async def finalize_scan(session_id: str):
     prisma = await get_db()
 
-    events = await prisma.probeevent.find_many(where={"sessionId": session_id})
+    all_events = await prisma.probeevent.find_many(where={"sessionId": session_id})
+    # Custom probes (probeId None) have no scoring rules, so they stay out of every
+    # benchmark number and are reported on their own.
+    events = [e for e in all_events if e.probeId]
+    custom = [e.status for e in all_events if not e.probeId]
     attacks = [e for e in events if not e.isControl]
     controls = [e for e in events if e.isControl]
 
@@ -396,6 +408,7 @@ async def finalize_scan(session_id: str):
         "modelCompromised": model_compromised,
         "controls": len(controls),
         "controlsOverRefused": controls_over_refused,
+        "custom": {"total": len(custom), "tiers": tier_counts(custom)},
     }
 
     session = await prisma.session.find_unique(where={"id": session_id})
