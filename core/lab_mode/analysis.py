@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from ..shared.version import LAB_DEFINITION_KEYS, PRE_AUDIT_LABEL
 from .evaluator import AgentImpactLevel, ObjectiveAchievement, SystemOutcome
 from .metrics import (
     RunOutcome,
@@ -364,7 +365,9 @@ def compromise_by_agent(outcomes: Sequence[RunOutcome]) -> Dict[str, Dict[str, i
 _COMPARABLE_MODEL_FIELDS = ("provider", "model", "temperature", "max_tokens")
 
 
-def comparability_problems(configs: Dict[str, Dict[str, Any]]) -> Tuple[List[str], List[str]]:
+def comparability_problems(
+    configs: Dict[str, Dict[str, Any]], versions: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Tuple[List[str], List[str]]:
     """Why a set of experiments (id -> stored config) cannot be pooled.
 
     Returns `(errors, warnings)`. Pooling by arm alone let a nemotron arm be
@@ -375,6 +378,16 @@ def comparability_problems(configs: Dict[str, Dict[str, Any]]) -> Tuple[List[str
     """
     errors: List[str] = []
     warnings: List[str] = []
+
+    # Results measured under different definitions (the pre-audit 1.2.0 evaluator and metrics vs the
+    # current ones) do not mean the same thing, so a comparison or a pooled rate across them is refused.
+    if versions is not None:
+        for key in LAB_DEFINITION_KEYS:
+            seen = {eid: (v or {}).get(key) for eid, v in versions.items()}
+            if len(set(seen.values())) > 1:
+                errors.append(
+                    f"{key} differs ({', '.join(f'{eid}={v}' for eid, v in sorted(seen.items()))}): "
+                    f"{PRE_AUDIT_LABEL.lower()} cannot be pooled or compared with newer results")
 
     def values(getter) -> Dict[str, Any]:
         return {eid: getter(cfg) for eid, cfg in configs.items()}

@@ -844,3 +844,41 @@ class TestRepetitionSeeds:
             snapshot = next(e for e in detail["events"] if e["event_type"] == "config_snapshot")
             seeds.setdefault(run["pair_id"], set()).add(snapshot["arguments"]["model"]["seed"])
         assert sorted(tuple(s) for s in seeds.values()) == [(11,), (12,)]     # one seed per pair, different per repetition
+
+
+class TestPreAuditExperiments:
+    """Experiments measured with the 1.2.0 evaluator and metrics stay visible, labelled, apart."""
+
+    OLD = {"versions": {"benchmark_version": "4.0.0", "lab_schema_version": "1.1.0", "case_schema_version": "1.1.0",
+                        "cee_version": "1.1.0", "topology_version": "1.1.0", "evaluator_version": "1.2.0",
+                        "metric_version": "1.2.0"}, "git_commit": "de61e53", "git_clean": True}
+
+    def _old_experiment(self, client, monkeypatch, **overrides):
+        with monkeypatch.context() as scope:      # not monkeypatch.undo(): that would also undo the client's database swap
+            scope.setattr(lab_api, "reproducibility_stamp", lambda: self.OLD)
+            return _run_to_completion(client, **overrides)["experiment"]
+
+    def test_rows_report_their_vintage_and_the_label(self, client, monkeypatch):
+        old = self._old_experiment(client, monkeypatch)
+        new = _run_to_completion(client)["experiment"]
+        rows = {e["experiment_id"]: e for e in client.get("/api/lab/experiments").json()["experiments"]}
+        assert (rows[old["experiment_id"]]["vintage"], rows[old["experiment_id"]]["vintage_label"]) == ("pre_audit", "Measured before the audit fixes")
+        assert (rows[new["experiment_id"]]["vintage"], rows[new["experiment_id"]]["vintage_label"]) == ("current", None)
+
+    def test_metrics_and_report_carry_the_label(self, client, monkeypatch):
+        old = self._old_experiment(client, monkeypatch)["experiment_id"]
+        assert client.get(f"/api/lab/experiments/{old}/metrics").json()["vintage"] == "pre_audit"
+        report = client.get(f"/api/lab/experiments/{old}/report").json()
+        assert report["experiment"]["vintage"] == "pre_audit"
+        assert report["findings"][0].startswith("Measured before the audit fixes")
+
+    def test_a_pre_audit_experiment_cannot_be_compared_with_a_current_one(self, client, monkeypatch):
+        old = self._old_experiment(client, monkeypatch, arm="attack")["experiment_id"]
+        new = _run_to_completion(client, arm="attack_validated")["experiment"]["experiment_id"]
+        response = client.get(f"/api/lab/compare?experiments={old},{new}")
+        assert response.status_code == 400 and "cannot be pooled or compared" in response.json()["detail"]
+
+    def test_two_current_experiments_still_compare(self, client):
+        a = _run_to_completion(client, arm="attack")["experiment"]["experiment_id"]
+        b = _run_to_completion(client, arm="attack_validated")["experiment"]["experiment_id"]
+        assert client.get(f"/api/lab/compare?experiments={a},{b}").status_code == 200

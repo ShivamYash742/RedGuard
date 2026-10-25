@@ -21,6 +21,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
+from ..shared.version import PRE_AUDIT_LABEL
 from .runner import repetition_warnings
 from .smoke import PARSE_FAILURE_GATE
 from .trace import EventType, TraceEvent
@@ -332,6 +333,7 @@ def build_report(
             "repetitions": config.get("repetitions"),
             "created_at": experiment.get("created_at"),
             "versions": experiment.get("versions") or {},
+            "vintage": experiment.get("vintage"),
         },
         "execution": {
             "pairs_planned": planned_pairs,
@@ -416,6 +418,10 @@ def _findings(r: Dict[str, Any]) -> List[str]:
     agg = res["aggregate"]
     n = res["n_attack_runs"]
 
+    if exp.get("vintage") == "pre_audit":
+        out.append(f"{PRE_AUDIT_LABEL}: these runs were judged with the 1.2.0 evaluator and metrics (substring predicates, "
+                   "controls and unreachable cases pooled, unexposed runs counted as resisted). Their numbers are not "
+                   "comparable with results from the current definitions and must not be pooled with them.")
     out.extend(exp["warnings"])
     if exp["scripted"]:
         out.append("This was a scripted replay: each case's compliant clean script stood in for the model, so the "

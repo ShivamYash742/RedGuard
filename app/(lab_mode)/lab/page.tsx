@@ -87,6 +87,34 @@ export default function LabPage() {
 
   if (loading) return <TableSkeleton />
 
+  const renderList = (rows: Experiment[]) => (
+    <ul className="divide-y divide-[var(--border-subtle)]">
+      {rows.map((e) => {
+        const config = e.config as { scripted?: boolean; model?: { model?: string }; cases?: string[]; repetitions?: number }
+        return (
+          <li key={e.experiment_id}>
+            <Link href={`/lab/experiments/${e.experiment_id}`}
+              className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 px-4 py-3 hover:bg-[var(--surface-base)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--primary)] sm:grid-cols-[minmax(0,1fr)_11rem_minmax(0,14rem)_10rem_1rem]">
+              <span className="flex min-w-0 items-center gap-2">
+                {e.live && (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-2 py-0.5 text-xs font-semibold text-[var(--primary)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-pulse" aria-hidden />
+                    live · <span className="tabular-nums">{e.live.completed}/{e.live.total}</span>
+                  </span>
+                )}
+                <span className="truncate text-sm font-semibold text-[var(--text-primary)]">{e.name}</span>
+              </span>
+              <span className="hidden text-sm text-[var(--text-secondary)] sm:block">{armName(e.arm)}</span>
+              <span className="hidden truncate font-mono text-xs text-[var(--text-secondary)] sm:block">{config.scripted ? 'scripted' : config.model?.model ?? 'model'}</span>
+              <span className="text-xs tabular-nums text-[var(--text-secondary)]">{new Date(e.created_at).toLocaleString()}</span>
+              <ArrowRight className="hidden h-4 w-4 text-[var(--text-secondary)] sm:block" aria-hidden />
+            </Link>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
   return (
     <div className="space-y-6">
       <header className="border-b border-[var(--border-subtle)] pb-5">
@@ -243,7 +271,7 @@ export default function LabPage() {
         <ul className="divide-y divide-[var(--border-subtle)]">
           {cases.map((c) => {
             const Icon = CHANNEL_ICONS[c.channel]
-            return (
+  return (
               <li key={c.id}>
                 <label className="grid cursor-pointer grid-cols-[1.25rem_1fr] gap-x-3 gap-y-2 px-4 py-3 hover:bg-[var(--surface-base)] lg:grid-cols-[1.25rem_minmax(0,1.3fr)_224px_minmax(0,1fr)] lg:items-center">
                   <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggle(c.id)} className="mt-1 accent-[var(--primary)] lg:mt-0" />
@@ -279,31 +307,21 @@ export default function LabPage() {
         {experiments.length === 0 ? (
           <EmptyState title="No experiments yet" description="Launch one above. The instant demo costs nothing and shows the whole pipeline working." />
         ) : (
-          <ul className="divide-y divide-[var(--border-subtle)]">
-            {experiments.map((e) => {
-              const config = e.config as { scripted?: boolean; model?: { model?: string }; cases?: string[]; repetitions?: number }
-              return (
-                <li key={e.experiment_id}>
-                  <Link href={`/lab/experiments/${e.experiment_id}`}
-                    className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 px-4 py-3 hover:bg-[var(--surface-base)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--primary)] sm:grid-cols-[minmax(0,1fr)_11rem_minmax(0,14rem)_10rem_1rem]">
-                    <span className="flex min-w-0 items-center gap-2">
-                      {e.live && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-2 py-0.5 text-xs font-semibold text-[var(--primary)]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-pulse" aria-hidden />
-                          live · <span className="tabular-nums">{e.live.completed}/{e.live.total}</span>
-                        </span>
-                      )}
-                      <span className="truncate text-sm font-semibold text-[var(--text-primary)]">{e.name}</span>
-                    </span>
-                    <span className="hidden text-sm text-[var(--text-secondary)] sm:block">{armName(e.arm)}</span>
-                    <span className="hidden truncate font-mono text-xs text-[var(--text-secondary)] sm:block">{config.scripted ? 'scripted' : config.model?.model ?? 'model'}</span>
-                    <span className="text-xs tabular-nums text-[var(--text-secondary)]">{new Date(e.created_at).toLocaleString()}</span>
-                    <ArrowRight className="hidden h-4 w-4 text-[var(--text-secondary)] sm:block" aria-hidden />
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+          <>
+            {renderList(experiments.filter((e) => e.vintage !== 'pre_audit'))}
+            {experiments.some((e) => e.vintage === 'pre_audit') && (
+              <div className="border-t border-[var(--border-default)]">
+                <div className="px-4 py-3">
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Measured before the audit fixes</h3>
+                  <p className="mt-0.5 max-w-3xl text-xs text-[var(--text-secondary)]">
+                    Judged with the 1.2.0 evaluator and metrics (substring predicates, controls and unreachable cases pooled,
+                    unexposed runs counted as resisted). Not comparable with the experiments above and never pooled with them.
+                  </p>
+                </div>
+                {renderList(experiments.filter((e) => e.vintage === 'pre_audit'))}
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

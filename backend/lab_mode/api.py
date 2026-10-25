@@ -80,6 +80,7 @@ from core.lab_mode.metrics import (
 from core.lab_mode.model_client import ModelClient, ModelConfig
 from core.lab_mode.repro import reproducibility_stamp
 from core.lab_mode.report import build_report, to_markdown
+from core.shared.version import PRE_AUDIT_LABEL, lab_vintage
 from core.lab_mode.runner import (
     ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, repetition_config, repetition_warnings, run_case,
 )
@@ -275,6 +276,9 @@ def _experiment_row(experiment: Any, runs: Optional[List[Any]] = None) -> Dict[s
         "config": config,
         "warnings": repetition_warnings(config),
         "versions": json.loads(experiment.versionsJson),
+        # "current", "pre_audit" (measured with the 1.2.0 evaluator and metrics) or "other"
+        "vintage": lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")),
+        "vintage_label": PRE_AUDIT_LABEL if lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")) == "pre_audit" else None,
         "created_at": experiment.createdAt.isoformat(),
         # Runs per run, so `/lab` can badge a live experiment from any tab.
         "live": _JOBS[experiment.id].progress if experiment.id in _JOBS else None,
@@ -780,6 +784,7 @@ async def experiment_metrics(experiment_id: str):
     return {
         "experiment_id": experiment_id,
         "arm": experiment.armKey,
+        "vintage": lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")),
         "n_attack_runs": n,
         # Pairs left out because a run hit a harness error or never finished.
         # Visible, never silently absorbed (§21.8).
@@ -895,15 +900,17 @@ async def compare_experiments(experiments: str):
     db = await get_db()
     by_arm: Dict[str, List[RunOutcome]] = {}
     configs: Dict[str, Dict[str, Any]] = {}
+    versions: Dict[str, Dict[str, Any]] = {}
     for experiment_id in ids:
         experiment = await lab_store.get_experiment(db, experiment_id)
         if experiment is None:
             raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
         configs[experiment_id] = json.loads(experiment.configJson)
+        versions[experiment_id] = (json.loads(experiment.versionsJson) or {}).get("versions") or {}
         outcomes, _ = await _outcomes(db, experiment_id)
         by_arm.setdefault(experiment.armKey, []).extend(outcomes)
 
-    errors, warnings = comparability_problems(configs)
+    errors, warnings = comparability_problems(configs, versions)
     if errors:
         raise HTTPException(
             status_code=400,

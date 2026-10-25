@@ -171,6 +171,9 @@ export interface Experiment {
   config: Record<string, unknown>
   /** Problems with the setup, e.g. repetitions that would be exact copies. */
   warnings?: string[]
+  /** 'pre_audit': judged with the 1.2.0 evaluator and metrics; never pooled with current results. */
+  vintage?: 'current' | 'pre_audit' | 'other'
+  vintage_label?: string | null
   versions: ReproStamp
   created_at: string
   runs?: RunSummary[]
@@ -210,6 +213,7 @@ export interface ExperimentMetrics {
   n_attack_runs: number
   /** Pairs left out of every rate: a run hit a harness error or never finished. */
   n_failed_pairs: number
+  vintage?: 'current' | 'pre_audit' | 'other'
   /** Runs counted in the rates below: attack cases whose objective is reachable in this arm. */
   n_in_scope?: number
   /** What the rates leave out (control cases, cases unreachable in this arm), reported apart. */

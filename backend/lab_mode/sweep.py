@@ -212,12 +212,13 @@ async def _outcomes_for(db: Any, experiment_id: str) -> Tuple[str, List[RunOutco
 
 
 async def _check_comparable(db: Any, experiment_ids: Sequence[str]) -> None:
-    configs = {}
+    configs, versions = {}, {}
     for experiment_id in experiment_ids:
         experiment = await lab_store.get_experiment(db, experiment_id)
         if experiment is not None:
             configs[experiment_id] = json.loads(experiment.configJson)
-    errors, warnings = comparability_problems(configs)
+            versions[experiment_id] = (json.loads(experiment.versionsJson) or {}).get("versions") or {}
+    errors, warnings = comparability_problems(configs, versions)
     for warning in warnings:
         print(f"  ! {warning}")
     if errors:

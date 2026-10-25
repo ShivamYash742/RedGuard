@@ -80,7 +80,7 @@ TOPOLOGY_VERSION: str = "1.1.0"
 EVALUATOR_VERSION: str = "2.0.0"
 
 #: Version of the Mode B metric formulas.
-METRIC_VERSION: str = "1.2.0"
+METRIC_VERSION: str = "2.0.0"
 
 #: Human-readable release name.
 RELEASE_NAME: str = "RedGuard v4.2.0"
@@ -110,6 +110,29 @@ def get_version_info() -> dict:
         "release_name": RELEASE_NAME,
         "citation_key": CITATION_KEY,
     }
+
+
+#: The Lab definitions behind results measured before the audit fixes (the Oct 2026 sweeps). Their
+#: verdicts used substring predicates, pooled controls and unreachable cases, and counted unexposed
+#: runs as resisted, so they are shown labelled and never pooled with results from the current ones.
+PRE_AUDIT_LAB_VERSIONS: dict = {"evaluator_version": "1.2.0", "metric_version": "1.2.0"}
+
+#: The stored versions that decide whether two Lab experiments' numbers mean the same thing.
+LAB_DEFINITION_KEYS = ("evaluator_version", "metric_version", "case_schema_version", "cee_version")
+
+PRE_AUDIT_LABEL = "Measured before the audit fixes"
+
+
+def lab_vintage(stored_versions: dict | None) -> str:
+    """"current" if an experiment's stored definitions are the ones in this code, "pre_audit" if
+    they are the 1.2.0 ones, else "other" (a different or unrecorded set)."""
+    stored = stored_versions or {}
+    current = get_lab_version_info()
+    if all(stored.get(k) == current[k] for k in LAB_DEFINITION_KEYS):
+        return "current"
+    if all(stored.get(k) == v for k, v in PRE_AUDIT_LAB_VERSIONS.items()):
+        return "pre_audit"
+    return "other"
 
 
 def get_lab_version_info() -> dict:
@@ -187,6 +210,9 @@ __all__ = [
     "TOPOLOGY_VERSION",
     "EVALUATOR_VERSION",
     "METRIC_VERSION",
+    "PRE_AUDIT_LAB_VERSIONS",
+    "PRE_AUDIT_LABEL",
+    "lab_vintage",
     "get_version_info",
     "get_lab_version_info",
     "parse_version",

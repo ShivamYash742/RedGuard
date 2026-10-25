@@ -374,6 +374,13 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
             {' · '}{config.max_steps ?? '—'} steps per agent · {config.cases?.length ?? 0} cases × {config.repetitions ?? 1} repetitions
           </p>
           {arm && <p className="mt-1 max-w-3xl text-xs text-[var(--text-secondary)]">{arm.description}</p>}
+          {experiment.vintage === 'pre_audit' && (
+            <p role="note" className="mt-2 max-w-3xl rounded-[var(--radius)] border border-[var(--warning)] px-3 py-2 text-xs text-[var(--text-primary)]">
+              <span className="font-semibold">{experiment.vintage_label ?? 'Measured before the audit fixes'}.</span>{' '}
+              Judged with the 1.2.0 evaluator and metrics: substring predicates, controls and unreachable cases pooled,
+              unexposed runs counted as resisted. Not comparable with newer experiments and never pooled with them.
+            </p>
+          )}
           {experiment.warnings?.map((warning) => (
             <p key={warning} role="alert" className="mt-2 max-w-3xl rounded-[var(--radius)] border border-[var(--warning)] px-3 py-2 text-xs text-[var(--text-primary)]">{warning}</p>
           ))}
