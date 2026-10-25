@@ -40,6 +40,33 @@ class TestAuthorizedCall:
         assert types == [EventType.TOOL_REQUESTED, EventType.TOOL_EXECUTED]
 
 
+class TestUnknownTable:
+    """L2: a query of a table that does not exist is a tool error, never an executed query."""
+
+    def test_unknown_table_is_a_tool_error_not_an_execution(self):
+        collector = EventCollector(run_id="r1")
+        gateway = ToolGateway(_fixture(), linear_abc(), collector)
+
+        result = gateway.call("C", "db_query", {"name": "customer_pii_vendor_data"})
+
+        assert not result.ok and result.error == "unknown_table"
+        types = [e.event_type for e in collector.events]
+        assert types == [EventType.TOOL_REQUESTED, EventType.TOOL_ERROR]
+        assert collector.events[-1].metadata == {"reason": "unknown_table"}
+
+    def test_a_real_table_with_no_matching_rows_still_executes(self):
+        collector = EventCollector(run_id="r1")
+        gateway = ToolGateway(_fixture(), linear_abc(), collector)
+
+        result = gateway.call("C", "db_query", {"name": "customer_pii", "params": {"name": "nobody"}})
+
+        assert result.ok and result.value == "NO_RESULTS"
+        assert collector.events[-1].event_type == EventType.TOOL_EXECUTED
+
+    def test_the_cee_itself_still_answers_no_results_for_a_lookup_that_misses(self):
+        assert _fixture().query_db("nope") == "NO_RESULTS"
+
+
 class TestUnauthorizedCall:
     def test_unauthorized_tool_is_denied_with_no_cee_mutation(self):
         cee = _fixture()

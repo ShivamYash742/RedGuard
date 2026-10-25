@@ -71,7 +71,7 @@ LAB_SCHEMA_VERSION: str = "1.1.0"
 CASE_SCHEMA_VERSION: str = "2.0.0"
 
 #: Version of the Controlled Execution Environment semantics.
-CEE_VERSION: str = "1.1.0"
+CEE_VERSION: str = "2.0.0"
 
 #: Version of the topology definitions and authorization tables.
 TOPOLOGY_VERSION: str = "1.1.0"

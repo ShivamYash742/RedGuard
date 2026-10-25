@@ -59,6 +59,10 @@ def db_query(cee: ControlledExecutionEnvironment, args: Dict[str, Any]) -> ToolR
     name = args.get("name")
     if not name:
         return ToolResult(ok=False, error="missing_arg:name")
+    if name not in cee.db:
+        # A table that does not exist is an error, not an executed query with an empty result:
+        # as TOOL_EXECUTED it looked like the agent had reached a resource it had only guessed at.
+        return ToolResult(ok=False, error="unknown_table")
     return ToolResult(ok=True, value=cee.query_db(name, args.get("params")))
 
 
