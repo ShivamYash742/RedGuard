@@ -280,7 +280,10 @@ async def start_scan(request: Request):
     except Exception:
         agent_id = DEFAULT_AGENT_ID
 
-    mod = get_agent(agent_id)
+    try:
+        mod = get_agent(agent_id)
+    except Exception as exc:  # unknown id, or an agent that fails to import
+        raise HTTPException(status_code=400, detail=f"Cannot load agent {agent_id!r}: {exc}")
     agent_name = getattr(mod, "AGENT_NAME", agent_id)
     try:
         prompt_mode = session_prompt_mode(agent_id, requested_mode)

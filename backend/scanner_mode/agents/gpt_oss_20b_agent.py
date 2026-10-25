@@ -38,4 +38,4 @@ def _llm():
 
 async def invoke(prompt: str, prompt_mode: str = "baseline") -> str:
     """Send a prompt to the agent and return its text response."""
-    return await run_agent("llama_3_1_8b_agent", _llm, prompt, prompt_mode)
+    return await run_agent("gpt_oss_20b_agent", _llm, prompt, prompt_mode)

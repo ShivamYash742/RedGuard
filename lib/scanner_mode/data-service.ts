@@ -274,7 +274,7 @@ export interface KnownAgent {
 export const KNOWN_AGENTS: KnownAgent[] = [
   { id: 'nemotron_3_ultra', name: 'Nemotron-3 Ultra (550B)', badge: 'NVIDIA NIM', category: 'nvidia' },
   { id: 'nemotron_super_agent', name: 'Nemotron-3 Super (120B)', badge: 'NVIDIA NIM', category: 'nvidia' },
-  { id: 'llama_3_1_8b_agent', name: 'GPT OSS 20B', badge: 'Groq', category: 'nvidia' },
+  { id: 'gpt_oss_20b_agent', name: 'GPT OSS 20B', badge: 'Groq', category: 'nvidia' },
   { id: 'gpt_oss_120b_agent', name: 'GPT OSS 120B', badge: 'Groq', category: 'nvidia' },
   { id: 'ollama_local_agent', name: 'Ollama Local Agent', badge: 'Local Ollama', category: 'ollama' },
   { id: 'example_custom_agent', name: 'Example Custom Agent', badge: 'Custom Template', category: 'custom' },

@@ -152,3 +152,19 @@ def test_every_agent_reports_its_model_config():
     for agent_id in AGENT_IDS:
         config = _load_module(agent_id).model_config()
         assert set(config) == {"provider", "model", "temperature", "seed"}, agent_id
+
+
+def test_the_old_gpt_oss_20b_id_still_resolves():
+    from scanner_mode.agent_loader import get_agent
+
+    assert get_agent("llama_3_1_8b_agent") is get_agent("gpt_oss_20b_agent")
+    assert get_agent("gpt_oss_20b_agent").MODEL_NAME == "openai/gpt-oss-20b"
+    assert "llama_3_1_8b_agent" not in AGENT_IDS and "gpt_oss_20b_agent" in AGENT_IDS
+
+
+def test_an_unknown_agent_is_an_error_not_the_default_agent():
+    from scanner_mode.agent_loader import get_agent
+
+    for bad in ("nope", "../scanner", "_scaffold"):
+        with pytest.raises(KeyError):
+            get_agent(bad)
