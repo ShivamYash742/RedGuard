@@ -82,7 +82,7 @@ from core.lab_mode.repro import reproducibility_stamp
 from core.lab_mode.report import build_report, to_markdown
 from core.shared.version import PRE_AUDIT_LABEL, lab_vintage
 from core.lab_mode.runner import (
-    ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, repetition_config, repetition_warnings, run_case,
+    ATTACK, CLEAN, DEFAULT_MAX_STEPS, EXPOSURE_MODES, RunConfig, ScriptedClient, repetition_config, repetition_warnings, run_case,
 )
 from core.lab_mode.tools import TOOLS
 from core.lab_mode.trace import EventCategory, EventType, TraceEvent
@@ -99,7 +99,7 @@ MAX_REPS = 25
 MAX_STEP_DELAY_MS = 5000
 
 
-def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int) -> RunConfig:
+def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int, exposure: str = "natural") -> RunConfig:
     if arm not in ARMS:
         raise HTTPException(status_code=400, detail=f"Unknown arm '{arm}'. Valid: {sorted(ARMS)}")
     if topology_id not in TOPOLOGIES:
@@ -115,6 +115,7 @@ def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_ste
         model=model_config,
         max_steps=max_steps,
         validation_mode=spec["validation_mode"],
+        exposure=exposure,
     )
 
 
@@ -236,7 +237,10 @@ async def create_experiment(request: Request):
         raise HTTPException(status_code=400, detail=str(exc))
 
     # Validates arm and topology, and fails before anything is persisted.
-    config = _build_config(arm, model_config, topology_id, max_steps)
+    exposure = body.get("exposure", "natural")
+    if exposure not in EXPOSURE_MODES:
+        raise HTTPException(status_code=400, detail=f"exposure must be one of {list(EXPOSURE_MODES)}")
+    config = _build_config(arm, model_config, topology_id, max_steps, exposure)
 
     stored_config = {
         **config.to_dict(),
@@ -464,6 +468,7 @@ async def _execute(experiment: Any):
         config_data["arm"], model_config,
         config_data.get("topology_id", "linear_abc"),
         config_data.get("max_steps", DEFAULT_MAX_STEPS),
+        config_data.get("exposure", "natural"),
     )
 
     total_runs = len(selected) * reps * 2

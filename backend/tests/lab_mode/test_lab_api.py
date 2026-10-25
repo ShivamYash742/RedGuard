@@ -882,3 +882,17 @@ class TestPreAuditExperiments:
         a = _run_to_completion(client, arm="attack")["experiment"]["experiment_id"]
         b = _run_to_completion(client, arm="attack_validated")["experiment"]["experiment_id"]
         assert client.get(f"/api/lab/compare?experiments={a},{b}").status_code == 200
+
+
+class TestForcedExposure:
+    def _config(self, client, **extra):
+        made = client.post("/api/lab/experiments", json={"scripted": True, "repetitions": 1, "cases": ["RGM-001"], **extra}).json()
+        return client.get(f"/api/lab/experiments/{made['experiment_id']}").json()["config"]
+
+    def test_exposure_defaults_to_natural_and_is_stored(self, client):
+        assert self._config(client)["exposure"] == "natural"
+        assert self._config(client, exposure="forced")["exposure"] == "forced"
+
+    def test_an_unknown_exposure_mode_is_400(self, client):
+        response = client.post("/api/lab/experiments", json={"exposure": "always"})
+        assert response.status_code == 400 and "exposure" in response.json()["detail"]
