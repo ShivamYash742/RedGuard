@@ -163,3 +163,36 @@ async def test_failed_agent_calls_are_retried_before_aborting(tmp_path, monkeypa
     assert len(calls) == 3
     assert any(e["event"] == "error" for e in events) is aborted
     assert stored.status.startswith("FAILED") is aborted
+
+
+@pytest.mark.asyncio
+async def test_family_scan_refuses_when_the_policy_cannot_load(tmp_path, monkeypatch, migrated_db_template):
+    from scanner_mode import inspector
+
+    db = tmp_path / "policy.db"
+    shutil.copyfile(migrated_db_template, db)
+    client = Prisma(datasource={"url": f"file:{db}"})
+    calls = []
+
+    async def spy_invoke(agent_id, prompt, model_name=None, prompt_mode=None):
+        calls.append(prompt)
+        return "ok"
+
+    bad = tmp_path / "policy.yaml"
+    bad.write_text("ingress_rules: [unclosed")
+    monkeypatch.setattr(inspector, "POLICY_PATH", bad)
+    monkeypatch.setattr(database, "prisma", client)
+    monkeypatch.setattr(scanner, "_probe_groups", _fake_groups)
+    monkeypatch.setattr(scanner, "_invoke_agent", spy_invoke)
+
+    await client.connect()
+    try:
+        session = await client.session.create(data={"sessionId": "bad-policy", "agentId": "fake"})
+        events = [e async for e in scanner.run_family_scan(session.id, "fake", "TEST")]
+        stored = await client.session.find_unique(where={"id": session.id})
+    finally:
+        await client.disconnect()
+
+    assert calls == []
+    assert [e["event"] for e in events] == ["error"] and "policy" in events[0]["data"]["message"]
+    assert stored.status.startswith("FAILED")

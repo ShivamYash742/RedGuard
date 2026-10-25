@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Dict, Any, List, Optional, Tuple
 
-from scanner_mode.inspector import POLICY_PATH, Inspector
+from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError
 from database import get_db
 from scanner_mode.schema import sha256_hex
 from scanner_mode.agent_loader import get_agent
@@ -209,7 +209,12 @@ async def init_scan_session(session_id: str) -> Dict[str, Any]:
 
 async def run_family_scan(session_id: str, agent_id: str, target_category: str, model_name: str = None) -> AsyncGenerator[Dict[str, Any], None]:
     prisma = await get_db()
-    inspector = Inspector()
+    try:
+        inspector = Inspector()
+    except PolicyError as exc:
+        await prisma.session.update(where={"id": session_id}, data={"status": f"FAILED: {exc}"[:200]})
+        yield {"event": "error", "data": {"message": str(exc)}}
+        return
 
     session = await prisma.session.find_unique(where={"id": session_id})
     prompt_mode = session.promptMode if session else None

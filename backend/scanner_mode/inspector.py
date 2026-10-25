@@ -9,6 +9,11 @@ from typing import Dict, Any, List
 POLICY_PATH = Path(__file__).parent / "policy.yaml"
 
 
+class PolicyError(ValueError):
+    """policy.yaml is missing, unreadable or not a mapping. The filter fails
+    closed: a scan never starts on a policy that did not load."""
+
+
 class Inspector:
     def __init__(self, policy_path: str = None):
         if policy_path is None:
@@ -20,9 +25,12 @@ class Inspector:
     def _load_policy(self) -> Dict[str, Any]:
         try:
             with open(self.policy_path, "r") as f:
-                return yaml.safe_load(f)
-        except Exception:
-            return {"ingress_rules": [], "default_action": "ALLOW"}
+                policy = yaml.safe_load(f)
+        except (OSError, yaml.YAMLError) as exc:
+            raise PolicyError(f"cannot load policy {self.policy_path}: {exc}") from exc
+        if not isinstance(policy, dict):
+            raise PolicyError(f"policy {self.policy_path} must be a mapping with ingress_rules")
+        return policy
 
     def _compile_patterns(self):
         # Each pattern matches the shape of an attack (a verb aimed at a target),

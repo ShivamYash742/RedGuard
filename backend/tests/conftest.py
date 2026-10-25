@@ -43,3 +43,25 @@ def migrated_db_template(tmp_path_factory) -> Path:
     if result.returncode != 0:
         raise RuntimeError(f"prisma db push failed:\n{result.stdout}\n{result.stderr}")
     return template
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch, migrated_db_template):
+    """A TestClient on a disposable database copy (never the committed dev.db).
+
+    Synchronous on purpose: the Prisma client must connect on the event loop
+    that serves the requests, so the swap is at the `database.prisma` global
+    and the app's own lifespan connects it inside TestClient's loop.
+    """
+    from fastapi.testclient import TestClient
+    from prisma import Prisma
+
+    import database
+    from app import app
+
+    test_db = tmp_path / "api.db"
+    shutil.copyfile(migrated_db_template, test_db)
+    monkeypatch.setenv("DATABASE_URL", f"file:{test_db}")
+    monkeypatch.setattr(database, "prisma", Prisma(datasource={"url": f"file:{test_db}"}))
+    with TestClient(app) as test_client:
+        yield test_client

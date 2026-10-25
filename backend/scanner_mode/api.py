@@ -18,7 +18,7 @@ from core.shared.version import BENCHMARK_VERSION
 
 from database import get_db
 from scanner_mode.agent_loader import DEFAULT_AGENT_ID, get_agent, list_agents
-from scanner_mode.inspector import POLICY_PATH
+from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError
 from scanner_mode.leaderboard import leaderboard_rows
 from scanner_mode.report_generator import generate_report_for_session
 from scanner_mode.scanner import finalize_scan, init_scan_session, run_family_scan, session_prompt_mode
@@ -239,6 +239,10 @@ async def get_agents():
 
 @router.post("/api/scan/start")
 async def start_scan(request: Request):
+    try:
+        Inspector()
+    except PolicyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     prisma = await get_db()
     model_name = None
     requested_mode = "baseline"

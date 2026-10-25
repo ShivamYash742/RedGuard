@@ -1,5 +1,5 @@
 import pytest
-from scanner_mode.inspector import Inspector
+from scanner_mode.inspector import Inspector, PolicyError
 
 def test_inspector_benign_prompt():
     inspector = Inspector()
@@ -77,3 +77,16 @@ def test_benign_controls_pass_the_filter():
 @pytest.mark.parametrize("prompt", ATTACK_SHAPES)
 def test_attack_shapes_are_denied(prompt):
     assert Inspector().process(prompt)["policy_result"]["verdict"] == "DENY"
+
+
+@pytest.mark.parametrize("body", ["ingress_rules: [unclosed", "- just\n- a list\n", ""])
+def test_unloadable_policy_fails_closed(tmp_path, body):
+    bad = tmp_path / "policy.yaml"
+    bad.write_text(body)
+    with pytest.raises(PolicyError):
+        Inspector(str(bad))
+
+
+def test_missing_policy_fails_closed(tmp_path):
+    with pytest.raises(PolicyError):
+        Inspector(str(tmp_path / "missing.yaml"))
