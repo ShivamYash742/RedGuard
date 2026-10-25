@@ -22,12 +22,12 @@
       },
       "references": [
         {
-          "title": "Ignore This Title and HackAPrompt: A Large-Scale Prompt Injection Dataset",
-          "authors": ["Gustavo Sandoval", "Hammond Pearce", "Teo Nys", "Raji Reddy", "Brendan Dolan-Gavitt", "Siddharth Garg"],
+          "title": "Ignore This Title and HackAPrompt: Exposing Systemic Vulnerabilities of LLMs through a Global Scale Prompt Hacking Competition",
+          "authors": ["Sander Schulhoff", "Jeremy Pinto", "Anaum Khan", "Louis-François Bouchard", "Chenglei Si", "Svetlina Anati", "Valen Tagliabue", "Anson Liu Kost", "Christopher Carnahan", "Jordan Boyd-Graber"],
           "year": 2023,
-          "venue": "arXiv",
-          "arxiv_id": "2311.17702",
-          "url": "https://arxiv.org/abs/2311.17702"
+          "venue": "EMNLP",
+          "arxiv_id": "2311.16119",
+          "url": "https://arxiv.org/abs/2311.16119"
         }
       ],
       "tags": ["baseline", "instruction_override", "trivial"],
@@ -57,12 +57,12 @@
       },
       "references": [
         {
-          "title": "Prompt Injection Attack: A Survey",
-          "authors": ["Yi Liu", "Gelei Deng", "Yuekang Li", "Kailong Wang", "Tianwei Zhang", "Yepang Liu", "Haoyu Wang", "Yan Zheng", "Yang Liu"],
+          "title": "Prompt Injection attack against LLM-integrated Applications",
+          "authors": ["Yi Liu", "Gelei Deng", "Yuekang Li", "Kailong Wang", "Zihao Wang", "Xiaofeng Wang", "Tianwei Zhang", "Yepang Liu", "Haoyu Wang", "Yan Zheng", "Leo Yu Zhang", "Yang Liu"],
           "year": 2023,
           "venue": "arXiv",
-          "arxiv_id": "2310.16184",
-          "url": "https://arxiv.org/abs/2310.16184"
+          "arxiv_id": "2306.05499",
+          "url": "https://arxiv.org/abs/2306.05499"
         }
       ],
       "tags": ["baseline", "classic", "system_prompt"],
@@ -93,11 +93,12 @@
       },
       "references": [
         {
-          "title": "Prompt Injection Attack: A Survey",
-          "authors": ["Yi Liu", "Gelei Deng", "Yuekang Li", "Kailong Wang", "Tianwei Zhang"],
+          "title": "Prompt Injection attack against LLM-integrated Applications",
+          "authors": ["Yi Liu", "Gelei Deng", "Yuekang Li", "Kailong Wang", "Zihao Wang", "Xiaofeng Wang", "Tianwei Zhang", "Yepang Liu", "Haoyu Wang", "Yan Zheng", "Leo Yu Zhang", "Yang Liu"],
           "year": 2023,
           "venue": "arXiv",
-          "arxiv_id": "2310.16184"
+          "arxiv_id": "2306.05499",
+          "url": "https://arxiv.org/abs/2306.05499"
         }
       ],
       "tags": ["authority_impersonation", "override", "easy"],
@@ -164,11 +165,12 @@
       },
       "references": [
         {
-          "title": "Ignore This Title and HackAPrompt",
-          "authors": ["Gustavo Sandoval", "Hammond Pearce", "Teo Nys"],
+          "title": "Ignore This Title and HackAPrompt: Exposing Systemic Vulnerabilities of LLMs through a Global Scale Prompt Hacking Competition",
+          "authors": ["Sander Schulhoff", "Jeremy Pinto", "Anaum Khan", "Louis-François Bouchard", "Chenglei Si", "Svetlina Anati", "Valen Tagliabue", "Anson Liu Kost", "Christopher Carnahan", "Jordan Boyd-Graber"],
           "year": 2023,
-          "venue": "arXiv",
-          "arxiv_id": "2311.17702"
+          "venue": "EMNLP",
+          "arxiv_id": "2311.16119",
+          "url": "https://arxiv.org/abs/2311.16119"
         }
       ],
       "tags": ["continuation", "completion", "medium"],
@@ -197,11 +199,12 @@
       },
       "references": [
         {
-          "title": "Few-Shot Prompt Injection: Exploiting In-Context Learning",
-          "authors": ["Anonymous"],
-          "year": 2024,
+          "title": "Jailbreak and Guard Aligned Language Models with Only Few In-Context Demonstrations",
+          "authors": ["Zeming Wei", "Yifei Wang", "Ang Li", "Yichuan Mo", "Yisen Wang"],
+          "year": 2023,
           "venue": "arXiv",
-          "arxiv_id": "2407.00000"
+          "arxiv_id": "2310.06387",
+          "url": "https://arxiv.org/abs/2310.06387"
         }
       ],
       "tags": ["few_shot", "in_context_learning", "medium"],
@@ -229,11 +232,12 @@
       },
       "references": [
         {
-          "title": "Prompt Injection Attack: A Survey",
-          "authors": ["Yi Liu", "Gelei Deng", "Yuekang Li"],
+          "title": "Prompt Injection attack against LLM-integrated Applications",
+          "authors": ["Yi Liu", "Gelei Deng", "Yuekang Li", "Kailong Wang", "Zihao Wang", "Xiaofeng Wang", "Tianwei Zhang", "Yepang Liu", "Haoyu Wang", "Yan Zheng", "Leo Yu Zhang", "Yang Liu"],
           "year": 2023,
           "venue": "arXiv",
-          "arxiv_id": "2310.16184"
+          "arxiv_id": "2306.05499",
+          "url": "https://arxiv.org/abs/2306.05499"
         }
       ],
       "tags": ["obfuscation", "encoding", "evasion", "base64", "hard"],
@@ -263,11 +267,12 @@
       },
       "references": [
         {
-          "title": "Prompt Injection Attack: A Survey",
-          "authors": ["Yi Liu", "Gelei Deng"],
+          "title": "Prompt Injection attack against LLM-integrated Applications",
+          "authors": ["Yi Liu", "Gelei Deng", "Yuekang Li", "Kailong Wang", "Zihao Wang", "Xiaofeng Wang", "Tianwei Zhang", "Yepang Liu", "Haoyu Wang", "Yan Zheng", "Leo Yu Zhang", "Yang Liu"],
           "year": 2023,
           "venue": "arXiv",
-          "arxiv_id": "2310.16184"
+          "arxiv_id": "2306.05499",
+          "url": "https://arxiv.org/abs/2306.05499"
         }
       ],
       "tags": ["delimiter", "parsing", "medium"],

@@ -23,7 +23,7 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
           "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
@@ -57,10 +57,10 @@
       },
       "references": [
         {
-          "title": "Sycophancy to Subterfuge: Investigating Reward Tampering in Language Models",
-          "authors": ["Carson Denison", "Monte MacDiarmid", "Fabien Roger", "Nate Thomas", "et al."],
+          "title": "Sycophancy to Subterfuge: Investigating Reward-Tampering in Large Language Models",
+          "authors": ["Carson Denison", "Monte MacDiarmid", "Fazl Barez", "David Duvenaud", "Shauna Kravec", "Samuel Marks", "Nicholas Schiefer", "Ryan Soklaski", "Alex Tamkin", "Jared Kaplan", "Buck Shlegeris", "Samuel R. Bowman", "Ethan Perez", "Evan Hubinger"],
           "year": 2024,
-          "venue": "NeurIPS",
+          "venue": "arXiv",
           "arxiv_id": "2406.10162",
           "url": "https://arxiv.org/abs/2406.10162"
         }
@@ -92,11 +92,12 @@
       },
       "references": [
         {
-          "title": "Sycophancy to Subterfuge: Investigating Reward Tampering in Language Models",
-          "authors": ["Carson Denison", "Monte MacDiarmid", "Fabien Roger"],
+          "title": "Sycophancy to Subterfuge: Investigating Reward-Tampering in Large Language Models",
+          "authors": ["Carson Denison", "Monte MacDiarmid", "Fazl Barez", "David Duvenaud", "Shauna Kravec", "Samuel Marks", "Nicholas Schiefer", "Ryan Soklaski", "Alex Tamkin", "Jared Kaplan", "Buck Shlegeris", "Samuel R. Bowman", "Ethan Perez", "Evan Hubinger"],
           "year": 2024,
-          "venue": "NeurIPS",
-          "arxiv_id": "2406.10162"
+          "venue": "arXiv",
+          "arxiv_id": "2406.10162",
+          "url": "https://arxiv.org/abs/2406.10162"
         }
       ],
       "tags": ["reward_hacking", "metric_gaming", "sycophancy", "hard"],
@@ -125,11 +126,12 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
-          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović"],
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
-          "arxiv_id": "2406.13352"
+          "arxiv_id": "2406.13352",
+          "url": "https://arxiv.org/abs/2406.13352"
         }
       ],
       "tags": ["mission_creep", "gradual_escalation", "calendar", "expert"],

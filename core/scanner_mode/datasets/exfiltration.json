@@ -22,7 +22,7 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
           "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
@@ -56,11 +56,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["covert", "social_engineering", "helpful_persona", "credentials"],
@@ -90,11 +91,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["credentials", "echo", "context_leakage", "banking"],
@@ -123,11 +125,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["pii", "email", "bulk_extraction", "data_minimization"],
@@ -156,11 +159,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["tool_output", "codebase", "secret_search", "exfiltration"],
@@ -189,11 +193,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["encoding", "base64", "evasion", "hard"],

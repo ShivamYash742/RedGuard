@@ -30,12 +30,12 @@
       },
       "references": [
         {
-          "title": "Poisoning Web-Scale Training Datasets is Practical",
-          "authors": ["Nicholas Carlini", "Matthew Jagielski", "Christopher A. Choquette-Choo", "Daniel Paleka", "Will Pearce", "Hyrum Anderson", "Andreas Terzis", "Kurt Thomas", "Florian Tramèr"],
+          "title": "AgentPoison: Red-teaming LLM Agents via Poisoning Memory or Knowledge Bases",
+          "authors": ["Zhaorun Chen", "Zhen Xiang", "Chaowei Xiao", "Dawn Song", "Bo Li"],
           "year": 2024,
-          "venue": "IEEE S&P",
-          "arxiv_id": "2302.10149",
-          "url": "https://arxiv.org/abs/2302.10149"
+          "venue": "arXiv",
+          "arxiv_id": "2407.12784",
+          "url": "https://arxiv.org/abs/2407.12784"
         }
       ],
       "tags": ["direct", "memory_corruption", "fact_injection", "email"],
@@ -72,7 +72,7 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
           "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
@@ -113,11 +113,12 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
-          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović"],
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
-          "arxiv_id": "2406.13352"
+          "arxiv_id": "2406.13352",
+          "url": "https://arxiv.org/abs/2406.13352"
         }
       ],
       "tags": ["persistent", "cross_session", "long_term_memory", "banking"],
@@ -147,7 +148,7 @@
       "references": [
         {
           "title": "Poisoning Retrieval Corpora by Injecting Adversarial Passages",
-          "authors": ["Evan Wallace", "Pradeep Dasigi", "Hannaneh Hajishirzi"],
+          "authors": ["Zexuan Zhong", "Ziqing Huang", "Alexander Wettig", "Danqi Chen"],
           "year": 2023,
           "venue": "EMNLP",
           "arxiv_id": "2310.19156",
@@ -180,11 +181,12 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
-          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović"],
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
-          "arxiv_id": "2406.13352"
+          "arxiv_id": "2406.13352",
+          "url": "https://arxiv.org/abs/2406.13352"
         }
       ],
       "tags": ["conversation_history", "context_injection", "chat_history"],
@@ -214,10 +216,11 @@
       "references": [
         {
           "title": "Poisoning Retrieval Corpora by Injecting Adversarial Passages",
-          "authors": ["Evan Wallace", "Pradeep Dasigi", "Hannaneh Hajishirzi"],
+          "authors": ["Zexuan Zhong", "Ziqing Huang", "Alexander Wettig", "Danqi Chen"],
           "year": 2023,
           "venue": "EMNLP",
-          "arxiv_id": "2310.19156"
+          "arxiv_id": "2310.19156",
+          "url": "https://arxiv.org/abs/2310.19156"
         }
       ],
       "tags": ["embeddings", "vector_store", "semantic_search", "rag", "hard"],

@@ -4,22 +4,17 @@ This document maps RedGuard probes to their academic/industry research sources.
 
 ## Major Benchmark Sources
 
-### 1. Google DeepMind Prompt Injection Benchmarks
-- **Paper**: "Ignore This Title and HackAPrompt: A Large-Scale Prompt Injection Dataset" (Sandoval et al., 2023)
-- **arXiv**: 2311.17702
+### 1. HackAPrompt
+- **Paper**: "Ignore This Title and HackAPrompt: Exposing Systemic Vulnerabilities of LLMs through a Global Scale Prompt Hacking Competition" (Schulhoff et al., EMNLP 2023)
+- **arXiv**: 2311.16119
 - **Relevant Families**: Direct Injection, Content Injection
 
-### 2. Agent Security Bench (ASB)
-- **Paper**: "Agent Security Bench: Evaluating Security of LLM Agents" (2024)
-- **arXiv**: 2406.13352
-- **Relevant Families**: All families - comprehensive agent benchmark
-
-### 3. WASP (Web Application Security Project) for LLMs
-- **Reference**: WASP Top 10 for LLM Applications
+### 2. OWASP Top 10 for LLM Applications
+- **Reference**: OWASP Top 10 for LLM Applications
 - **Relevant Families**: Tool Manipulation, Data Exfiltration, Autonomous Actions
 
-### 4. AgentDojo
-- **Paper**: "AgentDojo: A Dynamic Environment for Evaluating Agent Security" (2024)
+### 3. AgentDojo
+- **Paper**: "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents" (Debenedetti et al., 2024)
 - **arXiv**: 2406.13352
 - **Relevant Families**: Planning Manipulation, Goal Diversion, Autonomous Actions
 

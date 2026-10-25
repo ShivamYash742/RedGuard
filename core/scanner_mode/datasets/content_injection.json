@@ -22,7 +22,7 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
           "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
@@ -57,11 +57,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
           "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["html", "github", "tool_output", "indirect_injection"],
@@ -95,11 +96,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["html", "div", "hidden_attribute", "indirect_injection"],
@@ -141,11 +143,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["html", "comment", "indirect_injection", "gitlab"],
@@ -173,11 +176,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["css", "display_none", "reddit", "indirect_injection"],
@@ -207,11 +211,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["css", "opacity", "wiki", "indirect_injection"],
@@ -240,11 +245,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["svg", "metadata", "multimodal", "indirect_injection"],
@@ -281,11 +287,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["aria", "accessibility", "shopping", "indirect_injection"],
@@ -314,11 +321,12 @@
       },
       "references": [
         {
-          "title": "Not What You've Signed Up For",
-          "authors": ["Kai Greshake", "Sahar Abdelnabi"],
+          "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+          "authors": ["Kai Greshake", "Sahar Abdelnabi", "Shailesh Mishra", "Christoph Endres", "Thorsten Holz", "Mario Fritz"],
           "year": 2023,
           "venue": "ACM AISec Workshop",
-          "arxiv_id": "2302.12173"
+          "arxiv_id": "2302.12173",
+          "url": "https://arxiv.org/abs/2302.12173"
         }
       ],
       "tags": ["markdown", "details_summary", "forum", "indirect_injection"],

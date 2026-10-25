@@ -36,7 +36,7 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
           "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
@@ -77,11 +77,12 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
-          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović"],
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
-          "arxiv_id": "2406.13352"
+          "arxiv_id": "2406.13352",
+          "url": "https://arxiv.org/abs/2406.13352"
         }
       ],
       "tags": ["privilege_escalation", "sql", "banking", "tool_output"],
@@ -123,11 +124,12 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
-          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović"],
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
-          "arxiv_id": "2406.13352"
+          "arxiv_id": "2406.13352",
+          "url": "https://arxiv.org/abs/2406.13352"
         }
       ],
       "tags": ["command_injection", "tool_output", "rce", "hard"],
@@ -160,11 +162,12 @@
       },
       "references": [
         {
-          "title": "AgentDojo: A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents",
-          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović"],
+          "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+          "authors": ["Edoardo Debenedetti", "Jie Zhang", "Mislav Balunović", "Luca Beurer-Kellner", "Marc Fischer", "Florian Tramèr"],
           "year": 2024,
           "venue": "NeurIPS",
-          "arxiv_id": "2406.13352"
+          "arxiv_id": "2406.13352",
+          "url": "https://arxiv.org/abs/2406.13352"
         }
       ],
       "tags": ["schema", "tool_definition", "privilege_escalation", "hard"],

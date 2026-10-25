@@ -217,11 +217,11 @@ Every run produces four JSON artifacts:
 ## References
 
 Debenedetti et al. (2024). AgentDojo. *NeurIPS 2024*. arXiv:2406.13352.  
-Denison et al. (2024). Sycophancy to Subterfuge. *NeurIPS 2024*. arXiv:2406.10162.  
+Denison et al. (2024). Sycophancy to Subterfuge. arXiv:2406.10162.  
 Greshake et al. (2023). Not What You've Signed Up For. *ACM AISec Workshop*. arXiv:2302.12173.  
 Liu et al. (2024). Lost in the Middle. *TACL*. arXiv:2307.03172.  
-Sandoval et al. (2023). HackAPrompt. arXiv:2311.17702.  
-Wallace et al. (2023). Poisoning Retrieval Corpora. *EMNLP 2023*. arXiv:2310.19156.  
+Schulhoff et al. (2023). Ignore This Title and HackAPrompt. *EMNLP 2023*. arXiv:2311.16119.  
+Zhong et al. (2023). Poisoning Retrieval Corpora. *EMNLP 2023*. arXiv:2310.19156.  
 Wei et al. (2023). Jailbroken. *NeurIPS 2023*. arXiv:2307.02483.
 
 ---
