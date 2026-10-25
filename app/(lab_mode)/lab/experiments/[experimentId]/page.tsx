@@ -875,13 +875,23 @@ function Rates({ metrics }: { metrics: ExperimentMetrics }) {
               </tr>
             ))}
             <tr>
-              <td>Propagated past a compromised entry <span className="text-xs text-[var(--text-secondary)]">CPR</span></td>
+              <td>Propagated past a compromised entry <span className="text-xs text-[var(--text-secondary)]">CPR, any exposure</span></td>
               <td className="text-right font-mono tabular-nums">{formatRate(a.cpr)}</td>
               <td className="text-sm text-[var(--text-secondary)]">
                 {a.cpr === 'n/a' ? 'Undefined, not 0%: no run compromised an entry agent that had anywhere to propagate to.' : 'No interval: the denominator is itself an outcome.'}
               </td>
               <td className="text-sm text-[var(--text-secondary)]">{a.cpr_denominator_size} eligible runs</td>
             </tr>
+            {a.cpr_message !== undefined && (
+              <tr>
+                <td>Propagated by message <span className="text-xs text-[var(--text-secondary)]">CPR, message</span></td>
+                <td className="text-right font-mono tabular-nums">{formatRate(a.cpr_message)}</td>
+                <td className="text-sm text-[var(--text-secondary)]">
+                  Counts only a downstream agent that acted on content from an upstream agent without having read the artifact itself. The row above also counts agents that were exposed to it directly.
+                </td>
+                <td className="text-sm text-[var(--text-secondary)]">{a.cpr_message_denominator_size ?? 0} runs with a recorded route</td>
+              </tr>
+            )}
             <tr>
               <td>Contained <span className="text-xs text-[var(--text-secondary)]">of runs with downstream agents</span></td>
               <td className="text-right font-mono tabular-nums">{formatRate(a.containment_rate)}</td>

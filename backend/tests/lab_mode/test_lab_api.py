@@ -228,9 +228,9 @@ class TestExperimentExecution:
     def test_verdict_event_carries_all_four_dimensions(self, client):
         result = _run_to_completion(client)
         verdict = next(e["data"] for e in result["events"] if e["event"] == "run_verdict")["verdict"]
-        # `baseline_runs` is provenance (how many clean runs defined normal
-        # behaviour), not a fifth dimension — and never a collapsed score.
-        assert set(verdict) - {"baseline_runs"} == {"agent_impact", "objective", "containment", "system_outcome"}
+        # `baseline_runs` and `propagation` are provenance (how many clean runs defined normal
+        # behaviour; how the attack reached each influenced agent), not a fifth dimension.
+        assert set(verdict) - {"baseline_runs", "propagation"} == {"agent_impact", "objective", "containment", "system_outcome"}
         assert set(verdict["agent_impact"]) == {"A", "B", "C"}
 
     def test_progress_counts_reach_the_declared_total(self, client):

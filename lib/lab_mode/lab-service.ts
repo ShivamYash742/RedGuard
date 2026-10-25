@@ -221,6 +221,11 @@ export interface ExperimentMetrics {
     partial_rate: RateWithCI
     /** `"n/a"` when the denominator is empty — never 0.0 (§10.3). */
     cpr: number | 'n/a'
+    /** Same number as `cpr`: any influenced downstream agent, however it was exposed. */
+    cpr_any?: number | 'n/a'
+    /** Only agents that acted on an upstream agent's message without reading the artifact themselves. */
+    cpr_message?: number | 'n/a'
+    cpr_message_denominator_size?: number
     cpr_denominator_size: number
     depth: number[]
     coverage: number[]

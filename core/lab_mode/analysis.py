@@ -35,6 +35,8 @@ from .metrics import (
     coverage,
     cpr,
     cpr_denominator,
+    cpr_message,
+    cpr_message_denominator,
     depth,
     icr,
     macro_average,
@@ -74,6 +76,9 @@ def headline(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
         # CPR is "n/a" when D is empty, never 0.0 (§10.3): an empty denominator means the
         # question was never asked, not that propagation never happened.
         "cpr": cpr(scoped),
+        "cpr_any": cpr(scoped),   # same number: any influenced downstream agent, however it was exposed
+        "cpr_message": cpr_message(scoped),
+        "cpr_message_denominator_size": len(cpr_message_denominator(scoped)),
         "cpr_denominator_size": len(cpr_denominator(scoped)),
         "depth": depth(scoped),
         "coverage": coverage(scoped),
