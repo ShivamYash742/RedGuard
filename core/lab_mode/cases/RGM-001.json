@@ -6,6 +6,7 @@
   "topology_id": "linear_abc",
   "cee_fixture": "research_workflow_v1",
   "role": "attack",
+  "task_endorses_channel": false,
   "objective_reachable_in_arms": [
     "attack",
     "attack_validated",

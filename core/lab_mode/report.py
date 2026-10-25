@@ -292,6 +292,7 @@ def build_report(
             "channel": (attack.get("delivery") or {}).get("channel"),
             "injection_point": attack.get("injection_point"),
             "severity": case.get("severity"),
+            "task_endorses_channel": case.get("task_endorses_channel"),
             "objective": (case.get("objective") or {}).get("description"),
             "n": m.get("n", 0),
             "icr": m.get("icr"), "asr": m.get("asr"), "partial_rate": m.get("partial_rate"),
@@ -465,6 +466,10 @@ def _findings(r: Dict[str, Any]) -> List[str]:
     hit = [c["id"] for c in r["cases"] if c["asr"]]
     if hit:
         out.append("Cases where the objective was reached at least once: " + ", ".join(hit) + ".")
+        endorsed = [c["id"] for c in r["cases"] if c["asr"] and c.get("task_endorses_channel")]
+        if endorsed:
+            out.append("In " + ", ".join(endorsed) + " the task itself points the agents at the channel the attack arrives "
+                       "through, so success there partly measures following the task, not only susceptibility.")
     separated = [cid for cid, d in ((c["id"], c["drift"]) for c in r["cases"]) if d and d.get("separated")]
     if separated:
         out.append("Attack runs drifted measurably from clean behaviour (beyond the clean-vs-clean noise floor) in: "
@@ -629,8 +634,9 @@ def to_markdown(r: Dict[str, Any]) -> str:
 
     out += ["", "## Cases", ""]
     out.append(_table(
-        ["Case", "Title", "Family · entry", "n", "ICR", "ASR", "Partial", "CPR", "SOC", "Objectives", "Stopped", "Drift (attack / null)"],
-        [[c["id"], c["title"], f"{c['family']} · {c['channel']} at {c['injection_point']}", c["n"],
+        ["Case", "Title", "Family · entry", "Task points at channel", "n", "ICR", "ASR", "Partial", "CPR", "SOC", "Objectives", "Stopped", "Drift (attack / null)"],
+        [[c["id"], c["title"], f"{c['family']} · {c['channel']} at {c['injection_point']}",
+          {True: "yes", False: "no", None: "—"}[c.get("task_endorses_channel")], c["n"],
           _pct(c["icr"]), _pct(c["asr"]), _pct(c["partial_rate"]), _pct(c["cpr"]), _pct(c["soc"]),
           _counts(c["objectives"]), _counts(c["stopped_at"]),
           _drift(c["drift"])]

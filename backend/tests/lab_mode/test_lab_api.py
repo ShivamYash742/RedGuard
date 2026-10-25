@@ -94,8 +94,8 @@ def _run_to_completion(client: TestClient, **overrides) -> Dict[str, Any]:
 class TestCatalogEndpoints:
     def test_list_cases(self, client):
         body = client.get("/api/lab/cases").json()
-        assert body["total"] == 9
-        assert len(body["cases"]) == 9
+        assert body["total"] == 10
+        assert len(body["cases"]) == 10
         first = body["cases"][0]
         for key in ("id", "title", "family", "injection_point", "channel",
                     "eligible_downstream_agents", "expected_path"):
@@ -157,7 +157,7 @@ class TestExperimentCreation:
 
     def test_defaults_to_the_whole_case_set(self, client):
         body = client.post("/api/lab/experiments", json={"scripted": True, "repetitions": 1}).json()
-        assert len(body["cases"]) == 9
+        assert len(body["cases"]) == 10
 
     def test_unknown_arm_is_400(self, client):
         response = client.post("/api/lab/experiments", json={"arm": "arm-clean"})
@@ -783,6 +783,16 @@ class TestExperimentReport:
         assert set(report["agents"]) == {"A", "B", "C"}
         assert report["suitability"]["applies"] is False  # scripted
         assert any("scripted replay" in f for f in report["findings"])
+
+    def test_report_shows_which_tasks_point_at_the_poisoned_channel(self, client):
+        """L9: RGM-007's task tells the agents to read the poisoned key; RGM-010's only names it."""
+        experiment_id = _run_to_completion(client, cases=["RGM-007", "RGM-010"], repetitions=1)["experiment"]["experiment_id"]
+        report = client.get(f"/api/lab/experiments/{experiment_id}/report").json()
+        assert {c["id"]: c["task_endorses_channel"] for c in report["cases"]} == {"RGM-007": True, "RGM-010": False}
+        markdown = client.get(f"/api/lab/experiments/{experiment_id}/report?format=md").text
+        assert "Task points at channel" in markdown
+        cases = {c["id"]: c for c in client.get("/api/lab/cases").json()["cases"]}
+        assert cases["RGM-007"]["task_endorses_channel"] is True and cases["RGM-010"]["task_endorses_channel"] is False
 
     def test_markdown_download(self, client):
         experiment_id = _run_to_completion(client)["experiment"]["experiment_id"]

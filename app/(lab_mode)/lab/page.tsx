@@ -254,6 +254,8 @@ export default function LabPage() {
                       {FAMILY_LABELS[c.family] ?? c.family} ·{Icon && <Icon className="h-3.5 w-3.5" aria-hidden />}
                       enters via {CHANNEL_NAMES[c.channel] ?? c.channel} at {c.injection_point} ·{' '}
                       {c.eligible_downstream_agents.length ? `can reach ${c.eligible_downstream_agents.join(', ')}` : 'entry-local, nothing downstream to reach'}
+                      {c.task_endorses_channel ? ' · the task points the agents at this channel' : ''}
+                      {c.role === 'control' ? ' · control, reported apart' : ''}
                     </span>
                   </span>
                   <span className="col-start-2 lg:col-start-auto">

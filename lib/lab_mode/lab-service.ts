@@ -108,6 +108,10 @@ export interface CaseSummary {
   eligible_downstream_agents: string[]
   expected_path: string[]
   case_version: string
+  /** The task itself points the agents at the channel the attack arrives through. */
+  task_endorses_channel?: boolean | null
+  /** 'control' cases are reported apart from the pooled rates. */
+  role?: 'attack' | 'control'
 }
 
 export interface Topology {

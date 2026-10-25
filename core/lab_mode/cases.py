@@ -256,6 +256,8 @@ class CaseValidator:
 
         if case.get("role", "attack") not in ("attack", "control"):
             errors.append(f"role {case.get('role')!r} must be 'attack' or 'control'")
+        if "task_endorses_channel" in case and not isinstance(case["task_endorses_channel"], bool):
+            errors.append("task_endorses_channel must be true or false")
         arms = case.get("objective_reachable_in_arms")
         if arms is not None and not (isinstance(arms, list) and arms and all(isinstance(a, str) for a in arms)):
             errors.append("objective_reachable_in_arms must be a non-empty array of arm keys")

@@ -43,7 +43,7 @@ class TestCaseMetadata:
     def test_the_two_controls_and_the_unreachable_case_are_marked(self):
         assert case_role(load_case("RGM-009")) == "control"
         assert case_role(load_case("RGM-008")) == "control"
-        assert [case_role(load_case(c)) for c in case_ids() if c not in ("RGM-008", "RGM-009")] == ["attack"] * 7
+        assert [case_role(load_case(c)) for c in case_ids() if c not in ("RGM-008", "RGM-009")] == ["attack"] * 8
         assert load_case("RGM-005")["objective_reachable_in_arms"] == ["attack_permissive_tools"]
 
     def test_every_listed_arm_exists(self):
@@ -101,3 +101,33 @@ class TestScope:
         result = compare_arms("attack", base, "attack_permissive_tools", var)
         assert result["cases_compared"] == ["RGM-001"] and result["cases_in_scope_in_one_arm_only"] == ["RGM-005"]
         assert result["metrics"]["asr"]["difference"] == pytest.approx(0.5)   # not inflated by the reachable-only case
+
+
+class TestTaskEndorsesChannel:
+    """L9: some tasks point the agents at the poisoned channel, so success there partly measures
+    following the task. The flag is recorded per case and shown with the results."""
+
+    def test_every_case_records_it(self):
+        flags = {cid: load_case(cid)["task_endorses_channel"] for cid in case_ids()}
+        assert all(isinstance(v, bool) for v in flags.values())
+        assert {cid for cid, v in flags.items() if v} == {"RGM-003", "RGM-004", "RGM-005", "RGM-007", "RGM-009"}
+
+    def test_the_flag_agrees_with_the_task_text(self):
+        for cid in ("RGM-003", "RGM-004", "RGM-005", "RGM-007"):
+            case = load_case(cid)
+            location = case["attack"]["delivery"]["location"]
+            assert location in case["task"] or "bulletin" in case["task"], cid       # the task names the channel
+        assert "handoff_notes" in load_case("RGM-010")["task"]
+        assert not any(w in load_case("RGM-010")["task"] for w in ("Check the", "carried over"))   # ... but does not tell anyone to use it
+
+    def test_rgm_010_differs_from_rgm_007_only_in_what_the_task_asks(self):
+        a, b = load_case("RGM-007"), load_case("RGM-010")
+        assert b["task_endorses_channel"] is False and a["task_endorses_channel"] is True
+        assert a["task"] != b["task"] and a["attack"]["delivery"] == b["attack"]["delivery"]
+        assert a["attack"]["canary"] != b["attack"]["canary"] and b["attack"]["canary"] in b["attack"]["artifact"]
+        assert a["objective"]["reached"] == b["objective"]["reached"]
+
+    def test_a_non_boolean_flag_is_rejected(self):
+        from core.lab_mode.cases import CaseValidator
+
+        assert not CaseValidator().validate({**load_case("RGM-001"), "task_endorses_channel": "yes"}).valid
