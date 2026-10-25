@@ -80,7 +80,9 @@ from core.lab_mode.metrics import (
 from core.lab_mode.model_client import ModelClient, ModelConfig
 from core.lab_mode.repro import reproducibility_stamp
 from core.lab_mode.report import build_report, to_markdown
-from core.lab_mode.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, run_case
+from core.lab_mode.runner import (
+    ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, repetition_config, repetition_warnings, run_case,
+)
 from core.lab_mode.tools import TOOLS
 from core.lab_mode.trace import EventCategory, EventType, TraceEvent
 
@@ -215,8 +217,17 @@ async def create_experiment(request: Request):
         raise HTTPException(status_code=400, detail=f"Unknown case ids: {unknown}")
 
     try:
+        temperature = float(body.get("temperature", 0.0))
+        seed = body.get("seed")
+        seed = None if seed in (None, "") else int(seed)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="temperature must be a number and seed an integer")
+    if not 0.0 <= temperature <= 2.0:
+        raise HTTPException(status_code=400, detail="temperature must be between 0 and 2")
+
+    try:
         model_config = ModelConfig.from_env(
-            provider=body.get("provider", "ollama"), model=body.get("model"),
+            provider=body.get("provider", "ollama"), model=body.get("model"), temperature=temperature, seed=seed,
         )
     except ValueError as exc:  # unknown provider — the caller's mistake, not ours
         raise HTTPException(status_code=400, detail=str(exc))
@@ -224,21 +235,22 @@ async def create_experiment(request: Request):
     # Validates arm and topology, and fails before anything is persisted.
     config = _build_config(arm, model_config, topology_id, max_steps)
 
+    stored_config = {
+        **config.to_dict(),
+        "arm": arm,
+        "cases": selected,
+        "repetitions": reps,
+        "scripted": scripted,
+        # Slows the scripted replay so a demo can be watched; a model
+        # run is slow enough on its own.
+        **({"step_delay_ms": step_delay_ms} if scripted and step_delay_ms else {}),
+    }
     db = await get_db()
     experiment = await lab_store.create_experiment(
         db,
         name=body.get("name") or f"{arm} × {len(selected)} cases × {reps}",
         arm_key=arm,
-        config={
-            **config.to_dict(),
-            "arm": arm,
-            "cases": selected,
-            "repetitions": reps,
-            "scripted": scripted,
-            # Slows the scripted replay so a demo can be watched; a model
-            # run is slow enough on its own.
-            **({"step_delay_ms": step_delay_ms} if scripted and step_delay_ms else {}),
-        },
+        config=stored_config,
         versions=reproducibility_stamp(),
     )
     return {
@@ -248,6 +260,7 @@ async def create_experiment(request: Request):
         "repetitions": reps,
         "total_runs": len(selected) * reps * 2,
         "config": config.to_dict(),
+        "warnings": repetition_warnings(stored_config),
     }
 
 
@@ -258,6 +271,7 @@ def _experiment_row(experiment: Any, runs: Optional[List[Any]] = None) -> Dict[s
         "name": experiment.name,
         "arm": experiment.armKey,
         "config": config,
+        "warnings": repetition_warnings(config),
         "versions": json.loads(experiment.versionsJson),
         "created_at": experiment.createdAt.isoformat(),
         # Runs per run, so `/lab` can badge a live experiment from any tab.
@@ -439,10 +453,7 @@ async def _execute(experiment: Any):
     selected = config_data["cases"]
     reps = config_data["repetitions"]
 
-    model_config = ModelConfig.from_env(
-        provider=(config_data.get("model") or {}).get("provider", "ollama"),
-        model=(config_data.get("model") or {}).get("model"),
-    )
+    model_config = ModelConfig.from_stored(config_data.get("model"))
     run_config = _build_config(
         config_data["arm"], model_config,
         config_data.get("topology_id", "linear_abc"),
@@ -470,12 +481,14 @@ async def _execute(experiment: Any):
     for case_id in selected:
         case = load_case(case_id)
         cee_factory = fixture_factory(case)
-        client = _client_for(config_data, model_config, case)
 
         for rep in range(1, reps + 1):
             pair_id = f"{experiment.id}-{case_id}-r{rep}"
             if pair_id in done:
                 continue
+            # Same seed for the clean and attack half of a pair, a different one per repetition.
+            rep_config = repetition_config(run_config, rep)
+            client = _client_for(config_data, rep_config.model, case)
             results: Dict[str, Any] = {}
             rows: Dict[str, Any] = {}
 
@@ -493,7 +506,7 @@ async def _execute(experiment: Any):
 
                 started = time.monotonic()
                 async for item in _run_streaming(
-                    case, cee_factory(), run_config, client, mode=mode, run_id=row.id,
+                    case, cee_factory(), rep_config, client, mode=mode, run_id=row.id,
                 ):
                     if isinstance(item, TraceEvent):
                         yield {"event": "trace_event", "data": _event_payload(row.id, item)}

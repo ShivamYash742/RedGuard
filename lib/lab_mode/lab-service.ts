@@ -165,6 +165,8 @@ export interface Experiment {
   name: string
   arm: string
   config: Record<string, unknown>
+  /** Problems with the setup, e.g. repetitions that would be exact copies. */
+  warnings?: string[]
   versions: ReproStamp
   created_at: string
   runs?: RunSummary[]
@@ -387,6 +389,10 @@ export interface CreateExperimentRequest {
   repetitions?: number
   provider?: string
   model?: string
+  /** 0-2. At 0 repetitions of a local model are usually exact copies unless a seed is set. */
+  temperature?: number
+  /** Base seed: repetition N runs with seed + N, and the seed is recorded with every run. */
+  seed?: number
   topology_id?: string
   max_steps?: number
   /** Replay each case's clean_script instead of calling a model. */

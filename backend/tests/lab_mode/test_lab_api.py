@@ -801,3 +801,36 @@ class TestExperimentReport:
         assert not report["complete"] and report["runs"] == []
         assert any("Only 0 of 2 pairs" in c for c in report["caveats"])
         assert client.get("/api/lab/experiments/nope/report").status_code == 404
+
+
+class TestRepetitionSeeds:
+    """L7: temperature and a base seed are accepted, stored, and warned about when missing."""
+
+    def test_temperature_and_seed_are_stored_with_the_experiment(self, client):
+        created = _create_experiment(client, temperature=0.7, seed=41, repetitions=3)
+        assert (created["config"]["model"]["temperature"], created["config"]["model"]["seed"]) == (0.7, 41)
+        stored = client.get(f"/api/lab/experiments/{created['experiment_id']}").json()
+        assert stored["config"]["model"]["seed"] == 41 and stored["warnings"] == []
+
+    def test_repetitions_at_temperature_zero_without_a_seed_come_with_a_warning(self, client):
+        created = _create_experiment(client, scripted=False, repetitions=5)
+        assert len(created["warnings"]) == 1 and "exact copies" in created["warnings"][0]
+        assert client.get(f"/api/lab/experiments/{created['experiment_id']}").json()["warnings"] == created["warnings"]
+
+    def test_a_scripted_experiment_is_not_warned(self, client):
+        assert _create_experiment(client, repetitions=5)["warnings"] == []
+
+    @pytest.mark.parametrize("bad", [{"temperature": -0.1}, {"temperature": 2.5}, {"temperature": "hot"}, {"seed": "x"}])
+    def test_bad_values_are_rejected(self, client, bad):
+        response = client.post("/api/lab/experiments", json={"arm": "attack", "cases": ["RGM-001"], "scripted": True, **bad})
+        assert response.status_code == 400
+
+    def test_every_run_records_its_own_seed_and_a_pair_shares_it(self, client):
+        result = _run_to_completion(client, cases=["RGM-001"], repetitions=2, seed=10)
+        experiment = client.get(f"/api/lab/experiments/{result['experiment']['experiment_id']}").json()
+        seeds = {}
+        for run in experiment["runs"]:
+            detail = client.get(f"/api/lab/runs/{run['run_id']}").json()
+            snapshot = next(e for e in detail["events"] if e["event_type"] == "config_snapshot")
+            seeds.setdefault(run["pair_id"], set()).add(snapshot["arguments"]["model"]["seed"])
+        assert sorted(tuple(s) for s in seeds.values()) == [(11,), (12,)]     # one seed per pair, different per repetition

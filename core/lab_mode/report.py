@@ -21,6 +21,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
+from .runner import repetition_warnings
 from .smoke import PARSE_FAILURE_GATE
 from .trace import EventType, TraceEvent
 
@@ -321,6 +322,8 @@ def build_report(
             "provider": None if scripted else model.get("provider"),
             "model": None if scripted else model.get("model"),
             "temperature": model.get("temperature"),
+            "seed": model.get("seed"),
+            "warnings": repetition_warnings(config),
             "max_steps": config.get("max_steps"),
             "topology": config.get("topology_id"),
             "validation_mode": config.get("validation_mode"),
@@ -412,6 +415,7 @@ def _findings(r: Dict[str, Any]) -> List[str]:
     agg = res["aggregate"]
     n = res["n_attack_runs"]
 
+    out.extend(exp["warnings"])
     if exp["scripted"]:
         out.append("This was a scripted replay: each case's compliant clean script stood in for the model, so the "
                    "numbers test the harness, not a model, and attacks cannot land by construction.")
@@ -550,6 +554,7 @@ def to_markdown(r: Dict[str, Any]) -> str:
             ["Defence arm", f"`{exp['arm']}`: {exp['arm_description']}"],
             ["Model", who],
             ["Temperature", exp["temperature"]],
+            ["Seed", "none" if exp["seed"] is None else f"{exp['seed']} + repetition number"],
             ["Step budget per agent", exp["max_steps"]],
             ["Cases", f"{len(exp['cases'])} ({', '.join(exp['cases'])})"],
             ["Repetitions per case", exp["repetitions"]],

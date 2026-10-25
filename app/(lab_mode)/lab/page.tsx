@@ -38,6 +38,8 @@ export default function LabPage() {
   const [maxSteps, setMaxSteps] = useState(DEFAULT_MAX_STEPS)
   const [scripted, setScripted] = useState(false)
   const [slowMotion, setSlowMotion] = useState(true)
+  const [temperature, setTemperature] = useState(0)
+  const [seed, setSeed] = useState('')
   const [provider, setProvider] = useState('ollama')
   const [model, setModel] = useState(DEFAULT_LOCAL_MODEL)
   const [launching, setLaunching] = useState(false)
@@ -74,6 +76,7 @@ export default function LabPage() {
         arm, cases: selected, repetitions, max_steps: maxSteps, scripted,
         step_delay_ms: scripted && slowMotion ? DEMO_STEP_DELAY_MS : undefined,
         provider, model: model || undefined,
+        temperature, seed: seed.trim() === '' ? undefined : Math.trunc(Number(seed)),
       })
       router.push(`/lab/experiments/${created.experiment_id}?run=1`)
     } catch (err) {
@@ -163,7 +166,23 @@ export default function LabPage() {
               <span className={label}>Model</span>
               <input value={model} onChange={(e) => setModel(e.target.value)} disabled={scripted} placeholder="provider default" className={`${field} font-mono`} />
             </label>
+            <label className="block">
+              <span className={label}>Temperature</span>
+              <input type="number" min={0} max={2} step={0.1} value={temperature} disabled={scripted} className={field}
+                onChange={(e) => setTemperature(Math.max(0, Math.min(2, Number(e.target.value) || 0)))} />
+            </label>
+            <label className="block">
+              <span className={label}>Seed (repetition N uses seed + N)</span>
+              <input type="number" step={1} value={seed} disabled={scripted} placeholder="none" className={`${field} font-mono`}
+                onChange={(e) => setSeed(e.target.value)} />
+            </label>
           </div>
+          {!scripted && repetitions > 1 && temperature === 0 && seed.trim() === '' && (
+            <p role="alert" className="rounded-[var(--radius)] border border-[var(--warning)] px-3 py-2 text-xs text-[var(--text-primary)]">
+              {repetitions} repetitions at temperature 0 with no seed are likely exact copies of each other, so the number of cases, not
+              the number of runs, is the sample size. Set a seed (it is varied per repetition) or a temperature above 0.
+            </p>
+          )}
 
           <div className="space-y-2">
             <label className="flex items-start gap-2.5 text-sm text-[var(--text-secondary)]">
