@@ -33,7 +33,7 @@
       ],
       "tags": ["goal_diversion", "advertising", "redirection", "travel"],
       "affected_layers": ["orchestrator", "llm", "policy"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true
     },
@@ -102,7 +102,7 @@
       ],
       "tags": ["reward_hacking", "metric_gaming", "sycophancy", "hard"],
       "affected_layers": ["orchestrator", "llm", "policy"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true
     },
@@ -136,7 +136,7 @@
       ],
       "tags": ["mission_creep", "gradual_escalation", "calendar", "expert"],
       "affected_layers": ["orchestrator", "llm", "policy", "tools"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true
     }

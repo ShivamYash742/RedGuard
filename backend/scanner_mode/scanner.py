@@ -15,7 +15,7 @@ from scanner_mode.schema import sha256_hex
 from scanner_mode.agent_loader import get_agent
 from scanner_mode.agents._prompt_loader import PROMPT_MODES
 from scanner_mode.agents import _tools
-from scanner_mode.agents._tools import RECORDER
+from scanner_mode.agents._tools import FIXTURES, RECORDER
 from scanner_mode.agents._scaffold import SCAFFOLD
 
 # Add parent directory to sys.path to access redguard module (guard against duplicates)
@@ -348,11 +348,12 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
             #    (shadow call), so model-alone results cover every probe.
             for retry_delay in (*AGENT_RETRY_DELAYS, None):
                 actions: List[Dict[str, Any]] = []  # this attempt's action-tool calls
-                token = RECORDER.set(actions)
+                tokens = (RECORDER.set(actions), FIXTURES.set(probe.get("tool_fixtures") or {}))
                 try:
                     response = await _invoke_agent(agent_id, prompt, model_name=model_name, prompt_mode=prompt_mode)
                 finally:
-                    RECORDER.reset(token)
+                    RECORDER.reset(tokens[0])
+                    FIXTURES.reset(tokens[1])
                 is_recursion_error = "Recursion limit" in response or "GraphRecursionError" in response
                 # Agents report transport failures as text; never score those as a reply.
                 agent_errored = response.startswith(("Agent error", "[OllamaAgent]", "[CustomAgent]"))

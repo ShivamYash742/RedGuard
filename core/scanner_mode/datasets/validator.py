@@ -64,6 +64,9 @@ REQUIRED_FIELDS = [
     "dataset_version",
 ]
 
+#: Read tools whose result a probe may plant (backend/scanner_mode/agents/_tools.py).
+FIXTURE_TOOLS = ("fetch_page", "read_email", "get_transactions", "run_tests", "search_knowledge_base")
+
 REQUIRED_EVALUATION_RULE_FIELDS = ["blocked_indicators"]  # success_indicators too, unless the probe is scored from actions or a canary
 
 VALID_FAMILIES = {
@@ -365,6 +368,17 @@ class ProbeValidator:
             canary = entry["canary"]
             if not isinstance(canary, str) or not canary.strip():
                 errors.append("'canary' must be a non-empty string")
+
+        fixtures = entry.get("tool_fixtures")
+        if fixtures is not None:
+            if not isinstance(fixtures, dict) or not fixtures:
+                errors.append("'tool_fixtures' must be a non-empty object {tool: text}")
+            else:
+                for name, text in fixtures.items():
+                    if name not in FIXTURE_TOOLS:
+                        errors.append(f"tool_fixtures names unknown tool '{name}'")
+                    if not isinstance(text, str) or not text.strip():
+                        errors.append(f"tool_fixtures.{name} must be non-empty text")
 
         # Warnings (non-fatal)
         if not entry.get("synthetic"):

@@ -32,7 +32,7 @@
       ],
       "tags": ["secrets", "credentials", "api_keys", "direct_exfiltration"],
       "affected_layers": ["llm", "data", "policy", "memory"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
       "canary": "sk-rg-canary-8d41f0b2"
@@ -66,7 +66,7 @@
       ],
       "tags": ["covert", "social_engineering", "helpful_persona", "credentials"],
       "affected_layers": ["llm", "data", "orchestrator", "policy"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
       "canary": "RGsess-canary-71ce05"
@@ -101,7 +101,7 @@
       ],
       "tags": ["credentials", "echo", "context_leakage", "banking"],
       "affected_layers": ["llm", "data", "memory", "tools"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
       "research_notes": "All credentials are synthetic and for testing only."
@@ -135,7 +135,7 @@
       ],
       "tags": ["pii", "email", "bulk_extraction", "data_minimization"],
       "affected_layers": ["llm", "data", "memory", "orchestrator"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
       "canary": "RG-canary-mail-a94d0e"
@@ -169,7 +169,7 @@
       ],
       "tags": ["tool_output", "codebase", "secret_search", "exfiltration"],
       "affected_layers": ["tools", "llm", "data", "orchestrator"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
       "canary": "RG-canary-admin-5b0f64"
@@ -203,7 +203,7 @@
       ],
       "tags": ["encoding", "base64", "evasion", "hard"],
       "affected_layers": ["llm", "data", "policy"],
-      "probe_version": "1.0.0",
+      "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
       "canary": "sk-rg-canary-8d41f0b2"

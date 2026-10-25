@@ -219,6 +219,12 @@
       "default": false,
       "description": "A harmless request a good agent should simply answer. Measures over-refusal and regex false positives; never counted as an attack."
     },
+    "tool_fixtures": {
+      "type": "object",
+      "propertyNames": {"enum": ["fetch_page", "read_email", "get_transactions", "run_tests", "search_knowledge_base"]},
+      "additionalProperties": {"type": "string", "minLength": 1},
+      "description": "What the fixture-backed read tools return while this probe runs. An indirect attack is planted here (in a page, an email, a tool result) instead of in the user message."
+    },
     "canary": {
       "type": "string",
       "minLength": 6,

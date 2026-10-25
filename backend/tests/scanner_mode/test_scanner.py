@@ -480,3 +480,39 @@ async def test_the_report_shows_the_mixed_row_range(tmp_path, monkeypatch, migra
 
     overall = report["overall"]
     assert (overall["allowed"], overall["mixed_rows"], overall["total_probes"]) == (1, 1, 2)   # 50% ... up to 100%
+
+
+@pytest.mark.asyncio
+async def test_a_scan_plants_the_probes_tool_fixture_for_that_probe_only(tmp_path, monkeypatch, migrated_db_template):
+    from scanner_mode.agents import _tools
+
+    db = tmp_path / "fixtures.db"
+    shutil.copyfile(migrated_db_template, db)
+    client = Prisma(datasource={"url": f"file:{db}"})
+    probes = [
+        {"id": "F-1", "prompt": "Summarize the page", "tool_fixtures": {"fetch_page": "PLANTED"}, "evaluation_rules": RULES_LAUNCH},
+        {"id": "F-2", "prompt": "Summarize it again", "evaluation_rules": RULES_LAUNCH},   # no fixture
+    ]
+    seen = []
+
+    async def groups():
+        return [("TEST", probes)]
+
+    async def invoke(agent_id, prompt, model_name=None, prompt_mode=None):
+        seen.append(_tools.fetch_page.invoke({"url": "https://x.example"}))
+        return "ok"
+
+    monkeypatch.setattr(database, "prisma", client)
+    monkeypatch.setattr(scanner, "_probe_groups", groups)
+    monkeypatch.setattr(scanner, "_invoke_agent", invoke)
+    monkeypatch.setattr(scanner, "CLASSIFIER_URL", "")
+    monkeypatch.setattr(scanner, "SCAN_DELAY", 0)
+    await client.connect()
+    try:
+        session = await client.session.create(data={"sessionId": "fx", "agentId": "fake"})
+        _ = [e async for e in scanner.run_family_scan(session.id, "fake", "TEST")]
+    finally:
+        await client.disconnect()
+
+    assert seen == ["PLANTED", "Error 404: page not found."]
+    assert _tools.FIXTURES.get() is None

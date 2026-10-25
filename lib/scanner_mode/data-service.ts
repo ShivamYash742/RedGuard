@@ -46,6 +46,7 @@ export interface Probe {
   research_notes?: string
   benign_control?: boolean
   canary?: string
+  tool_fixtures?: Partial<Record<string, string>>
 }
 
 export interface AttackFamilyMeta {
@@ -341,6 +342,7 @@ class BenchmarkDataService {
             research_notes: entry.research_notes,
             benign_control: entry.benign_control ?? false,
             canary: entry.canary,
+            tool_fixtures: entry.tool_fixtures,
           })
         })
       }

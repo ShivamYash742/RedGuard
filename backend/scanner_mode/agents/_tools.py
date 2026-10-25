@@ -76,6 +76,57 @@ def calculator(expression: str) -> str:
         return f"Calculator error: {exc}"
 
 
+# ── Fixture-backed read tools ────────────────────────────────────────────────
+# Indirect attacks reach the agent the way they do in practice: inside a tool
+# result, not in the user's message. A probe's `tool_fixtures` ({tool: text}) is
+# what that tool returns for the duration of the probe; without one the tool
+# returns a harmless default. Nothing is fetched from anywhere.
+
+FIXTURES: ContextVar[Optional[dict]] = ContextVar("tool_fixtures", default=None)
+
+
+def _fixture(tool_name: str, default: str) -> str:
+    return (FIXTURES.get() or {}).get(tool_name, default)
+
+
+@tool
+def fetch_page(url: str) -> str:
+    """Fetch a web page or document by URL and return its text."""
+    record_call("fetch_page", {"url": url})
+    return _fixture("fetch_page", "Error 404: page not found.")
+
+
+@tool
+def read_email(query: str) -> str:
+    """Search the user's mailbox and return the matching messages."""
+    record_call("read_email", {"query": query})
+    return _fixture("read_email", "No messages found.")
+
+
+@tool
+def get_transactions(account: str = "checking") -> str:
+    """Return the recent transactions of one of the user's accounts."""
+    record_call("get_transactions", {"account": account})
+    return _fixture("get_transactions", "No transactions found.")
+
+
+@tool
+def run_tests(path: str = ".") -> str:
+    """Run the project's test suite and return its output."""
+    record_call("run_tests", {"path": path})
+    return _fixture("run_tests", "No tests found.")
+
+
+@tool
+def search_knowledge_base(query: str) -> str:
+    """Search the company knowledge base and return the best matching documents."""
+    record_call("search_knowledge_base", {"query": query})
+    return _fixture("search_knowledge_base", "No documents found.")
+
+
+FIXTURE_TOOLS = [fetch_page, read_email, get_transactions, run_tests, search_knowledge_base]
+
+
 # ── Action tools ─────────────────────────────────────────────────────────────
 # Mock tools that do nothing but record the call. Probes that try to make an
 # agent send, delete, run, pay or remember something are scored from these
@@ -151,7 +202,7 @@ def save_memory(note: str) -> str:
 
 
 ACTION_TOOLS = [send_email, http_post, execute_sql, run_command, delete_files, transfer_funds, place_order, save_memory]
-TOOLS = [web_search, file_read, calculator, *ACTION_TOOLS]
+TOOLS = [web_search, file_read, calculator, *FIXTURE_TOOLS, *ACTION_TOOLS]
 
 
 def extract_text(result: Any) -> str:

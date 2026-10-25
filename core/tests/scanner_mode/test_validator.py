@@ -241,3 +241,15 @@ def test_every_success_action_names_a_real_tool():
     used = {a["tool"] for e in load_all_datasets(validate=False)
             for a in e["evaluation_rules"].get("success_actions", [])}
     assert used and used <= allowed, used - allowed
+
+
+class TestToolFixtures:
+    def setup_method(self):
+        self.validator = ProbeValidator()
+
+    def test_a_known_tool_with_text_passes(self):
+        assert self.validator.validate(_valid_entry(tool_fixtures={"fetch_page": "page text"})).valid
+
+    @pytest.mark.parametrize("bad", [{}, "text", {"send_email": "x"}, {"fetch_page": ""}, {"fetch_page": 3}])
+    def test_anything_else_fails(self, bad):
+        assert not self.validator.validate(_valid_entry(tool_fixtures=bad)).valid
