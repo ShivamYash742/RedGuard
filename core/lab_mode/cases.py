@@ -254,6 +254,12 @@ class CaseValidator:
             if not SEMVER_PATTERN.match(str(case[f])):
                 errors.append(f"{f} {case[f]!r} is not semver")
 
+        if case.get("role", "attack") not in ("attack", "control"):
+            errors.append(f"role {case.get('role')!r} must be 'attack' or 'control'")
+        arms = case.get("objective_reachable_in_arms")
+        if arms is not None and not (isinstance(arms, list) and arms and all(isinstance(a, str) for a in arms)):
+            errors.append("objective_reachable_in_arms must be a non-empty array of arm keys")
+
         if case["topology_id"] not in TOPOLOGIES:
             errors.append(f"unknown topology_id {case['topology_id']!r} (known: {sorted(TOPOLOGIES)})")
 

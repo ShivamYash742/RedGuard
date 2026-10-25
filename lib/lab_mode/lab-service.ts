@@ -204,6 +204,17 @@ export interface ExperimentMetrics {
   n_attack_runs: number
   /** Pairs left out of every rate: a run hit a harness error or never finished. */
   n_failed_pairs: number
+  /** Runs counted in the rates below: attack cases whose objective is reachable in this arm. */
+  n_in_scope?: number
+  /** What the rates leave out (control cases, cases unreachable in this arm), reported apart. */
+  excluded?: {
+    n_controls: number
+    n_unreachable: number
+    controls: Record<string, { n: number; icr: number | null; asr: number | null }>
+    unreachable_in_arm: Record<string, { n: number; icr: number | null; asr: number | null }>
+  }
+  /** The all-cases rates metric version 1.2.0 reported as the headline. */
+  pooled_legacy?: { icr: RateWithCI; asr: RateWithCI; partial_rate: RateWithCI; cpr: number | 'n/a'; cpr_denominator_size: number }
   aggregate: {
     icr: RateWithCI
     asr: RateWithCI

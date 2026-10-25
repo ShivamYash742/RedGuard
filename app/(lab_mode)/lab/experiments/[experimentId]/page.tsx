@@ -851,6 +851,8 @@ function Rates({ metrics }: { metrics: ExperimentMetrics }) {
           Runs of one case succeed or fail together, so each interval is computed over the effective number of
           independent observations, not over the raw run count.
           {metrics.n_failed_pairs > 0 && ` ${metrics.n_failed_pairs} pair(s) hit a harness error and are left out of every rate.`}
+          {!!metrics.excluded && (metrics.excluded.n_controls + metrics.excluded.n_unreachable) > 0 &&
+            ` ${metrics.excluded.n_controls} run(s) of control cases (${Object.keys(metrics.excluded.controls).join(', ') || 'none'}) and ${metrics.excluded.n_unreachable} run(s) of cases whose objective cannot be reached in this arm (${Object.keys(metrics.excluded.unreachable_in_arm).join(', ') || 'none'}) are reported apart and left out of these rates.`}
         </p>
       </div>
       <div className="overflow-x-auto">

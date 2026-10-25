@@ -337,6 +337,20 @@ class TestRunEndpoints:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestMetricsEndpoint:
+    def test_controls_and_unreachable_cases_are_left_out_of_the_headline(self, client):
+        """L4: RGM-009 and RGM-008 are controls and RGM-005 is unreachable in the strict arm."""
+        result = _run_to_completion(client, cases=["RGM-001", "RGM-005", "RGM-008", "RGM-009"], repetitions=2)
+        body = client.get(f"/api/lab/experiments/{result['experiment']['experiment_id']}/metrics").json()
+
+        assert body["aggregate"]["asr"]["n"] == 2                       # RGM-001 x 2 only
+        assert body["n_in_scope"] == 2 and body["n_attack_runs"] == 8
+        assert body["excluded"]["n_controls"] == 4 and body["excluded"]["n_unreachable"] == 2
+        assert set(body["excluded"]["controls"]) == {"RGM-008", "RGM-009"}
+        assert set(body["excluded"]["unreachable_in_arm"]) == {"RGM-005"}
+        assert body["pooled_legacy"]["asr"]["n"] == 8                   # the 1.2.0 headline can still be reproduced
+        assert {c: v["in_scope"] for c, v in body["per_case"].items()} == {
+            "RGM-001": True, "RGM-005": False, "RGM-008": False, "RGM-009": False}
+
     def test_aggregate_shape(self, client):
         result = _run_to_completion(client, repetitions=3)
         body = client.get(

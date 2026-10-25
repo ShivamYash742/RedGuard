@@ -44,7 +44,7 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-from core.lab_mode.analysis import ARMS, arm_summary, comparability_problems, compare_standard
+from core.lab_mode.analysis import ARMS, arm_summary, comparability_problems, compare_standard, headline, scope_report
 from core.lab_mode.cases import (
     CASES_DIR,
     FIXTURES_DIR,
@@ -59,6 +59,8 @@ from core.lab_mode.evaluator import _RESOURCE_ARG_KEYS, evaluate, verdict_from_d
 from core.lab_mode.evidence import build_bundle
 from core.lab_mode.metrics import (
     asr,
+    case_role,
+    in_scope,
     containment_histogram,
     containment_rate,
     coverage,
@@ -721,13 +723,15 @@ async def _outcomes(db: Any, experiment_id: str) -> Tuple[List[RunOutcome], List
     this same function so the two can never disagree about what counts.
     """
     runs = await lab_store.list_runs(db, experiment_id)
+    experiment = await lab_store.get_experiment(db, experiment_id)
+    arm = experiment.armKey if experiment else None
     outcomes = []
     for run in lab_store.completed_attack_runs(runs):
         try:
             case = load_case(run.caseId)
         except FileNotFoundError:
             continue
-        outcomes.append(RunOutcome(case=case, verdict=verdict_from_dict(json.loads(run.verdictJson))))
+        outcomes.append(RunOutcome(case=case, verdict=verdict_from_dict(json.loads(run.verdictJson)), arm=arm))
     return outcomes, runs
 
 
@@ -740,8 +744,6 @@ async def experiment_metrics(experiment_id: str):
 
     outcomes, runs = await _outcomes(db, experiment_id)
     n = len(outcomes)
-    denominator = cpr_denominator(outcomes)
-    cpr_value = cpr(outcomes)
 
     per_case: Dict[str, Any] = {}
     for case_id in sorted({o.case["id"] for o in outcomes}):
@@ -755,7 +757,10 @@ async def experiment_metrics(experiment_id: str):
             # SOC needs N>=3 valid repetitions and returns None below that,
             # rather than a confident-looking 1.0 from a single run.
             "soc": soc(subset),
+            "role": case_role(subset[0].case),
+            "in_scope": in_scope(subset[0]),
         }
+    counted = [c for c in per_case.values() if c["in_scope"]]
 
     return {
         "experiment_id": experiment_id,
@@ -764,32 +769,18 @@ async def experiment_metrics(experiment_id: str):
         # Pairs left out because a run hit a harness error or never finished.
         # Visible, never silently absorbed (§21.8).
         "n_failed_pairs": len(lab_store.failed_pair_ids(runs)),
-        "aggregate": {
-            "icr": rate_summary(outcomes, icr),
-            "asr": rate_summary(outcomes, asr),
-            "partial_rate": rate_summary(outcomes, partial_rate),
-            # CPR is "n/a" when D is empty — never 0.0 (§10.3). An empty
-            # denominator means the question was never asked, not that
-            # propagation never happened.
-            "cpr": cpr_value,
-            "cpr_denominator_size": len(denominator),
-            "depth": depth(outcomes),
-            "coverage": coverage(outcomes),
-            "mean_coverage": mean_coverage(outcomes),
-            "containment_rate": containment_rate(outcomes),
-            "containment_histogram": [
-                {"agent": agent, "mechanism": mechanism, "count": count}
-                for (agent, mechanism), count in containment_histogram(outcomes).items()
-            ],
-        },
+        # Attack cases whose objective is reachable in this arm; controls and unreachable cases are
+        # in `excluded`, and the old all-cases headline is `pooled_legacy`.
+        "aggregate": headline(outcomes),
+        **scope_report(outcomes),
         "per_case": per_case,
         # Macro average weights every case equally. The micro figures above
         # weight by run count, so a case that happened to run more often
         # would otherwise dominate the headline (§10's aggregation note).
         "macro": {
-            "icr": macro_average([c["icr"] for c in per_case.values()]),
-            "asr": macro_average([c["asr"] for c in per_case.values()]),
-            "partial_rate": macro_average([c["partial_rate"] for c in per_case.values()]),
+            "icr": macro_average([c["icr"] for c in counted]),
+            "asr": macro_average([c["asr"] for c in counted]),
+            "partial_rate": macro_average([c["partial_rate"] for c in counted]),
         },
         "trajectory_drift": await _drift(db, runs),
         "run_counts": _count_by(runs, lambda r: r.status),
