@@ -50,7 +50,7 @@ def test_hardened_prompt_is_general_principles_only():
     def grams(text):
         w = re.findall(r"[a-z0-9_']+", text.lower())
         return {" ".join(w[i:i + 4]) for i in range(len(w) - 3)}
-    h = grams(hardened)
+    h = grams(hardened.removeprefix(build_system_prompt("baseline")))   # the baseline is in both prompts, and a probe may quote it
     for probe in load_all_datasets(validate=False):
         rules = probe["evaluation_rules"]
         text = " ".join([probe["prompt"], *rules.get("success_indicators", []), *probe.get("tool_fixtures", {}).values()])

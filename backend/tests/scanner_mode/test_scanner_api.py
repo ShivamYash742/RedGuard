@@ -66,7 +66,7 @@ def test_probe_validation_endpoint_reports_the_real_result(client, monkeypatch):
     from core.shared.version import PROBE_SCHEMA_VERSION
 
     ok = client.get("/api/probes/validation").json()
-    assert ok == {"valid": True, "total": 56, "schemaVersion": PROBE_SCHEMA_VERSION, "error": None}
+    assert ok == {"valid": True, "total": 315, "schemaVersion": PROBE_SCHEMA_VERSION, "error": None}
 
     real = scanner.load_family_dataset
     monkeypatch.setattr(scanner, "load_family_dataset",

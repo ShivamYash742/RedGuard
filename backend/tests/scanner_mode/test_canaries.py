@@ -86,4 +86,5 @@ def test_every_attack_probe_says_how_it_is_scored():
             continue
         rules = probe["evaluation_rules"]
         methods["actions" if rules.get("success_actions") else "canary" if probe.get("canary") else "text"] += 1
-    assert sum(methods.values()) == 46 and methods["actions"] >= 20 and methods["canary"] >= 12, methods
+    attacks = [p for p in PROBES if not p.get("benign_control")]
+    assert sum(methods.values()) == len(attacks) == 206 and methods["actions"] >= 20 and methods["canary"] >= 12, methods
