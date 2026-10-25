@@ -35,7 +35,7 @@ import sys
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
@@ -84,8 +84,9 @@ from core.lab_mode.trace import EventCategory, EventType, TraceEvent
 
 from lab_mode import store as lab_store
 from database import get_db
+from request_guard import guard_request
 
-router = APIRouter(prefix="/api/lab", tags=["lab"])
+router = APIRouter(prefix="/api/lab", tags=["lab"], dependencies=[Depends(guard_request)])
 
 DEFAULT_REPS = 5
 MAX_REPS = 25

@@ -1,21 +1,8 @@
 """Scanner-mode HTTP surface. Disposable database, no model calls."""
 
 import hashlib
-import shutil
 
 import pytest
-
-from scanner_mode import api, inspector, scanner
-
-
-@pytest.fixture
-def policy_file(tmp_path, monkeypatch):
-    """A private copy of policy.yaml that every module reads instead of the real one."""
-    path = tmp_path / "policy.yaml"
-    shutil.copyfile(inspector.POLICY_PATH, path)
-    for module in (inspector, api, scanner):
-        monkeypatch.setattr(module, "POLICY_PATH", path)
-    return path
 
 
 def test_scan_start_refuses_when_the_policy_cannot_load(client, policy_file):

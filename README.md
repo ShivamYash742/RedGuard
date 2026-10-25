@@ -434,7 +434,7 @@ Copy `.env.example` to `.env` and fill in the keys you need. `DATABASE_URL` is r
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent and Lab mode's Ollama provider (run `ollama serve` first) |
 | `LAB_MODEL` | Lab mode's default model when an experiment names none (default `granite3.3:2b`) |
 | `CLASSIFIER_URL` | Optional ML classifier for a secondary verdict. Unset = no call; every probe is sent to this URL, so only use a service you run |
-| `CORS_ORIGINS` | Origins allowed to call the API directly from a browser (default `http://localhost:3000`) |
+| `CORS_ORIGINS` | Origins allowed to call the API (default `http://localhost:3000,http://127.0.0.1:3000`). Requests carrying any other `Origin` get 403, and a request body must be `application/json` (415) |
 | `WEBHOOK_URL` | Optional Slack/Discord webhook for post-scan alerts |
 
 ### 4. Running Locally

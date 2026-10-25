@@ -65,3 +65,15 @@ def client(tmp_path, monkeypatch, migrated_db_template):
     monkeypatch.setattr(database, "prisma", Prisma(datasource={"url": f"file:{test_db}"}))
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def policy_file(tmp_path, monkeypatch):
+    """A private copy of policy.yaml that every module reads instead of the real one."""
+    from scanner_mode import api, inspector, scanner
+
+    path = tmp_path / "policy.yaml"
+    shutil.copyfile(inspector.POLICY_PATH, path)
+    for module in (inspector, api, scanner):
+        monkeypatch.setattr(module, "POLICY_PATH", path)
+    return path

@@ -196,3 +196,33 @@ async def test_family_scan_refuses_when_the_policy_cannot_load(tmp_path, monkeyp
     assert calls == []
     assert [e["event"] for e in events] == ["error"] and "policy" in events[0]["data"]["message"]
     assert stored.status.startswith("FAILED")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [None, "COMPLETED", "FAILED: timeout", "CANCELLED"])
+async def test_family_scan_needs_a_running_session(tmp_path, monkeypatch, migrated_db_template, status):
+    db = tmp_path / "running.db"
+    shutil.copyfile(migrated_db_template, db)
+    client = Prisma(datasource={"url": f"file:{db}"})
+    calls = []
+
+    async def spy_invoke(agent_id, prompt, model_name=None, prompt_mode=None):
+        calls.append(prompt)
+        return "ok"
+
+    monkeypatch.setattr(database, "prisma", client)
+    monkeypatch.setattr(scanner, "_probe_groups", _fake_groups)
+    monkeypatch.setattr(scanner, "_invoke_agent", spy_invoke)
+
+    await client.connect()
+    try:
+        session_id = "no-such-session"
+        if status:
+            session = await client.session.create(data={"sessionId": "done", "agentId": "fake", "status": status})
+            session_id = session.id
+        events = [e async for e in scanner.run_family_scan(session_id, "fake", "TEST")]
+    finally:
+        await client.disconnect()
+
+    assert calls == []
+    assert [e["event"] for e in events] == ["error"]

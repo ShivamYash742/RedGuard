@@ -11,13 +11,14 @@ import json
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from core.scanner_mode.datasets.loader import load_all_datasets
 from core.shared.version import BENCHMARK_VERSION
 
 from database import get_db
+from request_guard import guard_request
 from scanner_mode.agent_loader import DEFAULT_AGENT_ID, get_agent, list_agents
 from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError, parse_policy
 from scanner_mode.leaderboard import leaderboard_rows
@@ -25,7 +26,7 @@ from scanner_mode.schema import sha256_hex
 from scanner_mode.report_generator import generate_report_for_session
 from scanner_mode.scanner import finalize_scan, init_scan_session, run_family_scan, session_prompt_mode
 
-router = APIRouter(tags=["scanner"])
+router = APIRouter(tags=["scanner"], dependencies=[Depends(guard_request)])
 
 
 @router.get("/api/stats")

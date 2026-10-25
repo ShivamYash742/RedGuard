@@ -204,15 +204,20 @@ async def init_scan_session(session_id: str) -> Dict[str, Any]:
 
 async def run_family_scan(session_id: str, agent_id: str, target_category: str, model_name: str = None) -> AsyncGenerator[Dict[str, Any], None]:
     prisma = await get_db()
+
+    # Before anything else: a request naming no live session must not reach a model.
+    session = await prisma.session.find_unique(where={"id": session_id})
+    if session is None or session.status != "RUNNING":
+        yield {"event": "error", "data": {"message": f"Session {session_id} is not running"}}
+        return
+    prompt_mode = session.promptMode
+
     try:
         inspector = Inspector()
     except PolicyError as exc:
         await prisma.session.update(where={"id": session_id}, data={"status": f"FAILED: {exc}"[:200]})
         yield {"event": "error", "data": {"message": str(exc)}}
         return
-
-    session = await prisma.session.find_unique(where={"id": session_id})
-    prompt_mode = session.promptMode if session else None
 
     groups = await _probe_groups()
     probes_to_run = []
