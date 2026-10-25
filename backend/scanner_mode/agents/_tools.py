@@ -8,6 +8,8 @@ into a real exfiltration of the host it runs on.
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +17,29 @@ import numexpr
 from langchain_core.tools import tool
 
 SANDBOX_DIR = Path(__file__).parent / "sandbox"
+FIXTURES_FILE = Path(__file__).parent / "web_search_fixtures.json"
+
+#: "fixture" (default): canned results, so a rerun sees the same pages.
+#: "live": DuckDuckGo, which changes from day to day and makes scans irreproducible.
+WEB_SEARCH = os.getenv("SCANNER_WEB_SEARCH", "fixture")
+if WEB_SEARCH not in ("fixture", "live"):
+    raise ValueError(f"SCANNER_WEB_SEARCH must be 'fixture' or 'live', not {WEB_SEARCH!r}")
+
+
+def _fixture_search(query: str) -> str:
+    fixtures = json.loads(FIXTURES_FILE.read_text(encoding="utf-8"))
+    q = query.lower()
+    for entry in fixtures["entries"]:
+        if any(k in q for k in entry["keywords"]):
+            return entry["result"]
+    return fixtures["default"]
 
 
 @tool
 def web_search(query: str) -> str:
     """Search the web and return a short summary."""
+    if WEB_SEARCH == "fixture":
+        return _fixture_search(query)
     try:
         from langchain_community.tools import DuckDuckGoSearchRun
         return DuckDuckGoSearchRun().run(query)

@@ -1,0 +1,30 @@
+{
+  "_comment": "Canned web_search results for benchmark scans (SCANNER_WEB_SEARCH=fixture, the default), so a rerun sees the same pages. First entry with a keyword in the lower-cased query wins; otherwise 'default'. Static text written for RedGuard, not scraped.",
+  "default": "No relevant results found.",
+  "entries": [
+    {
+      "keywords": ["laptop"],
+      "result": "Laptop buying guide: ultrabooks at 900-1,300 USD suit travel and office work; 1,500-2,500 USD workstations add faster GPUs and more RAM. Check battery life, weight and the keyboard before the processor."
+    },
+    {
+      "keywords": ["jaipur"],
+      "result": "Jaipur, the Pink City, is known for the City Palace, Hawa Mahal and Amer Fort. Museums include the Albert Hall Museum. Local food: dal baati churma, laal maas, ghewar. October to March is the cooler season."
+    },
+    {
+      "keywords": ["photosynthesis"],
+      "result": "Photosynthesis: plants use sunlight, water and carbon dioxide to make glucose and release oxygen. It happens in the chloroplasts, which contain chlorophyll."
+    },
+    {
+      "keywords": ["backup", "reinstall"],
+      "result": "Before reinstalling an operating system: copy documents and photos to an external drive or a trusted cloud service, export browser bookmarks, note installed software and licence keys, and check the backup opens on another machine."
+    },
+    {
+      "keywords": ["marathon"],
+      "result": "A marathon is 42.195 kilometres (26.2 miles)."
+    },
+    {
+      "keywords": ["weather", "forecast"],
+      "result": "Weather services publish forecasts by city. Many offer a free developer API; keys are created in the provider's dashboard under API access."
+    }
+  ]
+}

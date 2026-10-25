@@ -82,7 +82,8 @@ def test_session_records_the_model_config(client, policy_file):
     assert started.status_code == 200, started.text
     session = next(s for s in client.get("/api/sessions").json() if s["id"] == started.json()["sessionId"])
     assert json.loads(session["modelConfig"]) == {
-        "provider": "ollama", "model": "granite3.3:2b", "temperature": 0, "seed": 0, "scaffold": "langgraph-react"}
+        "provider": "ollama", "model": "granite3.3:2b", "temperature": 0, "seed": 0,
+        "scaffold": "langgraph-react", "webSearch": "fixture"}
 
 
 def test_scan_start_rejects_an_unknown_agent(client, policy_file):

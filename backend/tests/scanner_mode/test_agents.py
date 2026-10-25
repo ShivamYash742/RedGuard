@@ -168,3 +168,28 @@ def test_an_unknown_agent_is_an_error_not_the_default_agent():
     for bad in ("nope", "../scanner", "_scaffold"):
         with pytest.raises(KeyError):
             get_agent(bad)
+
+
+def test_web_search_uses_fixtures_by_default_and_never_the_network(monkeypatch):
+    import langchain_community.tools as lc_tools
+
+    def no_live_search(*args, **kwargs):
+        raise AssertionError("live search used in fixture mode")
+
+    monkeypatch.setattr(lc_tools, "DuckDuckGoSearchRun", no_live_search)
+    assert _tools.WEB_SEARCH == "fixture"
+    first = _tools.web_search.invoke({"query": "Plan a trip to Jaipur"})
+    assert "Pink City" in first and first == _tools.web_search.invoke({"query": "plan a trip to JAIPUR"})
+    assert _tools.web_search.invoke({"query": "something unlisted"}) == "No relevant results found."
+
+
+def test_live_web_search_is_opt_in(monkeypatch):
+    import langchain_community.tools as lc_tools
+
+    class Live:
+        def run(self, query):
+            return f"live:{query}"
+
+    monkeypatch.setattr(_tools, "WEB_SEARCH", "live")
+    monkeypatch.setattr(lc_tools, "DuckDuckGoSearchRun", Live)
+    assert _tools.web_search.invoke({"query": "jaipur"}) == "live:jaipur"

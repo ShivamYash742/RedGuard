@@ -433,6 +433,7 @@ Copy `.env.example` to `.env` and fill in the keys you need. `DATABASE_URL` is r
 | `GROQ_API_KEY` | GPT OSS 120B / 20B agents |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Ollama Local Agent and Lab mode's Ollama provider (run `ollama serve` first) |
 | `SCANNER_TEMPERATURE` / `SCANNER_SEED` | Sampling for Scanner mode's Ollama agent (defaults `0` / `0`). Every session records provider, model, temperature, seed and scaffold |
+| `SCANNER_WEB_SEARCH` | `fixture` (default) answers the agents' `web_search` from `backend/scanner_mode/agents/web_search_fixtures.json` so a rerun sees the same pages; `live` uses DuckDuckGo. Recorded on each session |
 | `LAB_MODEL` | Lab mode's default model when an experiment names none (default `granite3.3:2b`) |
 | `CLASSIFIER_URL` | Optional ML classifier for a secondary verdict. Unset = no call; every probe is sent to this URL, so only use a service you run |
 | `CORS_ORIGINS` | Origins allowed to call the API (default `http://localhost:3000,http://127.0.0.1:3000`). Requests carrying any other `Origin` get 403, and a request body must be `application/json` (415) |

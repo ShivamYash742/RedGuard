@@ -13,6 +13,7 @@ from database import get_db
 from scanner_mode.schema import sha256_hex
 from scanner_mode.agent_loader import get_agent
 from scanner_mode.agents._prompt_loader import PROMPT_MODES
+from scanner_mode.agents import _tools
 from scanner_mode.agents._scaffold import SCAFFOLD
 
 # Add parent directory to sys.path to access redguard module (guard against duplicates)
@@ -126,10 +127,10 @@ def control_counts(statuses: List[str]) -> Dict[str, int]:
 
 def session_model_config(agent_id: str) -> str:
     """JSON recorded on the session: what the agent sends the model (provider, model,
-    temperature, seed) and the scaffold it runs in. `{}` if the agent does not say."""
+    temperature, seed), the scaffold it runs in and where web_search gets its pages."""
     mod = get_agent(agent_id)
     config = mod.model_config() if hasattr(mod, "model_config") else {}
-    return json.dumps({**config, "scaffold": SCAFFOLD})
+    return json.dumps({**config, "scaffold": SCAFFOLD, "webSearch": _tools.WEB_SEARCH})
 
 
 def session_prompt_mode(agent_id: str, requested: str) -> str:
