@@ -327,3 +327,36 @@ async def test_unanswered_probes_are_no_answer_and_leave_every_rate(tmp_path, mo
 
     assert (report["overall"]["no_answer"], report["overall"]["model_answered"]) == (2, 1)
     assert [(c["probes"], c["no_answer"]) for c in report["category_breakdown"]] == [(2, 2)]
+
+
+def test_the_real_corpus_validates():
+    assert scanner.validate_builtin_probes() == len(scanner.builtin_probe_ids()) == 56
+
+
+def test_validation_rejects_a_broken_corpus(monkeypatch):
+    real = scanner.load_family_dataset
+
+    def broken_prompt(family, validate=True):
+        entries = real(family, validate=False)
+        return [{k: v for k, v in e.items() if k != "prompt"} if e is entries[0] else e for e in entries]
+
+    def repeated_id(family, validate=True):
+        return [*real(family, validate=False), *real(family, validate=False)[:1]]
+
+    def missing_file(family, validate=True):
+        raise FileNotFoundError(family)
+
+    for loader, error in [(broken_prompt, ValueError), (repeated_id, ValueError), (missing_file, FileNotFoundError)]:
+        monkeypatch.setattr(scanner, "load_family_dataset", loader)
+        with pytest.raises(error):
+            scanner.validate_builtin_probes()
+
+
+@pytest.mark.asyncio
+async def test_a_missing_dataset_is_not_skipped_silently(monkeypatch):
+    def missing_file(family, validate=True):
+        raise FileNotFoundError(family)
+
+    monkeypatch.setattr(scanner, "load_family_dataset", missing_file)
+    with pytest.raises(FileNotFoundError):
+        await _probe_groups()

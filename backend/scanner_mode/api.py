@@ -24,7 +24,9 @@ from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError, parse_po
 from scanner_mode.leaderboard import leaderboard_rows
 from scanner_mode.schema import sha256_hex
 from scanner_mode.report_generator import generate_report_for_session
-from scanner_mode.scanner import finalize_scan, init_scan_session, run_family_scan, session_prompt_mode
+from scanner_mode.scanner import (
+    finalize_scan, init_scan_session, run_family_scan, session_prompt_mode, validate_builtin_probes,
+)
 
 router = APIRouter(tags=["scanner"], dependencies=[Depends(guard_request)])
 
@@ -253,6 +255,10 @@ async def start_scan(request: Request):
         Inspector()
     except PolicyError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    try:
+        validate_builtin_probes()
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=f"probe corpus is invalid: {exc}")
     prisma = await get_db()
     model_name = None
     requested_mode = "baseline"

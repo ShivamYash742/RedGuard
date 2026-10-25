@@ -43,3 +43,19 @@ def test_session_records_the_policy_hash(client, policy_file):
     assert started.status_code == 200, started.text
     session = next(s for s in client.get("/api/sessions").json() if s["id"] == started.json()["sessionId"])
     assert session["policySha256"] == hashlib.sha256(policy_file.read_bytes()).hexdigest()
+
+
+def test_scan_start_refuses_an_invalid_probe_corpus(client, policy_file, monkeypatch):
+    from scanner_mode import scanner
+
+    real = scanner.load_family_dataset
+
+    def one_probe_without_a_prompt(family, validate=True):
+        entries = real(family, validate=False)
+        return [{k: v for k, v in e.items() if k != "prompt"} for e in entries[:1]] + entries[1:]
+
+    monkeypatch.setattr(scanner, "load_family_dataset", one_probe_without_a_prompt)
+    before = len(client.get("/api/sessions").json())
+    response = client.post("/api/scan/start", json={})
+    assert response.status_code == 503 and "probe corpus is invalid" in response.json()["detail"]
+    assert len(client.get("/api/sessions").json()) == before

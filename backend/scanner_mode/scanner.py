@@ -5,6 +5,7 @@ import sys
 import httpx
 import json
 from datetime import datetime, timezone
+from collections import Counter
 from typing import AsyncGenerator, Dict, Any, List, Optional, Tuple
 
 from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError
@@ -18,6 +19,7 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 from core.scanner_mode.datasets.loader import FAMILY_FILES, load_family_dataset
+from core.scanner_mode.datasets.validator import ProbeValidator
 
 # Unset = no classifier call. Every probe prompt is POSTed here, so it must be
 # a service you run, never a third-party default.
@@ -130,25 +132,37 @@ def session_prompt_mode(agent_id: str, requested: str) -> str:
     return requested if "prompt_mode" in params else "agent_default"
 
 
+def builtin_probes() -> Dict[str, List[Dict[str, Any]]]:
+    """CATEGORY -> its built-in probes. A missing or unparsable dataset file
+    raises: a scan on a partial corpus would be silently invalid."""
+    return {
+        family.upper(): [e for e in load_family_dataset(family, validate=False) if "prompt" in e]
+        for family in FAMILY_FILES
+    }
+
+
 def builtin_probe_ids() -> frozenset:
     """Every built-in attack and control probe ID: what a session must contain,
     once each, to count towards benchmark numbers."""
-    return frozenset(
-        e["id"] for family in FAMILY_FILES for e in load_family_dataset(family, validate=False) if "prompt" in e
-    )
+    return frozenset(e["id"] for probes in builtin_probes().values() for e in probes)
+
+
+def validate_builtin_probes() -> int:
+    """Check the whole built-in corpus against the probe spec; return how many
+    probes it has. Raises (ValueError, OSError) if any dataset file is missing
+    or broken, a probe is invalid or an ID repeats. Run when a scan starts."""
+    entries = [e for family in FAMILY_FILES for e in load_family_dataset(family, validate=False)]
+    ProbeValidator().assert_valid(entries)
+    repeated = sorted(i for i, n in Counter(e["id"] for e in entries).items() if n > 1)
+    if repeated:
+        raise ValueError(f"Duplicate probe IDs: {repeated}")
+    return len(entries)
 
 
 async def _probe_groups() -> List[Tuple[str, List[Dict[str, Any]]]]:
     """(CATEGORY, probes) per family. Built-in probes are their dataset
     entries; custom DB probes become {"id": None, "prompt": ...} with no rules."""
-    base_groups: Dict[str, List[Dict[str, Any]]] = {}
-    for family in FAMILY_FILES:
-        cat = family.upper()
-        try:
-            entries = load_family_dataset(family, validate=False)
-            base_groups[cat] = [entry for entry in entries if "prompt" in entry]
-        except Exception as e:
-            print(f"Error loading family {family}: {e}")
+    base_groups = builtin_probes()
 
     try:
         prisma = await get_db()
