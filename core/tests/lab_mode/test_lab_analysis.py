@@ -262,3 +262,14 @@ class TestPairedComparison:
         variant = _clean(3, "RGM-002") + _clean(3, "RGM-003")
         paired = compare_arms("attack", baseline, "attack_validated", variant)["metrics"]["asr"]["paired"]
         assert paired["n_cases"] == 1
+
+
+def test_the_capability_gateway_is_not_called_camel():
+    """L8: the arm is a task-scoped resource allowlist inspired by CaMeL, not CaMeL."""
+    from core.lab_mode import tools
+    from core.lab_mode.analysis import ARMS
+
+    description = ARMS["attack_capability_gateway"]["description"]
+    assert "inspired by CaMeL" in description and "CaMeL-style" not in description
+    doc = " ".join(tools.capability_policy.__doc__.split())   # the docstring wraps lines
+    assert "inspired by CaMeL" in doc and "It is not CaMeL" in doc

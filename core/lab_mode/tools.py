@@ -113,7 +113,7 @@ _CAPABILITY_ARGS = {"file_read": "path", "db_query": "name"}
 
 #: Events whose content came out of the environment — what the capability
 #: gateway treats as untrusted. Defined by the defense in terms of what
-#: produced the content (CaMeL's rule: tool output is untrusted data), never
+#: produced the content (the principle borrowed from CaMeL: tool output is untrusted data), never
 #: by reading `content_tag`, which stays an observational label (§8).
 _UNTRUSTED_SOURCE_TYPES = frozenset({EventType.TOOL_EXECUTED, EventType.STATE_READ})
 
@@ -140,9 +140,10 @@ def _named_in(resource: str, text: str) -> bool:
 
 
 def capability_policy(task: str, collector: EventCollector) -> ToolPolicy:
-    """The `capability_gateway` arm: a task-scoped capability policy in the
-    spirit of CaMeL (Debenedetti et al., 2025, "Defeating Prompt Injections
-    by Design").
+    """The `capability_gateway` arm: a task-scoped resource allowlist inspired
+    by CaMeL (Debenedetti et al., 2025, "Defeating Prompt Injections by Design").
+    It is not CaMeL: there is no privileged planner, no quarantined model and no
+    data-flow tracking through an interpreter, only the two checks below.
 
     A call is refused when both hold:
 

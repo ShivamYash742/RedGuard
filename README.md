@@ -170,7 +170,7 @@ Defence arms, compared case by case on `/lab/compare`:
 | Prompt validation (`attack_validated`) | agents with an inbound edge are told to treat received content as data |
 | Permissive tools (`attack_permissive_tools`) | every agent may call every tool, so tool-layer containment cannot occur |
 | Bus filter (`attack_bus_gateway`) | the message bus refuses messages naming the targeted resources — an oracle upper bound |
-| Capability gateway (`attack_capability_gateway`) | CaMeL-style: reads of resources the task never named are refused once untrusted content is in the caller's context |
+| Capability gateway (`attack_capability_gateway`) | Task-scoped resource allowlist inspired by CaMeL (not an implementation of it): reads of resources the task never named are refused once untrusted content is in the caller's context |
 
 #### Watching a run
 

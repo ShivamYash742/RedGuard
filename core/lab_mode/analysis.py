@@ -309,7 +309,7 @@ ARMS: Dict[str, Dict[str, Any]] = {
         "permissive_tools": False,
     },
     "attack_capability_gateway": {
-        "description": "Task-scoped capability gateway (CaMeL-style) — reads of resources the task never named are refused once untrusted content is in the caller's context. Knows the task, never the attack; the clean half of each pair measures what it costs the benign task.",
+        "description": "Task-scoped resource allowlist inspired by CaMeL (not an implementation of it) — reads of resources the task never named are refused once untrusted content is in the caller's context. Knows the task, never the attack; the clean half of each pair measures what it costs the benign task.",
         "validation_mode": "capability_gateway",
         "permissive_tools": False,
     },

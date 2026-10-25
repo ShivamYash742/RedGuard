@@ -32,7 +32,7 @@ tool channel; each case runs attack + clean (control). The verdict has four
 dimensions — agent impact, objective achievement, containment, system outcome —
 and is never collapsed to one score. Defence arms: `attack`, `attack_validated`,
 `attack_bus_gateway` (oracle upper bound), `attack_capability_gateway`
-(CaMeL-style), `attack_permissive_tools`. Routes: `/lab`, `/lab/compare`,
+(a task-scoped resource allowlist inspired by CaMeL), `attack_permissive_tools`. Routes: `/lab`, `/lab/compare`,
 `/lab/experiments/[id]` (+ `/report`), `/lab/runs/[id]`. Experiments run as
 server-owned asyncio tasks (`_Job` in `backend/lab_mode/api.py`:
 `POST …/start|stop`, `GET …/stream`), so closing a tab does not stop one; one
