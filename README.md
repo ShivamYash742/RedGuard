@@ -1,6 +1,6 @@
-# RedGuard v4.2.0 🛡️ — AI Agent Security Benchmark Platform
+# RedGuard v5.0.0 🛡️ — AI Agent Security Benchmark Platform
 
-[![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)](./package.json)
+[![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)](./package.json)
 [![Benchmark](https://img.shields.io/badge/benchmark-v5.0.0-indigo.svg)](./core/shared/version.py)
 [![Dataset](https://img.shields.io/badge/dataset-v5.0.0-emerald.svg)](./core/scanner_mode/datasets)
 
@@ -65,7 +65,7 @@ and the two modes never import each other.
 
 ---
 
-## ✨ Key Features (v4.2.0)
+## ✨ Key Features (v5.0.0)
 
 | Feature | Description |
 |---|---|
@@ -89,7 +89,7 @@ and the two modes never import each other.
 ## 🏗️ Architecture Overview
 
 ```
-                        RedGuard v4.2.0 Platform
+                        RedGuard v5.0.0 Platform
                                    │
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │                      Next.js 16 Academic UI                         │

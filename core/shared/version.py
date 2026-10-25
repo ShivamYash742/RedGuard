@@ -83,7 +83,7 @@ EVALUATOR_VERSION: str = "2.0.0"
 METRIC_VERSION: str = "2.0.0"
 
 #: Human-readable release name.
-RELEASE_NAME: str = "RedGuard v4.2.0"
+RELEASE_NAME: str = "RedGuard v5.0.0"
 
 #: Citation key for the benchmark paper (placeholder until published).
 CITATION_KEY: str = "redguard2024"
