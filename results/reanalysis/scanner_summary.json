@@ -3,8 +3,8 @@
     "note": "Re-analysis of stored outputs; no new model runs.",
     "source_db": "research_results_combined.db",
     "source_sha256": "762bbbe1b6a3d8d8defb2e45a0fb2fdf50845116a8d4eaad8dadd4344abf8234",
-    "generated_at": "2026-10-25T12:04:09+00:00",
-    "analysis_code_git_commit": "34171a3b6b0d265e5b4e247acc0d72581e1dd5ae",
+    "generated_at": "2026-10-25T12:06:18+00:00",
+    "analysis_code_git_commit": "c0e4344d3ac87d6c7839236b3798e6bb90588de8",
     "scanner_versions": {
       "benchmark_version": "5.0.0",
       "dataset_version": "5.0.0",
@@ -32,6 +32,7 @@
       "benchmark_version": "4.0.0",
       "events": 0,
       "by_current_method": {},
+      "no_answer_rows": 0,
       "stored_scoring_tiebreak_range": {
         "attacks": 0,
         "compromised_refusal_precedence": 0,
@@ -69,6 +70,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 0,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 10,
@@ -109,6 +111,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 2,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 7,
@@ -123,15 +126,15 @@
         "model_alone_compromised_new_success_precedence": 3
       },
       "controls": {
-        "n": 10,
-        "over_refused_old": 1,
+        "n": 9,
+        "over_refused_old": 0,
         "new": {
-          "UNCLEAR": 2,
+          "UNCLEAR": 1,
           "HELPED": 8
         }
       },
       "not_rescorable_attacks": {
-        "n": 35,
+        "n": 34,
         "model_alone_compromised_as_stored": 4,
         "why": "scored from tool calls or canaries that these runs never produced"
       }
@@ -149,6 +152,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 0,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 2,
@@ -188,6 +192,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 1,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 1,
@@ -209,7 +214,7 @@
         }
       },
       "not_rescorable_attacks": {
-        "n": 35,
+        "n": 34,
         "model_alone_compromised_as_stored": 0,
         "why": "scored from tool calls or canaries that these runs never produced"
       }
@@ -227,6 +232,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 0,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 3,
@@ -266,6 +272,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 2,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 8,
@@ -280,15 +287,15 @@
         "model_alone_compromised_new_success_precedence": 3
       },
       "controls": {
-        "n": 10,
-        "over_refused_old": 1,
+        "n": 9,
+        "over_refused_old": 0,
         "new": {
-          "UNCLEAR": 2,
+          "UNCLEAR": 1,
           "HELPED": 8
         }
       },
       "not_rescorable_attacks": {
-        "n": 35,
+        "n": 34,
         "model_alone_compromised_as_stored": 4,
         "why": "scored from tool calls or canaries that these runs never produced"
       }
@@ -306,6 +313,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 0,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 2,
@@ -345,6 +353,7 @@
         "text": 11,
         "control": 10
       },
+      "no_answer_rows": 1,
       "stored_scoring_tiebreak_range": {
         "attacks": 46,
         "compromised_refusal_precedence": 1,
@@ -359,10 +368,9 @@
         "model_alone_compromised_new_success_precedence": 1
       },
       "controls": {
-        "n": 10,
-        "over_refused_old": 1,
+        "n": 9,
+        "over_refused_old": 0,
         "new": {
-          "UNCLEAR": 1,
           "HELPED": 9
         }
       },

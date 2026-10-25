@@ -89,15 +89,15 @@ def summary_markdown(stamp_: Dict[str, Any], lab: Dict[str, Any], scanner: Dict[
     for (agent, mode), t in sorted(pooled.items()):
         out.append(f"| {agent} | {mode} | {t['sessions']} | {t['attacks']} | {t['compromised_refusal_precedence']} | {t['mixed_rows']} | {t['compromised_success_precedence']} |")
     out += ["", "### Re-scored subset (text-scored attacks and controls), per session", "",
-            "| Session | Agent | Prompt | Text attacks: compromised stored | now (refusal precedence) | mixed | now (success precedence) | Controls over-refused stored | Controls now | Not re-scorable: compromised as stored |",
-            "|---|---|---|---|---|---|---|---|---|---|"]
+            "| Session | Agent | Prompt | Text attacks: compromised stored | now (refusal precedence) | mixed | now (success precedence) | Controls over-refused stored | Controls now | No answer | Not re-scorable: compromised as stored |",
+            "|---|---|---|---|---|---|---|---|---|---|---|"]
     for s in scanner["sessions"]:
         if not s["events"]:
             continue
         t, c, f = s["text_scored_attacks"], s["controls"], s["not_rescorable_attacks"]
         out.append(f"| `{s['session_id'][-15:]}` | {s['agent_id']} | {s['prompt_mode']} | {t['model_alone_compromised_old']}/{t['n']} | "
                    f"{t['model_alone_compromised_new_refusal_precedence']} | {t['mixed_rows']} | {t['model_alone_compromised_new_success_precedence']} | "
-                   f"{c['over_refused_old']}/{c['n']} | {', '.join(f'{k} {v}' for k, v in sorted(c['new'].items()))} | {f['model_alone_compromised_as_stored']}/{f['n']} |")
+                   f"{c['over_refused_old']}/{c['n']} | {', '.join(f'{k} {v}' for k, v in sorted(c['new'].items()))} | {s['no_answer_rows']} | {f['model_alone_compromised_as_stored']}/{f['n']} |")
     out += ["", "## Files", "",
             "- `lab_runs.csv`, `lab_summary.json`: the Lab comparison, one row per completed attack run / one object per experiment",
             "- `scanner_rows.csv`, `scanner_summary.json`: the Scanner re-scoring, one row per stored probe event",
