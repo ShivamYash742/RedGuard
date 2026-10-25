@@ -68,7 +68,7 @@ MIN_RUNS_FOR_STATISTICS: int = 3
 LAB_SCHEMA_VERSION: str = "1.1.0"
 
 #: Version of the Mode B security test case schema.
-CASE_SCHEMA_VERSION: str = "1.1.0"
+CASE_SCHEMA_VERSION: str = "2.0.0"
 
 #: Version of the Controlled Execution Environment semantics.
 CEE_VERSION: str = "1.1.0"
@@ -77,7 +77,7 @@ CEE_VERSION: str = "1.1.0"
 TOPOLOGY_VERSION: str = "1.1.0"
 
 #: Version of the verdict definitions and predicate DSL.
-EVALUATOR_VERSION: str = "1.2.0"
+EVALUATOR_VERSION: str = "2.0.0"
 
 #: Version of the Mode B metric formulas.
 METRIC_VERSION: str = "1.2.0"

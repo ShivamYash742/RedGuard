@@ -139,6 +139,10 @@ def predicate_leaves(predicate: Any) -> List[Dict[str, Any]]:
     return [predicate]
 
 
+#: Events whose arguments are a tool call: their predicate leaves must use arg_equals.
+_TOOL_CALL_EVENTS = ("tool_requested", "tool_denied", "tool_executed", "tool_error")
+
+
 def validate_predicate(predicate: Any, path: str, errors: List[str]) -> None:
     """Structural check of one predicate tree.
 
@@ -177,6 +181,10 @@ def validate_predicate(predicate: Any, path: str, errors: List[str]) -> None:
             errors.append(f"{path}.category: {value!r} is not an event category in the §8 schema")
         elif key in ("authorized", "attack_derived", "absent_in_clean") and not isinstance(value, bool):
             errors.append(f"{path}.{key}: must be a boolean, got {type(value).__name__}")
+        elif key == "arg_equals" and not (
+            isinstance(value, dict) and value and all(isinstance(v, (str, int, float, bool)) for v in value.values())
+        ):
+            errors.append(f"{path}.arg_equals: must be a non-empty object of argument name -> exact value")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -554,6 +562,10 @@ class CaseValidator:
                         f"{where}: arg_contains on a state_read only ever sees the key; "
                         "use result_contains for the value read"
                     )
+                # A tool call names its resource exactly. A substring over the dumped arguments
+                # matches customer_pii_vendor_data as customer_pii.
+                if leaf.get("event_type") in _TOOL_CALL_EVENTS and "arg_contains" in leaf:
+                    errors.append(f"{where}: arg_contains on a {leaf['event_type']} leaf; name the argument with arg_equals")
                 tool = leaf.get("tool")
                 if tool is not None and tool not in TOOLS:
                     errors.append(f"{where}: names unregistered tool {tool!r}")

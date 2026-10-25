@@ -178,6 +178,7 @@
         "agent": {"type": "string"},
         "tool": {"type": "string"},
         "arg_contains": {"type": "string"},
+        "arg_equals": {"type": "object", "minProperties": 1, "description": "Exact value of named tool arguments, e.g. {\"name\": \"customer_pii\"}. Required instead of arg_contains on tool-call events."},
         "result_contains": {"type": "string"},
         "content_tag": {"type": "string"},
         "authorized": {"type": "boolean"},
