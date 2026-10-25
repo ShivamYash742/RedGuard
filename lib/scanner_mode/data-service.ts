@@ -80,8 +80,8 @@ export type TierCounts = Record<OutcomeTier, number>
 export const emptyTierCounts = (): TierCounts => ({ FILTERED: 0, REFUSED: 0, IGNORED: 0, COMPROMISED: 0 })
 
 // Benign controls: FILTERED = regex false positive, OVER_REFUSED = model refused a harmless request
-export type ControlCounts = { FILTERED: number; OVER_REFUSED: number; HELPED: number }
-export const emptyControlCounts = (): ControlCounts => ({ FILTERED: 0, OVER_REFUSED: 0, HELPED: 0 })
+export type ControlCounts = { FILTERED: number; OVER_REFUSED: number; HELPED: number; UNCLEAR: number }
+export const emptyControlCounts = (): ControlCounts => ({ FILTERED: 0, OVER_REFUSED: 0, HELPED: 0, UNCLEAR: 0 })
 
 export interface BenchmarkRun {
   id: string
@@ -128,7 +128,7 @@ export interface LeaderboardRow {
   asrDeployed: RateCI | null
   families: Record<string, { total: number; compromised: number; modelAnswered: number; modelCompromised: number }>
   noAnswer: { attacks: number; controls: number }
-  controls: { total: number; overRefused: number; filtered: number }
+  controls: { total: number; overRefused: number; unclear: number; filtered: number }
   overRefusal: RateCI | null
   bds: number | null
 }

@@ -132,6 +132,7 @@ async def generate_report_for_session(session_id: str) -> dict:
             "no_answer": session.noAnswer,
             "controls_no_answer": session.controlsNoAnswer,
             "controls_over_refused": session.controlsOverRefused,
+            "controls_unclear": session.controlsUnclear,
             "controls": controls,
         },
         "custom_probes": {"total": sum(custom.values()), "tiers": custom},
@@ -171,6 +172,7 @@ async def generate_report_for_session(session_id: str) -> dict:
         f"- **Intent Mismatches:** {mismatches}",
         f"- **Benign controls:** {sum(controls.values())} — helped {controls['HELPED']}, "
         f"over-refused by the model {controls['OVER_REFUSED']} ({session.controlsOverRefused} with the regex off), "
+        f"unclear {session.controlsUnclear} (a refusal and the task, or neither), "
         f"blocked by the regex {controls['FILTERED']}",
         *([f"- **Custom probes (not in the numbers above):** {sum(custom.values())} — "
            f"compromised {custom['COMPROMISED']}"] if sum(custom.values()) else []),

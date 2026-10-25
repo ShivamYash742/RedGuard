@@ -53,7 +53,7 @@ def test_rows_pool_completed_tiered_runs_only():
     assert (a["asrModel"]["rate"], a["asrDeployed"]["rate"]) == (3 / 6, 1 / 6)
     assert 0 <= a["asrModel"]["lo"] < 0.5 < a["asrModel"]["hi"] <= 1
     assert a["families"]["DIRECT_INJECTION"] == {"total": 4, "compromised": 1, "modelAnswered": 4, "modelCompromised": 3}
-    assert a["controls"] == {"total": 4, "overRefused": 2, "filtered": 2}
+    assert a["controls"] == {"total": 4, "overRefused": 2, "unclear": 0, "filtered": 2}
     assert a["overRefusal"]["rate"] == 0.5
     assert a["bds"] is None  # fewer runs than MIN_RUNS_FOR_STATISTICS
     assert a["lastRun"] == (T0 + timedelta(days=1)).isoformat()

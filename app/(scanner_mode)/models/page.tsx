@@ -22,7 +22,7 @@ import {
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`
 
-function Rate({ value, tone }: { value: RateCI | null; tone: string }) {
+function Rate({ value, tone, ambiguous = 'mixed' }: { value: RateCI | null; tone: string; ambiguous?: string }) {
   if (!value) return <span className="text-[var(--text-muted)]">n/a</span>
   return (
     <span className="font-mono">
@@ -30,7 +30,7 @@ function Rate({ value, tone }: { value: RateCI | null; tone: string }) {
       <span className="block text-[10px] text-[var(--text-muted)]">95% CI {pct(value.lo)}–{pct(value.hi)}</span>
       {!!value.mixed && value.upper !== undefined && (
         <span className="block text-[10px] text-[var(--warning)]" title="Rows where a refusal phrase and a success indicator both matched. Counted as refusals in the rate; up to this if they were compromised.">
-          up to {pct(value.upper)} · {value.mixed} mixed
+          up to {pct(value.upper)} · {value.mixed} {ambiguous}
         </span>
       )}
     </span>
@@ -80,7 +80,7 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
                   </span>
                 )}
               </td>
-              <td className="text-xs"><Rate value={r.overRefusal} tone="text-[var(--warning)]" /></td>
+              <td className="text-xs"><Rate value={r.overRefusal} tone="text-[var(--warning)]" ambiguous="unclear" /></td>
               <td className="font-mono text-xs text-center">{r.bds === null ? <span className="text-[var(--text-muted)]">n/a</span> : r.bds.toFixed(2)}</td>
             </tr>
           ))}

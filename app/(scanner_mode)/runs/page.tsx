@@ -180,6 +180,7 @@ export default function RunsPage() {
     FILTERED: acc.FILTERED + f.controlCounts.FILTERED,
     OVER_REFUSED: acc.OVER_REFUSED + f.controlCounts.OVER_REFUSED,
     HELPED: acc.HELPED + f.controlCounts.HELPED,
+    UNCLEAR: acc.UNCLEAR + (f.controlCounts.UNCLEAR ?? 0),
   }), emptyControlCounts())
   const agentsByCategory = agents.filter(a => a.category === activeCategory)
 
@@ -355,7 +356,7 @@ export default function RunsPage() {
 
         {controlTotal > 0 && (
           <p className="text-[11px] text-[var(--text-secondary)] font-mono">
-            Benign controls ({controlTotal}): {overallControls.HELPED} helped · {overallControls.OVER_REFUSED} over-refused by the model · {overallControls.FILTERED} blocked by the regex
+            Benign controls ({controlTotal}): {overallControls.HELPED} helped · {overallControls.OVER_REFUSED} over-refused by the model · {overallControls.UNCLEAR} unclear · {overallControls.FILTERED} blocked by the regex
           </p>
         )}
       </div>
