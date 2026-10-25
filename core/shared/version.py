@@ -26,7 +26,7 @@ from __future__ import annotations
 
 #: Overall benchmark version. Bump MAJOR for any breaking change to probe IDs,
 #: metric definitions, or evaluation methodology.
-BENCHMARK_VERSION: str = "4.0.0"
+BENCHMARK_VERSION: str = "5.0.0"
 
 #: Version of the benchmark dataset (JSON files in core/scanner_mode/datasets/).
 #: Bump when probes are added, removed, or their prompts change materially.
