@@ -87,6 +87,44 @@ class TestAgreementReport:
             labels.agreement(path)
 
 
+class TestPerMethodSampling:
+    def _db(self, tmp_path):
+        db = tmp_path / "runs.db"
+        conn = sqlite3.connect(db)
+        conn.executescript("""
+            create table sessions (id text, agent_id text, prompt_mode text);
+            create table probe_events (id integer, session_id text, probe_id text, is_control integer, model_outcome text,
+                                       response_excerpt text, scored_by text, recorded_actions text);
+            create table lab_runs (id text, experiment_id text, case_id text, repetition_index int, mode text, status text, verdict_json text);
+            create table lab_trace_events (run_id text, step int, agent_id text, event_type text, tool text, arguments_json text);
+            insert into sessions values ('s1', 'a', 'baseline');
+        """)
+        rows = [(i, "s1", "RG-DI-001", 0, "COMPROMISED" if i % 4 == 0 else "REFUSED", f"reply {i}", method, '[{"tool": "send_email"}]' if method == "actions" else None)
+                for i, method in enumerate(["actions"] * 12 + ["canary"] * 12 + ["text"] * 3, start=1)]
+        conn.executemany("insert into probe_events values (?,?,?,?,?,?,?,?)", rows)
+        conn.commit()
+        conn.close()
+        return db
+
+    def test_each_scoring_method_gets_its_own_stratum_with_prompt_and_evidence(self, tmp_path):
+        out = tmp_path / "s.csv"
+        assert labels.export_sample(self._db(tmp_path), out, n_lab=0, per_method=5) == 5 + 5 + 3     # text has only 3 rows
+        rows = list(csv.DictReader(out.open(encoding="utf-8")))
+        assert sorted({r["scored_by"] for r in rows}) == ["actions", "canary", "text"]
+        assert all(r["prompt"] for r in rows) and any(r["evidence"] for r in rows if r["scored_by"] == "actions")
+
+    def test_the_agreement_report_gives_scorer_accuracy_and_recall_per_method(self, tmp_path):
+        path = _sample(tmp_path, [
+            {"kind": "scanner_attack", "scored_by": "actions", "auto_label": "COMPROMISED", "label_a": "COMPROMISED", "label_b": "COMPROMISED"},
+            {"kind": "scanner_attack", "scored_by": "actions", "auto_label": "REFUSED", "label_a": "COMPROMISED", "label_b": "COMPROMISED"},
+            {"kind": "scanner_attack", "scored_by": "text", "auto_label": "REFUSED", "label_a": "REFUSED", "label_b": "REFUSED"},
+            {"kind": "scanner_attack", "scored_by": "text", "auto_label": "COMPROMISED", "label_a": "REFUSED", "label_b": "IGNORED"},   # labellers disagree: left out
+        ])
+        accuracy = labels.agreement(path)["by_kind"]["scanner_attack"]["scorer_accuracy_by_method"]
+        assert accuracy["actions"] == {"n_agreed": 2, "scorer_matches_consensus": 0.5, "recall_compromised": 0.5, "n_compromised": 2}
+        assert accuracy["text"]["n_agreed"] == 1 and accuracy["text"]["recall_compromised"] is None
+
+
 # ── read-only guarantees ───────────────────────────────────────────────────────
 
 def _tiny_db(path: Path):

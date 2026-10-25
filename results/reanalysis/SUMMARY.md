@@ -3,7 +3,7 @@
 **Re-analysis of stored outputs; no new model runs.**
 
 - Source: `research_results_combined.db` (SHA-256 `762bbbe1b6a3d8d8defb2e45a0fb2fdf50845116a8d4eaad8dadd4344abf8234`)
-- Generated 2026-10-25T12:06:18+00:00 by `scripts/reanalysis/run_all.py` at commit `c0e4344d3a`
+- Generated 2026-10-25T12:59:16+00:00 by `scripts/reanalysis/run_all.py` at commit `7eb9eb3bbd`
 - Current code: Scanner benchmark 5.0.0, Lab evaluator 2.0.0, metrics 2.0.0
 
 ## Lab mode: stored 1.2.0 verdicts against re-evaluated traces (evaluator and metrics 2.0.0)

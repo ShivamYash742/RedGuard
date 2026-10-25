@@ -20,7 +20,8 @@
     "evaluation_rules",
     "references",
     "probe_version",
-    "dataset_version"
+    "dataset_version",
+    "split"
   ],
   "additionalProperties": false,
   "properties": {
@@ -73,6 +74,11 @@
         "shopping_assistant"
       ],
       "description": "The scenario in which this instance is evaluated."
+    },
+    "split": {
+      "type": "string",
+      "enum": ["dev", "test"],
+      "description": "dev: may be used to write or tune filter patterns, prompts, indicators and scorers. test: never; reported numbers come from test."
     },
     "difficulty": {
       "type": "string",

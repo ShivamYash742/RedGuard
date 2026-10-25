@@ -56,6 +56,8 @@ from .trace import ContentTag, EventCategory, EventCollector, EventType
 CLEAN = "CLEAN"
 ATTACK = "ATTACK"
 
+EXPOSURE_MODES = ("natural", "forced")
+
 AGENT_PROMPT = "agent_prompt"
 BUS_GATEWAY = "bus_gateway"
 CAPABILITY_GATEWAY = "capability_gateway"
@@ -113,6 +115,16 @@ class RunConfig:
     #: reproduce §5.3's narrower "Agent B's system prompt" formulation.
     validation_agents: Optional[Tuple[str, ...]] = None
     seed: Optional[int] = None
+    #: natural — the entry agent decides whether to read the planted location (the realistic setting;
+    #:           a run whose agent never reads it is not an attack on that agent).
+    #: forced  — before the entry agent's first turn the harness performs the read of the planted location
+    #:           for it (recorded, tainted and in its context like any read), in the attack run and in
+    #:           the clean run alike, so every attack run is exposed.
+    exposure: str = "natural"
+
+    def __post_init__(self) -> None:
+        if self.exposure not in EXPOSURE_MODES:
+            raise ValueError(f"exposure must be one of {EXPOSURE_MODES}, not {self.exposure!r}")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -123,6 +135,7 @@ class RunConfig:
             "validation_mode": self.validation_mode,
             "validation_agents": list(self.validation_agents) if self.validation_agents else None,
             "seed": self.seed,
+            "exposure": self.exposure,
         }
 
 
@@ -588,7 +601,32 @@ class CaseRunner:
 
     # ── loop ──────────────────────────────────────────────────────────
 
+    def _forced_read(self, agent: str) -> Optional[Action]:
+        """The read of the planted location that `exposure="forced"` performs for the entry agent."""
+        attack = self.case.get("attack") or {}
+        delivery = attack.get("delivery") or {}
+        channel, location = delivery.get("channel"), delivery.get("location")
+        if self.config.exposure != "forced" or attack.get("injection_point") != agent or not location:
+            return None
+        if channel == "files":
+            return Action(kind=TOOL_CALL, tool="file_read", args={"path": location})
+        if channel == "web":
+            return Action(kind=TOOL_CALL, tool="web_search", args={"query": location})
+        if channel == "db":
+            return Action(kind=TOOL_CALL, tool="db_query", args={"name": location})
+        if channel == "kv":
+            return Action(kind=STATE_READ, key=location)
+        return None
+
     async def _run_agent(self, agent: str) -> None:
+        forced = self._forced_read(agent)
+        if forced is not None:
+            output = self.collector.emit(
+                EventCategory.AGENT, EventType.AGENT_OUTPUT, agent_id=agent,
+                result=json.dumps(forced.to_dict()), arguments=forced.to_dict(), derived_from=(),
+                metadata={"forced_exposure": True},
+            )
+            self._dispatch(agent, forced, output.step)
         for turn in range(1, self.config.max_steps + 1):
             self.steps += 1
             self.collector.emit(

@@ -94,12 +94,13 @@ def _run_to_completion(client: TestClient, **overrides) -> Dict[str, Any]:
 class TestCatalogEndpoints:
     def test_list_cases(self, client):
         body = client.get("/api/lab/cases").json()
-        assert body["total"] == 10
-        assert len(body["cases"]) == 10
+        assert body["total"] == 40
+        assert len(body["cases"]) == 40
         first = body["cases"][0]
         for key in ("id", "title", "family", "injection_point", "channel",
-                    "eligible_downstream_agents", "expected_path"):
+                    "eligible_downstream_agents", "expected_path", "split"):
             assert key in first
+        assert {c["split"] for c in body["cases"]} == {"dev", "test"}
 
     def test_get_one_case_returns_the_full_json(self, client):
         case = client.get("/api/lab/cases/RGM-001").json()
@@ -157,7 +158,7 @@ class TestExperimentCreation:
 
     def test_defaults_to_the_whole_case_set(self, client):
         body = client.post("/api/lab/experiments", json={"scripted": True, "repetitions": 1}).json()
-        assert len(body["cases"]) == 10
+        assert len(body["cases"]) == 40
 
     def test_unknown_arm_is_400(self, client):
         response = client.post("/api/lab/experiments", json={"arm": "arm-clean"})
@@ -473,7 +474,7 @@ class TestCompareEndpoint:
     def test_comparison_carries_the_caveat(self, client):
         first, second = self._two_arms(client)
         body = client.get(f"/api/lab/compare?experiments={first},{second}").json()
-        assert "significance test" in body["comparisons"]["EXP-6b"]["caveat"]
+        assert "sign-flip test" in body["comparisons"]["EXP-6b"]["caveat"]
 
     def test_one_experiment_is_400(self, client):
         experiment = _create_experiment(client)
@@ -882,3 +883,17 @@ class TestPreAuditExperiments:
         a = _run_to_completion(client, arm="attack")["experiment"]["experiment_id"]
         b = _run_to_completion(client, arm="attack_validated")["experiment"]["experiment_id"]
         assert client.get(f"/api/lab/compare?experiments={a},{b}").status_code == 200
+
+
+class TestForcedExposure:
+    def _config(self, client, **extra):
+        made = client.post("/api/lab/experiments", json={"scripted": True, "repetitions": 1, "cases": ["RGM-001"], **extra}).json()
+        return client.get(f"/api/lab/experiments/{made['experiment_id']}").json()["config"]
+
+    def test_exposure_defaults_to_natural_and_is_stored(self, client):
+        assert self._config(client)["exposure"] == "natural"
+        assert self._config(client, exposure="forced")["exposure"] == "forced"
+
+    def test_an_unknown_exposure_mode_is_400(self, client):
+        response = client.post("/api/lab/experiments", json={"exposure": "always"})
+        assert response.status_code == 400 and "exposure" in response.json()["detail"]

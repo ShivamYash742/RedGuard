@@ -112,6 +112,8 @@ export interface CaseSummary {
   task_endorses_channel?: boolean | null
   /** 'control' cases are reported apart from the pooled rates. */
   role?: 'attack' | 'control'
+  /** 'test' cases were written after the evaluator was fixed; their numbers are the ones to quote. */
+  split?: 'dev' | 'test'
 }
 
 export interface Topology {
@@ -403,6 +405,8 @@ export interface CreateExperimentRequest {
   seed?: number
   topology_id?: string
   max_steps?: number
+  /** natural: the entry agent decides whether to read the planted location. forced: the harness performs that read. */
+  exposure?: 'natural' | 'forced'
   /** Replay each case's clean_script instead of calling a model. */
   scripted?: boolean
   /** Scripted only: pause per step so the demo can be watched. */

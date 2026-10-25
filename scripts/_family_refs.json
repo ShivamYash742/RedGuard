@@ -1,0 +1,141 @@
+{
+  "direct_injection": [
+    {
+      "title": "Ignore This Title and HackAPrompt: Exposing Systemic Vulnerabilities of LLMs through a Global Scale Prompt Hacking Competition",
+      "authors": [
+        "Sander Schulhoff",
+        "Jeremy Pinto",
+        "Anaum Khan",
+        "Louis-François Bouchard",
+        "Chenglei Si",
+        "Svetlina Anati",
+        "Valen Tagliabue",
+        "Anson Liu Kost",
+        "Christopher Carnahan",
+        "Jordan Boyd-Graber"
+      ],
+      "year": 2023,
+      "venue": "EMNLP",
+      "arxiv_id": "2311.16119",
+      "url": "https://arxiv.org/abs/2311.16119"
+    }
+  ],
+  "content_injection": [
+    {
+      "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+      "authors": [
+        "Kai Greshake",
+        "Sahar Abdelnabi",
+        "Shailesh Mishra",
+        "Christoph Endres",
+        "Thorsten Holz",
+        "Mario Fritz"
+      ],
+      "year": 2023,
+      "venue": "ACM AISec Workshop",
+      "arxiv_id": "2302.12173",
+      "url": "https://arxiv.org/abs/2302.12173"
+    }
+  ],
+  "memory_poisoning": [
+    {
+      "title": "AgentPoison: Red-teaming LLM Agents via Poisoning Memory or Knowledge Bases",
+      "authors": [
+        "Zhaorun Chen",
+        "Zhen Xiang",
+        "Chaowei Xiao",
+        "Dawn Song",
+        "Bo Li"
+      ],
+      "year": 2024,
+      "venue": "arXiv",
+      "arxiv_id": "2407.12784",
+      "url": "https://arxiv.org/abs/2407.12784"
+    }
+  ],
+  "tool_manipulation": [
+    {
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "authors": [
+        "Edoardo Debenedetti",
+        "Jie Zhang",
+        "Mislav Balunović",
+        "Luca Beurer-Kellner",
+        "Marc Fischer",
+        "Florian Tramèr"
+      ],
+      "year": 2024,
+      "venue": "NeurIPS",
+      "arxiv_id": "2406.13352",
+      "url": "https://arxiv.org/abs/2406.13352"
+    }
+  ],
+  "planning_manipulation": [
+    {
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "authors": [
+        "Edoardo Debenedetti",
+        "Jie Zhang",
+        "Mislav Balunović",
+        "Luca Beurer-Kellner",
+        "Marc Fischer",
+        "Florian Tramèr"
+      ],
+      "year": 2024,
+      "venue": "NeurIPS",
+      "arxiv_id": "2406.13352",
+      "url": "https://arxiv.org/abs/2406.13352"
+    }
+  ],
+  "data_exfiltration": [
+    {
+      "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+      "authors": [
+        "Kai Greshake",
+        "Sahar Abdelnabi",
+        "Shailesh Mishra",
+        "Christoph Endres",
+        "Thorsten Holz",
+        "Mario Fritz"
+      ],
+      "year": 2023,
+      "venue": "ACM AISec Workshop",
+      "arxiv_id": "2302.12173",
+      "url": "https://arxiv.org/abs/2302.12173"
+    }
+  ],
+  "autonomous_actions": [
+    {
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "authors": [
+        "Edoardo Debenedetti",
+        "Jie Zhang",
+        "Mislav Balunović",
+        "Luca Beurer-Kellner",
+        "Marc Fischer",
+        "Florian Tramèr"
+      ],
+      "year": 2024,
+      "venue": "NeurIPS",
+      "arxiv_id": "2406.13352",
+      "url": "https://arxiv.org/abs/2406.13352"
+    }
+  ],
+  "goal_diversion": [
+    {
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "authors": [
+        "Edoardo Debenedetti",
+        "Jie Zhang",
+        "Mislav Balunović",
+        "Luca Beurer-Kellner",
+        "Marc Fischer",
+        "Florian Tramèr"
+      ],
+      "year": 2024,
+      "venue": "NeurIPS",
+      "arxiv_id": "2406.13352",
+      "url": "https://arxiv.org/abs/2406.13352"
+    }
+  ]
+}

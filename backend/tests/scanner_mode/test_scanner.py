@@ -341,7 +341,7 @@ async def test_unanswered_probes_are_no_answer_and_leave_every_rate(tmp_path, mo
 
 
 def test_the_real_corpus_validates():
-    assert scanner.validate_builtin_probes() == len(scanner.builtin_probe_ids()) == 56
+    assert scanner.validate_builtin_probes() == len(scanner.builtin_probe_ids()) == 315
 
 
 def test_validation_rejects_a_broken_corpus(monkeypatch):

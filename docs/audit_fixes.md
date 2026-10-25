@@ -84,3 +84,28 @@ were not wrong were not re-checked.
 
 649 tests before the audit work, 1074 after (`cd backend && pytest ../core/tests tests -q`, about 50 s, no model call).
 `npm run typecheck` and `npx eslint app lib components` are clean.
+
+## After the audit: 6.0.0 evaluation work
+
+These are not audit findings; they are the follow-up in [`evaluation_plan.md`](./evaluation_plan.md) (status table
+there). Nothing was run against a model. Reported numbers do not change: they come from 4.0.0 / 1.2.0 runs and stay
+labelled as such.
+
+| ID | What changed | Tests |
+|---|---|---|
+| X1 | `split` (dev | test) on probes and Lab cases; hand-written = dev, generated = test | `test_test_split.py`, `test_lab_split.py`, `test_validator.py` |
+| S4 | hardened prompt = six general principles; no attack phrase, family or scenario | `test_agents.py` |
+| S3 | 160 test attacks, 99 controls from `scripts/gen_test_probes.py` | `test_test_split.py` |
+| X2 | frozen manifests (Scanner and Lab) and digests stored per session / run | `test_test_split.py`, `test_lab_manifest.py` |
+| X3, S5, S9 | split-aware leaderboard, exposure, `noDifferenceFrom`, `/api/leaderboard/compare` | `test_leaderboard.py`, `test_scanner_api.py` |
+| X4 | `core/shared/power.py`, `scripts/power.py` | `test_power.py` |
+| L1 | 30 generated Lab test cases | `test_lab_split.py`, `test_lab_cases.py` |
+| L2 | `exposure=forced` | `test_lab_forced_exposure.py`, `test_lab_api.py`, `test_lab_store.py` |
+| L3 | suitability gates | `test_lab_suitability.py` |
+| L5 | paired verdict, underpowered, pair validity, Holm; per-split headlines | `test_lab_analysis.py`, `test_lab_split.py` |
+| S1, L6 | labelling export with prompt, tool calls and per-method strata; accuracy and recall per method | `test_reanalysis.py` |
+| X5, X6 | `docs/evaluation_protocol.md`; sweep `--split`, `--exposure` | `test_lab_store.py` |
+| release | benchmark, dataset, probe schema 6.0.0; case schema 2.1.0; release 6.0.0 | (full suite: 1984 tests) |
+
+Not done: S2 (the 11 phrase-scored probes stay in the dev split), S7 (external benchmark), L7 (needs labelled data),
+and everything that needs a model or two people to label.

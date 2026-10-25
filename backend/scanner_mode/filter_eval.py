@@ -2,6 +2,7 @@
 Regex-filter false positives on a held-out benign set.
 
     cd backend && python -m scanner_mode.filter_eval [--set xstest_safe.csv] [--split all|tune|holdout] [--list]
+    cd backend && python -m scanner_mode.filter_eval --corpus      # the probe corpus, by dev / test split
 
 Runs every prompt of a benign set (default: the XSTest safe prompts, CC BY 4.0, see
 core/scanner_mode/benign_sets/README.md) through the Inspector and reports how many
@@ -67,13 +68,54 @@ def evaluate(rows: List[Dict[str, str]], inspector: Inspector | None = None) -> 
     }
 
 
+def evaluate_corpus(inspector: Inspector | None = None) -> Dict[str, Any]:
+    """What the filter does with the probe corpus, by split: attacks it denies and benign controls it denies.
+
+    The filter reads only the user message, so an indirect attack (planted in a tool result) is invisible to it:
+    `indirect` counts those. Its patterns were tuned on the dev split; the test split is the honest figure."""
+    from scanner_mode.scanner import builtin_probes
+    inspector = inspector or Inspector()
+    out: Dict[str, Any] = {"policy_sha256": inspector.policy_sha256}
+    probes = [p for group in builtin_probes().values() for p in group]
+    for split in ("dev", "test"):
+        part = [p for p in probes if p["split"] == split]
+        attacks = [p for p in part if not p.get("benign_control")]
+        controls = [p for p in part if p.get("benign_control")]
+        denied = lambda group: [p for p in group if inspector.process(p["prompt"])["policy_result"]["verdict"] == "DENY"]
+        by_family: Dict[str, List[bool]] = defaultdict(list)
+        caught = {p["id"] for p in denied(attacks)}
+        for p in attacks:
+            by_family[p["attack_family"]].append(p["id"] in caught)
+        out[split] = {
+            "attacks_denied": _rate(len(caught), len(attacks)),
+            "attacks_indirect": sum(1 for p in attacks if p.get("tool_fixtures")),
+            "controls_denied": _rate(len(denied(controls)), len(controls)),
+            "attacks_denied_by_family": {f: _rate(sum(v), len(v)) for f, v in sorted(by_family.items())},
+        }
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--set", default="xstest_safe.csv")
     parser.add_argument("--split", default="all", choices=["all", "tune", "holdout"])
     parser.add_argument("--list", action="store_true", help="print the denied prompts")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--corpus", action="store_true", help="evaluate the probe corpus by split instead of a benign set")
     args = parser.parse_args()
+
+    if args.corpus:
+        result = evaluate_corpus()
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            for split in ("dev", "test"):
+                r = result[split]
+                a, c = r["attacks_denied"], r["controls_denied"]
+                print(f"{split:4s}  attacks denied {a['denied']}/{a['total']} ({a['rate']:.1%}, 95% CI {a['lo']:.1%}-{a['hi']:.1%}; "
+                      f"{r['attacks_indirect']} are planted in tool results the filter cannot see)  "
+                      f"controls denied {c['denied']}/{c['total']} ({c['rate']:.1%}, {c['lo']:.1%}-{c['hi']:.1%})")
+        return
 
     result = evaluate(load_set(args.set, args.split))
     if args.json:

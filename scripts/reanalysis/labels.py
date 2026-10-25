@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.reanalysis.common import open_copy  # noqa: E402
 
-COLUMNS = ["sample_id", "kind", "source", "context", "text", "auto_label", "label_a", "label_b"]
+COLUMNS = ["sample_id", "kind", "source", "context", "prompt", "text", "evidence", "scored_by", "auto_label", "label_a", "label_b"]
 VOCAB = {
     "scanner_attack": ("COMPROMISED", "REFUSED", "IGNORED"),
     "scanner_control": ("HELPED", "OVER_REFUSED"),
@@ -60,17 +60,37 @@ def confusion_matrix(human: Sequence[str], auto: Sequence[str]) -> Dict[str, Dic
     return {h: dict(row) for h, row in sorted(table.items())}
 
 
-def export_sample(db: Path, out: Path, n_scanner: int = 56, n_lab: int = 20, seed: int = 20261025) -> int:
+def _probe_prompts() -> Dict[str, str]:
+    """probe id -> the prompt the agent was given (the labeller needs it to judge the reply)."""
+    from core.scanner_mode.datasets.loader import load_all_datasets
+    return {p["id"]: p["prompt"] for p in load_all_datasets(validate=False)}
+
+
+def export_sample(db: Path, out: Path, n_scanner: int = 56, n_lab: int = 20, seed: int = 20261025, per_method: int = 0) -> int:
+    """`per_method` > 0 samples that many Scanner rows from each scoring method (actions, canary, text, ...)
+    instead of `n_scanner` in total, so the scorer's accuracy is measured for every method, not only the common one."""
     rng = random.Random(seed)
     rows: List[Dict[str, str]] = []
+    prompts = _probe_prompts()
     with open_copy(db) as conn:
+        columns = {r["name"] for r in conn.execute("pragma table_info(probe_events)")}
+        extra = ", e.recorded_actions" if "recorded_actions" in columns else ", null as recorded_actions"
         probe_events = list(conn.execute(
-            "select e.id, s.agent_id, s.prompt_mode, e.probe_id, e.is_control, e.model_outcome, e.response_excerpt "
-            "from probe_events e join sessions s on s.id = e.session_id where e.response_excerpt is not null order by e.id"))
-        for e in rng.sample(probe_events, min(n_scanner, len(probe_events))):
+            "select e.id, s.agent_id, s.prompt_mode, e.probe_id, e.is_control, e.model_outcome, e.response_excerpt, e.scored_by" + extra +
+            " from probe_events e join sessions s on s.id = e.session_id where e.response_excerpt is not null order by e.id"))
+        if per_method:
+            strata: Dict[str, list] = defaultdict(list)
+            for e in probe_events:
+                strata[e["scored_by"] or "unknown"].append(e)
+            chosen = [e for key in sorted(strata) for e in rng.sample(strata[key], min(per_method, len(strata[key])))]
+        else:
+            chosen = rng.sample(probe_events, min(n_scanner, len(probe_events)))
+        for e in chosen:
             rows.append({"kind": "scanner_control" if e["is_control"] else "scanner_attack",
                          "source": f"{e['agent_id']}/{e['prompt_mode']}/{e['probe_id']}", "context": f"probe {e['probe_id']}",
-                         "text": (e["response_excerpt"] or "")[:4000], "auto_label": e["model_outcome"]})
+                         "prompt": prompts.get(e["probe_id"], ""),
+                         "text": (e["response_excerpt"] or "")[:4000], "evidence": e["recorded_actions"] or "",
+                         "scored_by": e["scored_by"] or "", "auto_label": e["model_outcome"]})
         attack_runs = list(conn.execute("select id, experiment_id, case_id, repetition_index, verdict_json from lab_runs "
                                         "where mode = 'ATTACK' and status = 'COMPLETED' and verdict_json is not null order by id"))
         for r in rng.sample(attack_runs, min(n_lab, len(attack_runs))):
@@ -92,6 +112,24 @@ def export_sample(db: Path, out: Path, n_scanner: int = 56, n_lab: int = 20, see
     return len(rows)
 
 
+def _accuracy_by_method(rows: List[Dict[str, str]]) -> Dict[str, Dict[str, object]]:
+    """Where the two labellers agree, how often the scorer's label is the same, per scoring method; and,
+    for attacks, its recall of COMPROMISED (the error that matters: a missed attack understates success)."""
+    out: Dict[str, Dict[str, object]] = {}
+    for method in sorted({r.get("scored_by", "") for r in rows}):
+        part = [r for r in rows if r.get("scored_by", "") == method and r["label_a"].strip() == r["label_b"].strip()]
+        if not part:
+            continue
+        true_positive = [r for r in part if r["label_a"].strip() == "COMPROMISED"]
+        out[method or "unknown"] = {
+            "n_agreed": len(part),
+            "scorer_matches_consensus": sum(r["auto_label"] == r["label_a"].strip() for r in part) / len(part),
+            "recall_compromised": (sum(r["auto_label"] == "COMPROMISED" for r in true_positive) / len(true_positive)) if true_positive else None,
+            "n_compromised": len(true_positive),
+        }
+    return out
+
+
 def agreement(path: Path) -> Dict[str, object]:
     with path.open(encoding="utf-8", newline="") as f:
         rows = [r for r in csv.DictReader(f)]
@@ -109,6 +147,7 @@ def agreement(path: Path) -> Dict[str, object]:
             "cohens_kappa_between_labellers": cohens_kappa(a, b),
             "confusion_labeller_a_vs_auto": confusion_matrix(a, auto),
             "confusion_labeller_b_vs_auto": confusion_matrix(b, auto),
+            "scorer_accuracy_by_method": _accuracy_by_method(part),
         }
     return report
 
@@ -121,11 +160,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     e.add_argument("--out", required=True)
     e.add_argument("--scanner", type=int, default=56)
     e.add_argument("--lab", type=int, default=20)
+    e.add_argument("--per-method", type=int, default=0, help="Scanner rows per scoring method (overrides --scanner)")
     a = sub.add_parser("agree")
     a.add_argument("csv")
     args = parser.parse_args(argv)
     if args.command == "export":
-        print(f"wrote {export_sample(Path(args.db), Path(args.out), args.scanner, args.lab)} rows to {args.out}")
+        print(f"wrote {export_sample(Path(args.db), Path(args.out), args.scanner, args.lab, per_method=args.per_method)} rows to {args.out}")
     else:
         print(json.dumps(agreement(Path(args.csv)), indent=2))
     return 0

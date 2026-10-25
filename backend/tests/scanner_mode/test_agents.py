@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import re
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
@@ -31,12 +32,29 @@ def test_open_proxy_route_is_gone():
     assert "/api/proxy" not in app.openapi()["paths"]
 
 
-def test_baseline_prompt_does_not_describe_the_attacks():
-    baseline = build_system_prompt().lower()
-    hardened = build_system_prompt("hardened").lower()
-    for phrase in ("ignore previous instructions", "system override", "internal note"):
-        assert phrase not in baseline
-        assert phrase in hardened
+def test_neither_prompt_describes_the_attacks():
+    for mode in ("baseline", "hardened"):
+        prompt = build_system_prompt(mode).lower()
+        for phrase in ("ignore previous instructions", "system override", "internal note", "developer mode"):
+            assert phrase not in prompt
+        assert not re.search(r"\bdan\b", prompt)
+
+
+def test_hardened_prompt_is_general_principles_only():
+    from core.scanner_mode.datasets.loader import load_all_datasets
+    hardened = build_system_prompt("hardened")
+    for word in ("DIRECT PROMPT INJECTION", "MEMORY POISONING", "SCENARIO AWARENESS", "GitHub", "banking", "calendar"):
+        assert word.lower() not in hardened.lower(), word
+    assert "SECURITY PRINCIPLES" in hardened and hardened.startswith(build_system_prompt("baseline"))
+    # no 4-word run of any probe text, success indicator or fixture is in the prompt
+    def grams(text):
+        w = re.findall(r"[a-z0-9_']+", text.lower())
+        return {" ".join(w[i:i + 4]) for i in range(len(w) - 3)}
+    h = grams(hardened.removeprefix(build_system_prompt("baseline")))   # the baseline is in both prompts, and a probe may quote it
+    for probe in load_all_datasets(validate=False):
+        rules = probe["evaluation_rules"]
+        text = " ".join([probe["prompt"], *rules.get("success_indicators", []), *probe.get("tool_fixtures", {}).values()])
+        assert not (grams(text) & h), (probe["id"], sorted(grams(text) & h)[:3])
 
 
 def test_session_prompt_mode(monkeypatch):

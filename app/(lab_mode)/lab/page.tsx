@@ -39,6 +39,7 @@ export default function LabPage() {
   const [scripted, setScripted] = useState(false)
   const [slowMotion, setSlowMotion] = useState(true)
   const [temperature, setTemperature] = useState(0)
+  const [exposure, setExposure] = useState<'natural' | 'forced'>('natural')
   const [seed, setSeed] = useState('')
   const [provider, setProvider] = useState('ollama')
   const [model, setModel] = useState(DEFAULT_LOCAL_MODEL)
@@ -76,7 +77,7 @@ export default function LabPage() {
         arm, cases: selected, repetitions, max_steps: maxSteps, scripted,
         step_delay_ms: scripted && slowMotion ? DEMO_STEP_DELAY_MS : undefined,
         provider, model: model || undefined,
-        temperature, seed: seed.trim() === '' ? undefined : Math.trunc(Number(seed)),
+        temperature, seed: seed.trim() === '' ? undefined : Math.trunc(Number(seed)), exposure,
       })
       router.push(`/lab/experiments/${created.experiment_id}?run=1`)
     } catch (err) {
@@ -200,6 +201,14 @@ export default function LabPage() {
                 onChange={(e) => setTemperature(Math.max(0, Math.min(2, Number(e.target.value) || 0)))} />
             </label>
             <label className="block">
+              <span className={label}>Exposure</span>
+              <select value={exposure} disabled={scripted} onChange={(e) => setExposure(e.target.value as 'natural' | 'forced')} className={field}
+                title="natural: the entry agent decides whether to read the planted location. forced: the harness performs that read, so every attack run is exposed.">
+                <option value="natural">natural</option>
+                <option value="forced">forced (harness reads it)</option>
+              </select>
+            </label>
+            <label className="block">
               <span className={label}>Seed (repetition N uses seed + N)</span>
               <input type="number" step={1} value={seed} disabled={scripted} placeholder="none" className={`${field} font-mono`}
                 onChange={(e) => setSeed(e.target.value)} />
@@ -265,6 +274,8 @@ export default function LabPage() {
           </h2>
           <div className="flex gap-3 text-sm font-semibold">
             <button onClick={() => setSelected(cases.map((c) => c.id))} className="text-[var(--primary)] hover:underline">All</button>
+            <button onClick={() => setSelected(cases.filter((c) => c.split === 'test').map((c) => c.id))} className="text-[var(--primary)] hover:underline" title="The held-out cases: the ones whose numbers may be quoted">Test split</button>
+            <button onClick={() => setSelected(cases.filter((c) => c.split !== 'test').map((c) => c.id))} className="text-[var(--primary)] hover:underline" title="The cases the evaluator was built with">Dev split</button>
             <button onClick={() => setSelected([])} className="text-[var(--primary)] hover:underline">None</button>
           </div>
         </div>
@@ -284,6 +295,7 @@ export default function LabPage() {
                       {c.eligible_downstream_agents.length ? `can reach ${c.eligible_downstream_agents.join(', ')}` : 'entry-local, nothing downstream to reach'}
                       {c.task_endorses_channel ? ' · the task points the agents at this channel' : ''}
                       {c.role === 'control' ? ' · control, reported apart' : ''}
+                      {c.split === 'test' ? ' · held-out test case' : ''}
                     </span>
                   </span>
                   <span className="col-start-2 lg:col-start-auto">

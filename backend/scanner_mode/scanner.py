@@ -259,7 +259,9 @@ async def init_scan_session(session_id: str) -> Dict[str, Any]:
 
     # Save policy snapshot; the session keeps the hash of the exact text filtered with.
     policy_yaml = POLICY_PATH.read_text()
-    await prisma.session.update(where={"id": session_id}, data={"policySha256": sha256_hex(policy_yaml)})
+    from scanner_mode.manifest import current_manifest   # here: manifest.py imports this module
+    await prisma.session.update(where={"id": session_id}, data={"policySha256": sha256_hex(policy_yaml),
+                                                                 "manifestSha256": current_manifest()["digest"]})
     await prisma.policysnapshot.create(
         data={
             "session": {"connect": {"id": session_id}},

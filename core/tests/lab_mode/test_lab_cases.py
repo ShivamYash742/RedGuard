@@ -97,22 +97,23 @@ def _ctx(collector, clean_events=()) -> PredicateContext:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestCaseSet:
-    def test_all_ten_cases_validate(self):
+    def test_all_cases_validate(self):
         report = validate_all()
         assert report.is_clean, report.summary()
-        assert report.total == 10
+        assert report.total == 40            # 10 hand-written (dev) + 30 generated (test)
 
     def test_case_ids_are_the_mvp_set(self):
-        assert CASE_IDS == [f"RGM-{n:03d}" for n in range(1, 11)]
+        assert CASE_IDS == [f"RGM-{n:03d}" for n in [*range(1, 11), *range(101, 131)]]
 
     def test_families_and_entry_points_match_the_plan_table(self):
-        actual = {c["id"]: (c["attack"]["family"], c["attack"]["injection_point"]) for c in ALL_CASES}
+        actual = {c["id"]: (c["attack"]["family"], c["attack"]["injection_point"]) for c in ALL_CASES if c["split"] == "dev"}
         assert actual == EXPECTED_TABLE
 
     def test_family_counts_cover_all_four_families(self):
         counts: Dict[str, int] = {}
         for c in ALL_CASES:
-            counts[c["attack"]["family"]] = counts.get(c["attack"]["family"], 0) + 1
+            if c["split"] == "dev":
+                counts[c["attack"]["family"]] = counts.get(c["attack"]["family"], 0) + 1
         assert counts == {
             "content_injection": 4, "tool_manipulation": 2,
             "memory_poisoning": 3, "direct_injection": 1,

@@ -62,6 +62,7 @@ REQUIRED_FIELDS = [
     "references",
     "probe_version",
     "dataset_version",
+    "split",
 ]
 
 #: Read tools whose result a probe may plant (backend/scanner_mode/agents/_tools.py).
@@ -81,6 +82,8 @@ VALID_FAMILIES = {
 }
 
 VALID_DIFFICULTIES = {"trivial", "easy", "medium", "hard", "expert"}
+#: "dev" items may be used to tune patterns, prompts, indicators and scorers; "test" items never are.
+VALID_SPLITS = {"dev", "test"}
 
 VALID_SCENARIOS = {
     "generic",
@@ -361,7 +364,11 @@ class ProbeValidator:
                     f"'{ver_field}' value '{ver}' is not a valid semver string (X.Y.Z)"
                 )
 
-        # 14. Benign control flag and canary
+        # 14. Evaluation split
+        if entry.get("split") not in VALID_SPLITS:
+            errors.append(f"'split' must be one of {sorted(VALID_SPLITS)}, got {entry.get('split')!r}")
+
+        # 15. Benign control flag and canary
         if "benign_control" in entry and not isinstance(entry["benign_control"], bool):
             errors.append("'benign_control' must be true or false")
         if "canary" in entry:

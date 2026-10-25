@@ -107,4 +107,4 @@ def test_every_tool_call_leaf_in_every_case_names_its_resource_exactly():
     report = validate_all()
     results = report.results
     assert results and all(r.valid for r in results), [str(r) for r in results if not r.valid]
-    assert len(case_ids()) == 10
+    assert len(case_ids()) == 40

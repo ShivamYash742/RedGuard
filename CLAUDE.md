@@ -65,9 +65,9 @@ in `eslint.config.mjs`. `shared/` may be used by both.
 
 ## Current state (2026-10-25)
 
-- Branch `audit-fixes` (off `main`, not pushed) holds the 5.0.0 release: fixes
-  from an external audit, one commit per task ID (P1-P9, S1-S14, V1-V2, 2C,
-  L1-L9). `docs/audit_fixes.md` maps each ID to what changed, its commit, its
+- Branch `audit-fixes` (off `main`, not pushed) holds the 5.0.0 audit fixes and
+  the 6.0.0 evaluation work on top of them. 5.0.0: one commit per task ID
+  (P1-P9, S1-S14, V1-V2, 2C, L1-L9). `docs/audit_fixes.md` maps each ID to what changed, its commit, its
   tests and whether it moves a reported number; `docs/report_errata.md` lists
   the statements in the earlier report and paper that do not hold. Do not merge
   `ui-improvements` (committed conflict markers in `next.config.js`; deletes
@@ -77,7 +77,23 @@ in `eslint.config.mjs`. `shared/` may be used by both.
   4.1.5, readable from git (`git show 6c3606a:<file>`): `MODE_A_FIX_PLAN.md`,
   `MODE_B_LIVE_PLAN.md`, `MULTI_AGENT_LAB_PLAN.md` (the design spec that `§N`
   code comments cite), `MULTI_AGENT_LAB_EXPLAINED.md`, `RedGuard_Architecture.*`.
-- **1060 tests pass** (~45 s, no model call; non-loopback sockets are blocked by
+- **6.0.0 evaluation work** (plan: `docs/evaluation_plan.md` has a status
+  table; procedure: `docs/evaluation_protocol.md`). Every probe and case has
+  `split` (dev | test). Hand-written ones are **dev** (the filter, prompts,
+  indicators and evaluator were built against them); generated ones
+  (`scripts/gen_test_probes.py` -> `RG-xx-1nn`, 160 attacks + 99 controls;
+  `scripts/gen_test_cases.py` -> `RGM-101..130`) are **test**. Never edit a
+  generated file by hand (a test compares it with the generator) and never tune
+  the filter, prompts or evaluator to a test item. `scanner_mode/manifest.py` and
+  `core/lab_mode/manifest.py` hash the frozen files and both sets; the
+  `frozen_manifest.json` tests fail on any change, and a deliberate change means
+  `python -m scanner_mode.manifest --write` (or `python -m core.lab_mode.manifest
+  --write`) plus a version bump. The hardened prompt is six general principles
+  (no phrase/family/scenario). Leaderboard rows use the test split when present
+  and list `noDifferenceFrom` (paired test, `core/shared/power.py`);
+  `/api/leaderboard/compare`; Lab `exposure=forced`, suitability gates, paired
+  verdicts. **Nothing has been run against a model under 6.0.0.**
+- **1984 tests pass** (~70 s, no model call; non-loopback sockets are blocked by
   an autouse fixture). `npm run typecheck` and `npx eslint app lib components`
   are clean (plain `npm run lint` also scans the untracked `papr/` folder).
   `.github/workflows/ci.yml` runs the same checks; it has not run on GitHub yet.
@@ -85,14 +101,14 @@ in `eslint.config.mjs`. `shared/` may be used by both.
   benchmark 4.0.0 (granite3.3:2b, plus Nemotron-3 Ultra and GPT-OSS 120B in
   the paper), Lab results from 1.2.0 (six Ollama models, no-defence arm). They
   stay visible, labelled "Measured before the audit fixes", never pooled with
-  5.0.0 / 2.0.0 runs. The Ollama agent now calls tools natively through
+  6.0.0 / 2.0.0 runs. The Ollama agent now calls tools natively through
   `/v1` instead of the old JSON text loop; nobody has run that against
   granite yet. Real runs use local Ollama `granite3.3:2b` only (not hosted).
 - Pinned dependencies: `backend/requirements.lock` is a constraints file
   (`pip install -r requirements.txt -c requirements.lock`); it resolves for
   Python 3.12 and 3.14, not 3.10.
 
-### How Scanner mode scores (since 5.0.0)
+### How Scanner mode scores (since 5.0.0; corpus and prompt changed in 6.0.0)
 
 Every attack probe lands in one tier: `FILTERED` (regex policy denied it),
 `REFUSED`, `IGNORED` (no refusal, no compliance) or `COMPROMISED`; an agent that
@@ -143,7 +159,7 @@ agent instead of substituting the default.
   does is `IGNORED` (the recorded `fetch_page` calls show whether it was exposed).
 - Hosted agents are called without a seed. Venues of unchanged references were not
   re-checked against arXiv (IDs, titles, authors and years were).
-- Scores from 3.x and 4.x runs are not comparable with 5.0.0.
+- Scores from 3.x, 4.x and 5.x runs are not comparable with 6.0.0.
 
 Security: `/api/proxy` removed; both routers reject a foreign `Origin` (403) and
 a non-JSON body (415) (`backend/request_guard.py`, `CORS_ORIGINS` defaults to
@@ -242,11 +258,11 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
   them if you change those on purpose.
 - **Versions.** Canonical in `core/shared/version.py`, with no runtime link to
   the frontend, so strings are hand-synced. Two kinds:
-  - **Release** 5.0.0 (`RELEASE_NAME`): `package.json` (+ lock, via
+  - **Release** 6.0.0 (`RELEASE_NAME`): `package.json` (+ lock, via
     `npm version X --no-git-tag-version`), `README.md` title and version badge,
     `app/layout.tsx`, `components/shared/Sidebar.tsx`.
   - **Benchmark** (Scanner-mode scoring and probe set): `BENCHMARK_VERSION`,
-    `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`, all 5.0.0: `README.md` benchmark
+    `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`, all 6.0.0: `README.md` benchmark
     and dataset badges, `components/shared/Header.tsx`,
     `app/(scanner_mode)/runs/page.tsx`, the dataset version on
     `app/(scanner_mode)/corpus/page.tsx` (its schema badge is read from
@@ -290,6 +306,13 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
 - `MULTI_AGENT_LAB_PLAN.md` — the Lab-mode design spec that the `§N` comments
   in code cite. Removed in 4.1.5; read it from git history:
   `git show 6c3606a:MULTI_AGENT_LAB_PLAN.md`.
+- `docs/evaluation_plan.md` (what makes the evaluation support its claims, with a
+  status table), `docs/evaluation_protocol.md` (what may be published; the
+  pre-registration template; run and labelling procedure), `docs/audit_fixes.md`,
+  `docs/report_errata.md`.
+- `docs/viva_guide.md` (+ `.pdf`): the whole project explained for a viva, with Q&A.
+  `docs/colab_guide.md` (+ `.pdf`) and `docs/colab/redguard_ollama_colab.ipynb`: serve a 7-10B model
+  from a Colab GPU and point `OLLAMA_BASE_URL` at it. `python scripts/md_to_pdf.py <file.md>` rebuilds a PDF.
 - `docs/` — also research paper draft, literature mapping, and
   `docs/scanner_mode/benchmark_spec.md` (generated).
 - `PRODUCT.md` — product/design context.

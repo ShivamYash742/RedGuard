@@ -256,6 +256,8 @@ class CaseValidator:
 
         if case.get("role", "attack") not in ("attack", "control"):
             errors.append(f"role {case.get('role')!r} must be 'attack' or 'control'")
+        if case.get("split", "dev") not in ("dev", "test"):
+            errors.append(f"split {case.get('split')!r} must be 'dev' or 'test'")
         if "task_endorses_channel" in case and not isinstance(case["task_endorses_channel"], bool):
             errors.append("task_endorses_channel must be true or false")
         arms = case.get("objective_reachable_in_arms")

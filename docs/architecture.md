@@ -60,12 +60,13 @@ files without appearing in the URL, so `/corpus` and `/lab` are unchanged.
 
 | To add… | Put it in |
 |---|---|
-| a probe | `core/scanner_mode/datasets/<family>.json` (validated by `schema.json`; score it with `success_actions`, a `canary`, or compliance-phrase `success_indicators`; plant indirect payloads in `tool_fixtures`; bump `DATASET_VERSION`; cite only arXiv papers listed in `core/tests/scanner_mode/verified_arxiv.json`) |
+| a probe | `core/scanner_mode/datasets/<family>.json` (validated by `schema.json`; **`split`: new probes written after the filter, prompts and scorer are frozen are `test` and come from `scripts/gen_test_probes.py`, never by hand**; score it with `success_actions`, a `canary`, or compliance-phrase `success_indicators`; plant indirect payloads in `tool_fixtures`; bump `DATASET_VERSION`; cite only arXiv papers listed in `core/tests/scanner_mode/verified_arxiv.json`) |
 | an agent to scan | `backend/scanner_mode/agents/<name>.py` with `AGENT_NAME`, `AGENT_DESCRIPTION`, `model_config()`, an LLM factory and an async `invoke()` that calls `_scaffold.run_agent` (the model is the only thing that may differ) — discovered automatically |
-| a Lab case | `core/lab_mode/cases/RGM-0xx.json` (validated by `case_schema.json`, needs a `clean_script`, exact `arg_equals` names in tool-call predicates, a `role` and `objective_reachable_in_arms`) |
+| a Lab case | `core/lab_mode/cases/RGM-0xx.json` (dev) or `RGM-1xx` from `scripts/gen_test_cases.py` (test) (validated by `case_schema.json`, a `split`, needs a `clean_script`, exact `arg_equals` names in tool-call predicates, a `role` and `objective_reachable_in_arms`) |
 | a Scanner page / API route | `app/(scanner_mode)/…` / `backend/scanner_mode/api.py` |
 | a Lab page / API route | `app/(lab_mode)/lab/…` / `backend/lab_mode/api.py` |
-| something both modes use | the layer's `shared/` |
+| something both modes use | the layer's `shared/` (statistics, `power.py` sample size and paired verdicts, `manifest.py` content hashes) |
+| a change to the filter, prompts, tools, scorer or evaluator | edit it, then `python -m scanner_mode.manifest --write` / `python -m core.lab_mode.manifest --write` and bump the matching version: the frozen-manifest tests fail otherwise |
 
 ## Commands
 
@@ -78,6 +79,10 @@ python -m core.lab_mode.smoke --scripted            # Lab pipeline without a mod
 cd backend && python -m lab_mode.sweep --help       # Lab batch runs
 cd backend && python -m scanner_mode.target_agent   # chat with a Scanner agent
 python docs/scanner_mode/spec_generator.py          # regenerate the probe spec
+python -m scripts.gen_test_probes                   # rewrite the generated test probes
+python -m scripts.gen_test_cases                    # rewrite the generated test Lab cases
+python -m scripts.power --rate 0.2 --effect 0.1     # how many items a comparison needs
+cd backend && python -m scanner_mode.filter_eval    # filter false positives on XSTest
 ```
 
 Code comments and test names written before 4.2.0 still say "Mode A" and

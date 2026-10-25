@@ -44,7 +44,9 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-from core.lab_mode.analysis import ARMS, arm_summary, comparability_problems, compare_standard, headline, scope_report
+from core.lab_mode.analysis import (
+    ARMS, arm_summary, comparability_problems, compare_standard, headline, headline_split, scope_report, split_headlines,
+)
 from core.lab_mode.cases import (
     CASES_DIR,
     FIXTURES_DIR,
@@ -82,7 +84,7 @@ from core.lab_mode.repro import reproducibility_stamp
 from core.lab_mode.report import build_report, to_markdown
 from core.shared.version import PRE_AUDIT_LABEL, lab_vintage
 from core.lab_mode.runner import (
-    ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, repetition_config, repetition_warnings, run_case,
+    ATTACK, CLEAN, DEFAULT_MAX_STEPS, EXPOSURE_MODES, RunConfig, ScriptedClient, repetition_config, repetition_warnings, run_case,
 )
 from core.lab_mode.tools import TOOLS
 from core.lab_mode.trace import EventCategory, EventType, TraceEvent
@@ -99,7 +101,7 @@ MAX_REPS = 25
 MAX_STEP_DELAY_MS = 5000
 
 
-def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int) -> RunConfig:
+def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_steps: int, exposure: str = "natural") -> RunConfig:
     if arm not in ARMS:
         raise HTTPException(status_code=400, detail=f"Unknown arm '{arm}'. Valid: {sorted(ARMS)}")
     if topology_id not in TOPOLOGIES:
@@ -115,6 +117,7 @@ def _build_config(arm: str, model_config: ModelConfig, topology_id: str, max_ste
         model=model_config,
         max_steps=max_steps,
         validation_mode=spec["validation_mode"],
+        exposure=exposure,
     )
 
 
@@ -132,6 +135,7 @@ def _case_summary(case: Dict[str, Any]) -> Dict[str, Any]:
         "severity": case["severity"],
         "task_endorses_channel": case.get("task_endorses_channel"),
         "role": case.get("role", "attack"),
+        "split": case.get("split", "dev"),
         "topology_id": case["topology_id"],
         "cee_fixture": case["cee_fixture"],
         "objective": case["objective"]["description"],
@@ -236,7 +240,10 @@ async def create_experiment(request: Request):
         raise HTTPException(status_code=400, detail=str(exc))
 
     # Validates arm and topology, and fails before anything is persisted.
-    config = _build_config(arm, model_config, topology_id, max_steps)
+    exposure = body.get("exposure", "natural")
+    if exposure not in EXPOSURE_MODES:
+        raise HTTPException(status_code=400, detail=f"exposure must be one of {list(EXPOSURE_MODES)}")
+    config = _build_config(arm, model_config, topology_id, max_steps, exposure)
 
     stored_config = {
         **config.to_dict(),
@@ -464,6 +471,7 @@ async def _execute(experiment: Any):
         config_data["arm"], model_config,
         config_data.get("topology_id", "linear_abc"),
         config_data.get("max_steps", DEFAULT_MAX_STEPS),
+        config_data.get("exposure", "natural"),
     )
 
     total_runs = len(selected) * reps * 2
@@ -793,6 +801,8 @@ async def experiment_metrics(experiment_id: str):
         # in `excluded`, and the old all-cases headline is `pooled_legacy`.
         "aggregate": headline(outcomes),
         **scope_report(outcomes),
+        "headline_split": headline_split(outcomes),
+        "by_split": split_headlines(outcomes),
         "per_case": per_case,
         # Macro average weights every case equally. The micro figures above
         # weight by run count, so a case that happened to run more often

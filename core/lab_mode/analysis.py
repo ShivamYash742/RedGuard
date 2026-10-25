@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from ..shared.power import comparison_verdict, holm, paired_difference
 from ..shared.version import LAB_DEFINITION_KEYS, PRE_AUDIT_LABEL
 from .evaluator import AgentImpactLevel, ObjectiveAchievement, SystemOutcome
 from .metrics import (
@@ -128,6 +129,21 @@ def scope_report(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
     }
 
 
+def split_headlines(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
+    """The headline on each split of the cases. Cases written after the evaluator and predicates were fixed
+    (`split: "test"`) are the ones whose numbers may be published; `dev` cases were used to build them."""
+    out: Dict[str, Any] = {}
+    for name in ("dev", "test"):
+        subset = [o for o in valid if o.case.get("split", "dev") == name]
+        if subset:
+            out[name] = {"n_runs": len(subset), "n_cases": len({o.case["id"] for o in subset}), **headline(subset)}
+    return out
+
+
+def headline_split(valid: Sequence[RunOutcome]) -> str:
+    return "test" if any(o.case.get("split", "dev") == "test" for o in valid) else "dev"
+
+
 def arm_summary(outcomes: Sequence[RunOutcome]) -> Dict[str, Any]:
     """Every §10 aggregate for one arm, plus the validity accounting."""
     valid = _valid(outcomes)
@@ -147,6 +163,8 @@ def arm_summary(outcomes: Sequence[RunOutcome]) -> Dict[str, Any]:
         "n_invalid": len(outcomes) - len(valid),
         **headline(valid),
         **scope_report(valid),
+        "headline_split": headline_split(valid),
+        "by_split": split_headlines(valid),
         "macro": {
             "icr": macro_average([c["icr"] for c in counted]),
             "asr": macro_average([c["asr"] for c in counted]),
@@ -178,7 +196,12 @@ def _per_case(outcomes: Sequence[RunOutcome], metric) -> Dict[str, Optional[floa
     return {case_id: metric(runs) for case_id, runs in by_case.items()}
 
 
-def _paired(metric, baseline: Sequence[RunOutcome], variant: Sequence[RunOutcome]) -> Dict[str, Any]:
+#: Fewer cases than this cannot show a difference smaller than about a third of the baseline rate.
+ENOUGH_CASES = 30
+
+
+def _paired(metric, baseline: Sequence[RunOutcome], variant: Sequence[RunOutcome],
+            baseline_name: str = "baseline", variant_name: str = "variant") -> Dict[str, Any]:
     """The arms compared case by case: variant minus baseline per shared case,
     the mean of those differences, and a bootstrap interval over cases.
 
@@ -194,7 +217,14 @@ def _paired(metric, baseline: Sequence[RunOutcome], variant: Sequence[RunOutcome
     ]
     ci = bootstrap_ci(diffs) if len(diffs) >= MIN_PAIRED_CASES else None
     tolerance = 1e-9
+    test = paired_difference(diffs)
+    verdict = comparison_verdict(test, label_a=variant_name, label_b=baseline_name)
     return {
+        # A claim needs the interval and the sign-flip test to agree, and says what this many cases could detect.
+        # `higher` is the arm with the larger value of the metric.
+        "p": test["p"],
+        "verdict": verdict,
+        "underpowered": len(diffs) < ENOUGH_CASES,
         "n_cases": len(diffs),
         "mean_difference": sum(diffs) / len(diffs) if diffs else None,
         "ci": list(ci) if ci else None,
@@ -246,7 +276,7 @@ def compare_arms(
             "variant": v,
             "difference": difference,
             "overlapping": _intervals_overlap(b["ci"], v["ci"]),
-            "paired": _paired(_METRICS[metric], baseline, variant),
+            "paired": _paired(_METRICS[metric], baseline, variant, baseline_name, variant_name),
         }
 
     # CPR can legitimately be "n/a" on either side, and "n/a" minus a number
@@ -261,10 +291,14 @@ def compare_arms(
         "variant": var["containment_rate"],
     }
 
+    # What the defence costs the benign task: a pair is valid only if its clean half completed the task, so an
+    # arm that blocks legitimate reads shows up as fewer valid pairs than the baseline has.
+    validity = {k: (a["n_valid"] / a["n_runs"] if a["n_runs"] else None) for k, a in (("baseline", base), ("variant", var))}
     return {
         "baseline_arm": baseline_name,
         "variant_arm": variant_name,
         "metrics": comparisons,
+        "pair_validity": {**validity, "difference": None if None in validity.values() else validity["variant"] - validity["baseline"]},
         "cases_compared": sorted(in_both),
         "cases_in_scope_in_one_arm_only": one_arm_only,
         "baseline_summary": base,
@@ -273,8 +307,10 @@ def compare_arms(
             "Rate intervals are clustered by case. Read `paired` for the effect: "
             "it compares the arms case by case, the unit this design generalises "
             "over. `overlapping` is kept for continuity and is not an evidence "
-            "test. No significance test is reported: 9 hand-authored cases "
-            "cannot support one (§21.6)."
+            "test. `paired.verdict` claims a difference only when the "
+            "interval and a sign-flip test over cases agree, and says what "
+            "this many cases could detect; `paired.underpowered` marks "
+            "comparisons over fewer than 30 cases (§21.6)."
         ),
     }
 
@@ -346,6 +382,10 @@ def compare_standard(outcomes_by_arm: Dict[str, Sequence[RunOutcome]]) -> Dict[s
                 baseline_arm, outcomes_by_arm[baseline_arm],
                 variant_arm, outcomes_by_arm[variant_arm],
             )
+    # The comparisons are asked together, so their p-values are adjusted together (Holm).
+    labels = [k for k, r in results.items() if r["metrics"]["asr"]["paired"]["p"] is not None]
+    for label, adjusted in zip(labels, holm([results[k]["metrics"]["asr"]["paired"]["p"] for k in labels])):
+        results[label]["metrics"]["asr"]["paired"]["p_holm"] = adjusted
     return results
 
 
