@@ -1,7 +1,33 @@
 # Plan: making RedGuard's evaluation support its claims
 
-Status: plan only. Nothing here has been implemented or run. Written 2026-10-25 after the 5.0.0 audit fixes
-(`docs/audit_fixes.md`), which repaired the scoring mechanics but did not make the evaluation trustworthy.
+Written 2026-10-25 after the 5.0.0 audit fixes (`docs/audit_fixes.md`), which repaired the scoring mechanics but did not
+make the evaluation trustworthy. **Implementation status is in the table below; the plan text under it is unchanged.**
+Nothing has been run against a model.
+
+| ID | Status | Where |
+|---|---|---|
+| X1 dev/test split | done | `split` on probes and cases; `RG-xx-1nn`, `RGM-101..130` are test |
+| X2 frozen manifest | done | `scanner_mode/manifest.py`, `core/lab_mode/manifest.py`, `frozen_manifest.json`, `Session.manifestSha256`, run stamp |
+| X3 claims policy | done (API); UI shows the new fields | `noDifferenceFrom`, `/api/leaderboard/compare`, Lab `paired.verdict` |
+| X4 power calculator | done | `core/shared/power.py`, `python -m scripts.power` |
+| X5 pre-registration | done (template) | `docs/evaluation_protocol.md` |
+| X6 run protocol | done (document, sweep flags); runs need a model | `docs/evaluation_protocol.md`, `sweep --split --exposure` |
+| S1 scorer vs people | tooling done; labelling needs people and runs | `scripts/reanalysis/labels.py --per-method` |
+| S2 phrase-scored probes | not converted: left in dev only, so the test headline has none | |
+| S3 variants | done: 160 test attacks (20 per family), 97 matched controls | `scripts/gen_test_probes.py` |
+| S4 hardened prompt | done: six general principles, no phrase, family or scenario | `agents/system_prompts.json` |
+| S5 exposure | done (reporting); a forced mode exists for Lab only | `asrModelExposed`, `exposure` |
+| S6 filter on held-out | tooling exists (`filter_eval`); rerun on test attacks needs no model | |
+| S7 external benchmark | not done | needs the external data |
+| S8 hosted drift | model config recorded; protocol says run on different days | |
+| S9 paired comparison | done | `leaderboard.compare_events` |
+| L1 case matrix | done: 30 generated test cases | `scripts/gen_test_cases.py` |
+| L2 forced exposure | done | `RunConfig.exposure`, `exposure` in the API and sweep |
+| L3 suitability gates | done | `report.suitability_gates` |
+| L4 variance and repetitions | seeds exist since 5.0.0; protocol sets temperature and >= 5 reps | |
+| L5 defence arms, paired | analysis done; running the arms needs a model | `analysis.compare_arms` |
+| L6 verdicts vs people | tooling done; labelling needs people | `labels.py` (Lab runs) |
+| L7 INFLUENCED definition | not decided: needs L6 data | |
 
 ## What "evaluation" has to deliver
 
