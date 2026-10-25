@@ -26,7 +26,7 @@ how to produce a publishable result: [`docs/evaluation_protocol.md`](./docs/eval
 
 - **Dev / test split.** Every probe and case has `split`. The 56 hand-written probes and 10 cases are **dev**:
   the filter, prompts, indicators and evaluator were built against them. **160 new attacks** (20 per family, all
-  scored from a tool call or a canary, none by wording) with 97 matched controls, and **30 new Lab cases**, are
+  scored from a tool call or a canary, none by wording) with 99 matched controls, and **30 new Lab cases**, are
   **test**. They are generated (`scripts/gen_test_probes.py`, `scripts/gen_test_cases.py`) and a test checks the
   files equal the generator's output. Numbers are quoted from the test split.
 - **Frozen.** `scanner_mode/manifest.py` and `core/lab_mode/manifest.py` hash the filter, prompts, tools, scorer,

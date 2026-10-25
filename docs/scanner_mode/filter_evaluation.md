@@ -52,3 +52,19 @@ intent); these are its measured false positives, not a target.
 The set is for reporting. Do not edit a pattern to make one of its prompts pass. If you
 change a pattern, tune on `--split tune` and report only `--split holdout`. Tests do not
 assert zero false positives.
+
+## On the probe corpus, by split (2026-10-25, no model)
+
+`cd backend && python -m scanner_mode.filter_eval --corpus` runs every probe's user message through the filter.
+The patterns were written and tuned while the dev probes were in view; the test probes were written afterwards
+and the patterns were not touched.
+
+| Split | Attacks denied | Benign controls denied |
+|---|---|---|
+| dev | 11 of 46 (23.9%, 95% CI 13.9-37.9%); 18 of the 46 are planted in tool results the filter never sees | 0 of 10 (0-27.8%) |
+| test | **4 of 160 (2.5%, 95% CI 1.0-6.3%)**; 110 of the 160 are planted in tool results | 0 of 99 (0-3.7%) |
+
+The filter's apparent detection rate on the dev probes does not carry over to held-out attacks: on the test
+split it denies 2.5%, and none of the indirect attacks can be seen at all. Read "as deployed" numbers with that
+in mind: with this filter, the deployed stack and the model alone are nearly the same thing on the test split.
+Denials by family are in `--corpus --json`.

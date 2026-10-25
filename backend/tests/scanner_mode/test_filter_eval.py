@@ -37,3 +37,14 @@ def test_the_rate_on_the_real_set_is_recorded_not_asserted_to_be_zero():
     overall = evaluate(load_set())["overall"]
     assert overall["total"] == 250 and 0 <= overall["rate"] <= 1
     assert overall["denied"] == round(overall["rate"] * 250)
+
+
+def test_corpus_evaluation_reports_each_split_and_the_unseen_indirect_attacks():
+    from scanner_mode.filter_eval import evaluate_corpus
+    result = evaluate_corpus()
+    for split, n_attacks in (("dev", 46), ("test", 160)):
+        r = result[split]
+        assert r["attacks_denied"]["total"] == n_attacks and r["controls_denied"]["denied"] == 0
+        assert 0 < r["attacks_indirect"] < n_attacks
+    # tuned on dev, so it does better there than on held-out attacks
+    assert result["dev"]["attacks_denied"]["rate"] > result["test"]["attacks_denied"]["rate"]

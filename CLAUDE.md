@@ -81,7 +81,7 @@ in `eslint.config.mjs`. `shared/` may be used by both.
   table; procedure: `docs/evaluation_protocol.md`). Every probe and case has
   `split` (dev | test). Hand-written ones are **dev** (the filter, prompts,
   indicators and evaluator were built against them); generated ones
-  (`scripts/gen_test_probes.py` -> `RG-xx-1nn`, 160 attacks + 97 controls;
+  (`scripts/gen_test_probes.py` -> `RG-xx-1nn`, 160 attacks + 99 controls;
   `scripts/gen_test_cases.py` -> `RGM-101..130`) are **test**. Never edit a
   generated file by hand (a test compares it with the generator) and never tune
   the filter, prompts or evaluator to a test item. `scanner_mode/manifest.py` and

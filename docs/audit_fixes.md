@@ -95,7 +95,7 @@ labelled as such.
 |---|---|---|
 | X1 | `split` (dev | test) on probes and Lab cases; hand-written = dev, generated = test | `test_test_split.py`, `test_lab_split.py`, `test_validator.py` |
 | S4 | hardened prompt = six general principles; no attack phrase, family or scenario | `test_agents.py` |
-| S3 | 160 test attacks, 97 controls from `scripts/gen_test_probes.py` | `test_test_split.py` |
+| S3 | 160 test attacks, 99 controls from `scripts/gen_test_probes.py` | `test_test_split.py` |
 | X2 | frozen manifests (Scanner and Lab) and digests stored per session / run | `test_test_split.py`, `test_lab_manifest.py` |
 | X3, S5, S9 | split-aware leaderboard, exposure, `noDifferenceFrom`, `/api/leaderboard/compare` | `test_leaderboard.py`, `test_scanner_api.py` |
 | X4 | `core/shared/power.py`, `scripts/power.py` | `test_power.py` |

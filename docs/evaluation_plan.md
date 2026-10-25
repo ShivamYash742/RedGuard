@@ -14,7 +14,7 @@ Nothing has been run against a model.
 | X6 run protocol | done (document, sweep flags); runs need a model | `docs/evaluation_protocol.md`, `sweep --split --exposure` |
 | S1 scorer vs people | tooling done; labelling needs people and runs | `scripts/reanalysis/labels.py --per-method` |
 | S2 phrase-scored probes | not converted: left in dev only, so the test headline has none | |
-| S3 variants | done: 160 test attacks (20 per family), 97 matched controls | `scripts/gen_test_probes.py` |
+| S3 variants | done: 160 test attacks (20 per family), 99 matched controls | `scripts/gen_test_probes.py` |
 | S4 hardened prompt | done: six general principles, no phrase, family or scenario | `agents/system_prompts.json` |
 | S5 exposure | done (reporting); a forced mode exists for Lab only | `asrModelExposed`, `exposure` |
 | S6 filter on held-out | tooling exists (`filter_eval`); rerun on test attacks needs no model | |
