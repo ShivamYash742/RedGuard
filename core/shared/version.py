@@ -35,11 +35,11 @@ PRE_AUDIT_BENCHMARK_VERSIONS: tuple = ("4.0.0",)
 
 #: Version of the benchmark dataset (JSON files in core/scanner_mode/datasets/).
 #: Bump when probes are added, removed, or their prompts change materially.
-DATASET_VERSION: str = "4.0.0"
+DATASET_VERSION: str = "5.0.0"
 
 #: Version of the probe JSON schema (core/scanner_mode/datasets/schema.json).
 #: Bump when new required fields are added to dataset entries.
-PROBE_SCHEMA_VERSION: str = "4.0.0"
+PROBE_SCHEMA_VERSION: str = "5.0.0"
 
 #: Minimum number of runs per probe required for statistical metrics (BDS, CI).
 MIN_RUNS_FOR_STATISTICS: int = 3

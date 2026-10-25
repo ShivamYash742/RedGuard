@@ -66,7 +66,7 @@ function CorpusContent() {
         </div>
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Dataset Version</span>
-          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">4.0.0</div>
+          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">5.0.0</div>
         </div>
       </div>
 

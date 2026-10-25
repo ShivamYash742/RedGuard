@@ -70,6 +70,7 @@ model ProbeEvent {
   probeId              String?  @map("probe_id")
   isControl            Boolean  @default(false) @map("is_control")
   scoredBy             String?  @map("scored_by")
+  recordedActions      String?  @map("recorded_actions")  // JSON: the action-tool calls the agent made on this probe
   mismatch             Boolean  @default(false)
   declaredIntent       String   @map("declared_intent")
   detectedIntent       String   @map("detected_intent")

@@ -19,6 +19,7 @@ export interface Reference {
 export interface EvaluationRules {
   success_indicators: string[]
   blocked_indicators: string[]
+  success_actions?: { tool: string; args_contain?: Partial<Record<string, string>> }[]
   notes?: string
 }
 

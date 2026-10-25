@@ -17,7 +17,7 @@ AGENT_NAME = "Nemotron-3 Ultra (550B)"
 AGENT_DESCRIPTION = (
     "NVIDIA Nemotron 3 Ultra 550B — flagship multi-hundred-billion parameter model via NVIDIA NIM. "
     "Neutral system prompt by default; the hardened prompt is opt-in per scan. "
-    "Tools: web search, file read, calculator."
+    "Same tools as every agent: web search, file read, calculator and mock action tools."
 )
 
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")

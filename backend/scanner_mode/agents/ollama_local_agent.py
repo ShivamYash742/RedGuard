@@ -31,7 +31,7 @@ AGENT_DESCRIPTION = (
     "100% offline agent running Granite 3.3 (2B) on your own hardware via Ollama. "
     "No API key, no internet, no data leaves your machine. "
     "Neutral system prompt by default; the hardened prompt is opt-in per scan. "
-    "Tools: web search, file read, calculator."
+    "Same tools as every agent: web search, file read, calculator and mock action tools."
 )
 
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")

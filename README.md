@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)](./package.json)
 [![Benchmark](https://img.shields.io/badge/benchmark-v5.0.0-indigo.svg)](./core/shared/version.py)
-[![Dataset](https://img.shields.io/badge/dataset-v4.0.0-emerald.svg)](./core/scanner_mode/datasets)
+[![Dataset](https://img.shields.io/badge/dataset-v5.0.0-emerald.svg)](./core/scanner_mode/datasets)
 
 RedGuard is an academic-grade **AI Agent Security Benchmark Platform** designed for empirical evaluation of Large Language Model (LLM) agent resistance against indirect prompt injections, goal diversion, persistent memory poisoning, autonomous execution risks, and tool hijacking.
 

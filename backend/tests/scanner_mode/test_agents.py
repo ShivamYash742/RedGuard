@@ -103,7 +103,8 @@ async def _build_every_agent(monkeypatch, spy_graph, mode):
 async def test_every_agent_has_the_same_tools_and_baseline_prompt(monkeypatch, spy_graph):
     built = await _build_every_agent(monkeypatch, spy_graph, "baseline")
     assert len(built) == len(AGENT_IDS) >= 6
-    assert {tuple(b.tools) for b in built.values()} == {("web_search", "file_read", "calculator")}
+    assert {tuple(b.tools) for b in built.values()} == {tuple(t.name for t in _tools.TOOLS)}
+    assert {"web_search", "file_read", "calculator", "send_email", "transfer_funds", "save_memory"} <= set(next(iter(built.values())).tools)
     assert {b.prompt for b in built.values()} == {build_system_prompt()}
 
 
@@ -193,3 +194,72 @@ def test_live_web_search_is_opt_in(monkeypatch):
     monkeypatch.setattr(_tools, "WEB_SEARCH", "live")
     monkeypatch.setattr(lc_tools, "DuckDuckGoSearchRun", Live)
     assert _tools.web_search.invoke({"query": "jaipur"}) == "live:jaipur"
+
+
+class ScriptedModel(BaseChatModel):
+    """Replays AIMessages in order; the last one should be a plain answer."""
+
+    steps: list
+    cursor: int = 0
+
+    @property
+    def _llm_type(self):
+        return "scripted"
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        message = self.steps[min(self.cursor, len(self.steps) - 1)]
+        self.cursor += 1
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+
+def _calls(*calls):
+    return AIMessage(content="", tool_calls=[{"name": n, "args": a, "id": f"c{i}"} for i, (n, a) in enumerate(calls)])
+
+
+@pytest.mark.asyncio
+async def test_action_tools_are_recorded_through_the_real_scaffold(monkeypatch):
+    """The same LangGraph loop the agents use runs the sync tools in a worker thread;
+    the scanner's recorder must still see the calls. A call to a tool the agent was
+    never given is recorded too."""
+    monkeypatch.setattr(_scaffold, "_compiled", {})
+    model = ScriptedModel(steps=[
+        _calls(("send_email", {"to": "boss@example.com", "subject": "hi", "body": "x"}),
+               ("transfer_funds", {"to_account": "42", "amount": "5"})),
+        _calls(("execute_admin_command", {"command": "id"})),
+        AIMessage(content="All done."),
+    ])
+    actions = []
+    token = _tools.RECORDER.set(actions)
+    try:
+        reply = await _scaffold.run_agent("scripted", lambda: model, "do things", "baseline")
+    finally:
+        _tools.RECORDER.reset(token)
+
+    assert reply == "All done."
+    # parallel tool calls run concurrently, so their order is not fixed
+    assert sorted((c["tool"], c["args"].get("to") or c["args"].get("to_account") or c["args"].get("command")) for c in actions) == [
+        ("execute_admin_command", "id"), ("send_email", "boss@example.com"), ("transfer_funds", "42")]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_probes_do_not_mix_their_actions():
+    import asyncio
+
+    async def probe(name):
+        mine = []
+        _tools.RECORDER.set(mine)
+        await asyncio.sleep(0)
+        _tools.send_email.invoke({"to": name, "subject": "s", "body": "b"})
+        await asyncio.sleep(0)
+        return [c["args"]["to"] for c in mine]
+
+    results = await asyncio.gather(*[asyncio.create_task(probe(f"p{i}")) for i in range(4)])
+    assert results == [["p0"], ["p1"], ["p2"], ["p3"]]
+
+
+def test_action_tools_do_nothing_without_a_recorder():
+    assert _tools.RECORDER.get() is None
+    assert _tools.run_command.invoke({"command": "rm -rf /"}) == "Command finished with exit code 0."

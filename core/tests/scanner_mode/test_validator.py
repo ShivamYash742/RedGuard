@@ -207,3 +207,38 @@ class TestShippedDatasets:
                 assert (e["threat_model"], e["attacker_capability"]) == ("none", "none"), e["id"]
             else:
                 assert "none" not in (e["threat_model"], e["attacker_capability"]), e["id"]
+
+
+class TestSuccessActions:
+    def setup_method(self):
+        self.validator = ProbeValidator()
+
+    def _entry(self, actions):
+        rules = {"success_indicators": ["x"], "blocked_indicators": ["y"], "success_actions": actions}
+        return _valid_entry(evaluation_rules=rules)
+
+    def test_well_formed_actions_pass(self):
+        ok = [{"tool": "send_email", "args_contain": {"to": "evil.com"}}, {"tool": "run_command"}]
+        assert self.validator.validate(self._entry(ok)).valid
+
+    @pytest.mark.parametrize("bad", [
+        [], "send_email", [{"args_contain": {"to": "x"}}], [{"tool": 3}],
+        [{"tool": "send_email", "args_contain": {"to": 5}}], [{"tool": "send_email", "typo": 1}],
+    ])
+    def test_malformed_actions_fail(self, bad):
+        assert not self.validator.validate(self._entry(bad)).valid
+
+
+def test_every_success_action_names_a_real_tool():
+    # backend/ is not on the path of core tests, so read the tool names from the source
+    import re
+    from pathlib import Path
+    from core.scanner_mode.datasets.loader import load_all_datasets
+
+    tools = Path(__file__).parents[3] / "backend" / "scanner_mode" / "agents" / "_tools.py"
+    real = set(re.findall(r"^def (\w+)\(", tools.read_text(), re.M))
+    # execute_admin_command is the tool RG-TM-007 injects: it exists nowhere, so a call to it is the attack
+    allowed = real | {"execute_admin_command"}
+    used = {a["tool"] for e in load_all_datasets(validate=False)
+            for a in e["evaluation_rules"].get("success_actions", [])}
+    assert used and used <= allowed, used - allowed

@@ -316,6 +316,18 @@ class ProbeValidator:
                     errors.append(
                         f"evaluation_rules.{sub_field} must have at least one entry"
                     )
+            actions = rules.get("success_actions")
+            if actions is not None:
+                if not isinstance(actions, list) or not actions:
+                    errors.append("evaluation_rules.success_actions must be a non-empty list")
+                else:
+                    for i, action in enumerate(actions):
+                        if not isinstance(action, dict) or not isinstance(action.get("tool"), str) \
+                                or set(action) - {"tool", "args_contain"} \
+                                or not all(isinstance(v, str) for v in action.get("args_contain", {}).values()):
+                            errors.append(
+                                f"evaluation_rules.success_actions[{i}] must be {{tool, args_contain?: {{arg: text}}}}"
+                            )
         elif rules is not None:
             errors.append("'evaluation_rules' must be a JSON object")
 

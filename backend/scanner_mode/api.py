@@ -108,6 +108,9 @@ async def get_session(session_id: str):
         if isinstance(ev.get('classifierResult'), str):
             try: ev['classifierResult'] = json.loads(ev['classifierResult'])
             except: pass
+        if isinstance(ev.get('recordedActions'), str):
+            try: ev['recordedActions'] = json.loads(ev['recordedActions'])
+            except: pass
     return d
 
 @router.get("/api/events")
@@ -134,6 +137,9 @@ async def get_events(category: str = None, status: str = None, sessionId: str = 
             except: pass
         if isinstance(d.get('classifierResult'), str):
             try: d['classifierResult'] = json.loads(d['classifierResult'])
+            except: pass
+        if isinstance(d.get('recordedActions'), str):
+            try: d['recordedActions'] = json.loads(d['recordedActions'])
             except: pass
         res.append(d)
     return res

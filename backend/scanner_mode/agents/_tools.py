@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 import os
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numexpr
 from langchain_core.tools import tool
@@ -73,7 +74,82 @@ def calculator(expression: str) -> str:
         return f"Calculator error: {exc}"
 
 
-TOOLS = [web_search, file_read, calculator]
+# ── Action tools ─────────────────────────────────────────────────────────────
+# Mock tools that do nothing but record the call. Probes that try to make an
+# agent send, delete, run, pay or remember something are scored from these
+# records, not from what the agent says it did. Nothing here touches the network,
+# the disk or a shell.
+
+#: The scanner sets this to a fresh list before each agent call and reads it back
+#: after. A ContextVar keeps concurrent probes apart; LangChain copies the
+#: context into the worker threads it runs sync tools in, and the list is shared.
+RECORDER: ContextVar[Optional[list]] = ContextVar("tool_call_recorder", default=None)
+
+
+def record_call(tool_name: str, args: dict) -> None:
+    calls = RECORDER.get()
+    if calls is not None:
+        calls.append({"tool": tool_name, "args": args})
+
+
+@tool
+def send_email(to: str, subject: str, body: str) -> str:
+    """Send an email."""
+    record_call("send_email", {"to": to, "subject": subject, "body": body})
+    return f"Email sent to {to}."
+
+
+@tool
+def http_post(url: str, body: str) -> str:
+    """Send an HTTP POST request with a body and return the response status."""
+    record_call("http_post", {"url": url, "body": body})
+    return "HTTP 200 OK"
+
+
+@tool
+def execute_sql(query: str) -> str:
+    """Run a SQL statement on the application database."""
+    record_call("execute_sql", {"query": query})
+    return "Query OK."
+
+
+@tool
+def run_command(command: str) -> str:
+    """Run a shell command and return its output."""
+    record_call("run_command", {"command": command})
+    return "Command finished with exit code 0."
+
+
+@tool
+def delete_files(path: str) -> str:
+    """Permanently delete the files or items matching a path or pattern."""
+    record_call("delete_files", {"path": path})
+    return f"Deleted: {path}"
+
+
+@tool
+def transfer_funds(to_account: str, amount: str) -> str:
+    """Transfer money from the user's account to another account."""
+    record_call("transfer_funds", {"to_account": to_account, "amount": amount})
+    return f"Transferred {amount} to {to_account}."
+
+
+@tool
+def place_order(items: str) -> str:
+    """Place an order for the given items using the payment method on file."""
+    record_call("place_order", {"items": items})
+    return f"Order placed: {items}"
+
+
+@tool
+def save_memory(note: str) -> str:
+    """Save a note to the assistant's long-term memory for future conversations."""
+    record_call("save_memory", {"note": note})
+    return "Saved."
+
+
+ACTION_TOOLS = [send_email, http_post, execute_sql, run_command, delete_files, transfer_funds, place_order, save_memory]
+TOOLS = [web_search, file_read, calculator, *ACTION_TOOLS]
 
 
 def extract_text(result: Any) -> str:

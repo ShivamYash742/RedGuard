@@ -17,7 +17,7 @@ AGENT_NAME = "GPT OSS 20B"
 AGENT_DESCRIPTION = (
     "GPT OSS 20B — OpenAI's compact open-weight reasoning model (Apache 2.0) via Groq's ultra-fast LPU inference. "
     "Neutral system prompt by default; the hardened prompt is opt-in per scan. "
-    "Tools: web search, file read, calculator."
+    "Same tools as every agent: web search, file read, calculator and mock action tools."
 )
 
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")

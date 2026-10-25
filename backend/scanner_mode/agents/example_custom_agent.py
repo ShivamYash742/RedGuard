@@ -28,7 +28,7 @@ AGENT_NAME = "Custom Template Agent"
 AGENT_DESCRIPTION = (
     "Template for an OpenAI-compatible endpoint of your own. "
     "Runs in the shared scaffold: the same prompt, tools and step limit as every other agent. "
-    "Tools: web search, file read, calculator."
+    "Same tools as every agent: web search, file read, calculator and mock action tools."
 )
 
 LLM_ENDPOINT: str = os.getenv("CUSTOM_AGENT_URL", "http://localhost:5000/v1/chat/completions")
