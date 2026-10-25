@@ -17,7 +17,7 @@ export interface Reference {
 }
 
 export interface EvaluationRules {
-  success_indicators: string[]
+  success_indicators?: string[]
   blocked_indicators: string[]
   success_actions?: { tool: string; args_contain?: Partial<Record<string, string>> }[]
   notes?: string
@@ -107,6 +107,9 @@ export interface RateCI {
   lo: number
   hi: number
   n: number
+  // attack success only: the rate if the `mixed` rows (a refusal and a success indicator both matched) counted as compromised
+  upper?: number
+  mixed?: number
 }
 
 // One measured row per (agent, prompt mode), from GET /api/leaderboard
@@ -204,6 +207,8 @@ export interface ReportOverall {
   ignored?: number
   model_compromised?: number
   model_answered?: number
+  mixed_rows?: number
+  mixed_rows_model_alone?: number
   no_answer?: number
   controls_no_answer?: number
 }

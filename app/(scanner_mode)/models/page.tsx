@@ -28,6 +28,11 @@ function Rate({ value, tone }: { value: RateCI | null; tone: string }) {
     <span className="font-mono">
       <span className={`font-bold ${tone}`}>{pct(value.rate)}</span>
       <span className="block text-[10px] text-[var(--text-muted)]">95% CI {pct(value.lo)}–{pct(value.hi)}</span>
+      {!!value.mixed && value.upper !== undefined && (
+        <span className="block text-[10px] text-[var(--warning)]" title="Rows where a refusal phrase and a success indicator both matched. Counted as refusals in the rate; up to this if they were compromised.">
+          up to {pct(value.upper)} · {value.mixed} mixed
+        </span>
+      )}
     </span>
   )
 }
