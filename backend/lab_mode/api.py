@@ -135,6 +135,7 @@ def _case_summary(case: Dict[str, Any]) -> Dict[str, Any]:
         "severity": case["severity"],
         "task_endorses_channel": case.get("task_endorses_channel"),
         "role": case.get("role", "attack"),
+        "split": case.get("split", "dev"),
         "topology_id": case["topology_id"],
         "cee_fixture": case["cee_fixture"],
         "objective": case["objective"]["description"],

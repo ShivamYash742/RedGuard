@@ -65,9 +65,26 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
                 <span className="block text-[10px] text-[var(--text-muted)]">
                   {r.promptMode ?? 'agent default'} · last run {new Date(r.lastRun).toLocaleDateString()}
                 </span>
+                {r.headlineSplit && (
+                  <span className="block text-[10px] text-[var(--text-muted)]" title="The held-out test split is the one whose numbers may be quoted; the dev split was used to build the benchmark.">
+                    {r.headlineSplit} split
+                  </span>
+                )}
+                {!!r.noDifferenceFrom?.length && (
+                  <span className="block text-[10px] text-[var(--warning)]" title="A paired per-probe test finds no difference between this row and these, so their order is not a ranking.">
+                    not separable from {r.noDifferenceFrom.join(', ')}
+                  </span>
+                )}
               </td>
               <td className="font-mono text-xs text-center">{r.runs}</td>
-              <td className="text-xs"><Rate value={r.asrModel} tone="text-[var(--danger)]" /></td>
+              <td className="text-xs">
+                <Rate value={r.asrModel} tone="text-[var(--danger)]" />
+                {r.exposure && r.asrModelExposed && (
+                  <span className="block text-[10px] text-[var(--text-muted)]" title="Among attacks the agent actually met: indirect attacks count only if it read the planted result.">
+                    exposed only {pct(r.asrModelExposed.rate)} · read the planted result in {r.exposure.exposed} of {r.exposure.indirect} indirect attacks
+                  </span>
+                )}
+              </td>
               <td className="text-xs"><Rate value={r.asrDeployed} tone="text-[var(--danger)]" /></td>
               <td className="font-mono text-xs min-w-[9rem]">
                 <TierBar counts={r.tiers} total={r.attacks} height="h-1.5" />

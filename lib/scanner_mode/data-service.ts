@@ -128,6 +128,14 @@ export interface LeaderboardRow {
   tiers: TierCounts
   asrModel: RateCI | null
   asrDeployed: RateCI | null
+  /** The split the row's numbers are computed on: the held-out 'test' split when the runs cover it. */
+  headlineSplit?: 'dev' | 'test'
+  /** Attack success among attacks the agent actually met (indirect ones whose planted result it read). */
+  asrModelExposed?: RateCI | null
+  exposure?: { indirect: number; exposed: number } | null
+  /** Rows this one cannot be told apart from by a paired per-probe test: its rank is not a claim against them. */
+  noDifferenceFrom?: string[]
+  bySplit?: Record<string, { attacks: number; asrModel: RateCI | null; asrDeployed: RateCI | null }>
   families: Record<string, { total: number; compromised: number; modelAnswered: number; modelCompromised: number }>
   noAnswer: { attacks: number; controls: number }
   controls: { total: number; overRefused: number; unclear: number; filtered: number }

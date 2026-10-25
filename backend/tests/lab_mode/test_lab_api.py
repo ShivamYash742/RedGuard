@@ -98,8 +98,9 @@ class TestCatalogEndpoints:
         assert len(body["cases"]) == 40
         first = body["cases"][0]
         for key in ("id", "title", "family", "injection_point", "channel",
-                    "eligible_downstream_agents", "expected_path"):
+                    "eligible_downstream_agents", "expected_path", "split"):
             assert key in first
+        assert {c["split"] for c in body["cases"]} == {"dev", "test"}
 
     def test_get_one_case_returns_the_full_json(self, client):
         case = client.get("/api/lab/cases/RGM-001").json()
