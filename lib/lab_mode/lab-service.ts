@@ -226,6 +226,15 @@ export interface ExperimentMetrics {
     /** Only agents that acted on an upstream agent's message without reading the artifact themselves. */
     cpr_message?: number | 'n/a'
     cpr_message_denominator_size?: number
+    /** How many runs had the chance to meet the artifact and how many did; rates given exposure leave out the rest. */
+    exposure?: {
+      n_valid: number
+      n_unrecorded: number
+      n_opportunity: number
+      n_exposed: number
+      asr_given_exposure: RateWithCI
+      icr_given_exposure: RateWithCI
+    }
     cpr_denominator_size: number
     depth: number[]
     coverage: number[]

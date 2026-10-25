@@ -230,7 +230,7 @@ class TestExperimentExecution:
         verdict = next(e["data"] for e in result["events"] if e["event"] == "run_verdict")["verdict"]
         # `baseline_runs` and `propagation` are provenance (how many clean runs defined normal
         # behaviour; how the attack reached each influenced agent), not a fifth dimension.
-        assert set(verdict) - {"baseline_runs", "propagation"} == {"agent_impact", "objective", "containment", "system_outcome"}
+        assert set(verdict) - {"baseline_runs", "propagation", "exposure"} == {"agent_impact", "objective", "containment", "system_outcome"}
         assert set(verdict["agent_impact"]) == {"A", "B", "C"}
 
     def test_progress_counts_reach_the_declared_total(self, client):

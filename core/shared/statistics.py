@@ -135,7 +135,9 @@ def clustered_rate(
     where a bootstrap over a few clusters collapses to a zero-width interval.
 
     One item per cluster (a single run): nothing to cluster over, so the plain
-    Wilson interval. No variation at all: the correlation cannot be estimated,
+    Wilson interval. A single cluster holding several items: they are repetitions
+    of one task, so the effective sample is 1 (the number of clusters), not the
+    repetition count. No variation at all: the correlation cannot be estimated,
     and each cluster counts once, the conservative reading since uniform
     outcomes are exactly what perfectly correlated items produce.
     """
@@ -152,7 +154,9 @@ def clustered_rate(
     icc: Optional[float] = None
     n_eff = float(n)
     method = "wilson"
-    if k >= 2 and n > k:
+    if k == 1 and n > 1:
+        n_eff, method = 1.0, "wilson_single_cluster"
+    elif k >= 2 and n > k:
         msb = sum(m * (p - value) ** 2 for m, p in zip(sizes, rates)) / (k - 1)
         msw = sum(m * p * (1 - p) for m, p in zip(sizes, rates)) / (n - k)
         n0 = (n - sum(m * m for m in sizes) / n) / (k - 1)

@@ -37,6 +37,7 @@ from .metrics import (
     cpr_denominator,
     cpr_message,
     cpr_message_denominator,
+    exposure_counts,
     depth,
     icr,
     macro_average,
@@ -64,6 +65,13 @@ def _case_metrics(subset: Sequence[RunOutcome]) -> Dict[str, Any]:
             "cpr": cpr(subset), "soc": soc(subset)}
 
 
+def exposure_summary(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
+    """Counts of valid / opportunity / exposed runs and ASR / ICR given exposure (see `exposure_counts`)."""
+    counts = exposure_counts(valid)
+    exposed = counts.pop("exposed_runs")
+    return {**counts, "asr_given_exposure": rate_summary(exposed, asr), "icr_given_exposure": rate_summary(exposed, icr)}
+
+
 def headline(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
     """The §10 aggregates over the runs that count (attack cases whose objective is reachable
     in their arm; `metrics.in_scope`). Controls and unreachable cases are left out and reported
@@ -80,6 +88,7 @@ def headline(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
         "cpr_message": cpr_message(scoped),
         "cpr_message_denominator_size": len(cpr_message_denominator(scoped)),
         "cpr_denominator_size": len(cpr_denominator(scoped)),
+        "exposure": exposure_summary(scoped),
         "depth": depth(scoped),
         "coverage": coverage(scoped),
         "mean_coverage": mean_coverage(scoped),

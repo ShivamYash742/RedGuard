@@ -882,6 +882,18 @@ function Rates({ metrics }: { metrics: ExperimentMetrics }) {
               </td>
               <td className="text-sm text-[var(--text-secondary)]">{a.cpr_denominator_size} eligible runs</td>
             </tr>
+            {a.exposure && (
+              <tr>
+                <td>Attack reached an agent <span className="text-xs text-[var(--text-secondary)]">exposure</span></td>
+                <td className="text-right font-mono tabular-nums">{a.exposure.n_exposed} / {a.exposure.n_valid}</td>
+                <td className="text-sm text-[var(--text-secondary)]">
+                  A run in which no agent ever read the planted content counts as resisted in the rates above. Attack success among the exposed runs only: {formatRate(a.exposure.asr_given_exposure.value)}.
+                </td>
+                <td className="text-sm text-[var(--text-secondary)]">
+                  {a.exposure.n_opportunity} had the opportunity{a.exposure.n_unrecorded > 0 && `, ${a.exposure.n_unrecorded} stored without exposure flags`}
+                </td>
+              </tr>
+            )}
             {a.cpr_message !== undefined && (
               <tr>
                 <td>Propagated by message <span className="text-xs text-[var(--text-secondary)]">CPR, message</span></td>
