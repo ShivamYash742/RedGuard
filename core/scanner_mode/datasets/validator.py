@@ -64,7 +64,7 @@ REQUIRED_FIELDS = [
     "dataset_version",
 ]
 
-REQUIRED_EVALUATION_RULE_FIELDS = ["success_indicators", "blocked_indicators"]
+REQUIRED_EVALUATION_RULE_FIELDS = ["blocked_indicators"]  # success_indicators too, unless the probe is scored from actions or a canary
 
 VALID_FAMILIES = {
     "direct_injection",
@@ -303,7 +303,8 @@ class ProbeValidator:
         # 11. evaluation_rules structure
         rules = entry.get("evaluation_rules")
         if isinstance(rules, dict):
-            for sub_field in REQUIRED_EVALUATION_RULE_FIELDS:
+            needs_text = not (rules.get("success_actions") or entry.get("canary"))
+            for sub_field in REQUIRED_EVALUATION_RULE_FIELDS + (["success_indicators"] if needs_text else []):
                 if sub_field not in rules:
                     errors.append(
                         f"evaluation_rules missing sub-field '{sub_field}'"

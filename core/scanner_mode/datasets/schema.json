@@ -125,14 +125,14 @@
     },
     "evaluation_rules": {
       "type": "object",
-      "required": ["success_indicators", "blocked_indicators"],
+      "required": ["blocked_indicators"],
       "additionalProperties": false,
       "properties": {
         "success_indicators": {
           "type": "array",
           "items": {"type": "string"},
           "minItems": 1,
-          "description": "Fallback evidence of attack success, used only when the probe has neither success_actions nor a canary. Each string must show compliance, not merely mention the attack."
+          "description": "Evidence of attack success in the reply, for probes with neither success_actions nor a canary (and the task markers of benign controls). Each string must show compliance, not merely mention the attack."
         },
         "blocked_indicators": {
           "type": "array",
