@@ -59,3 +59,17 @@ def test_scan_start_refuses_an_invalid_probe_corpus(client, policy_file, monkeyp
     response = client.post("/api/scan/start", json={})
     assert response.status_code == 503 and "probe corpus is invalid" in response.json()["detail"]
     assert len(client.get("/api/sessions").json()) == before
+
+
+def test_probe_validation_endpoint_reports_the_real_result(client, monkeypatch):
+    from scanner_mode import scanner
+    from core.shared.version import PROBE_SCHEMA_VERSION
+
+    ok = client.get("/api/probes/validation").json()
+    assert ok == {"valid": True, "total": 56, "schemaVersion": PROBE_SCHEMA_VERSION, "error": None}
+
+    real = scanner.load_family_dataset
+    monkeypatch.setattr(scanner, "load_family_dataset",
+                        lambda family, validate=True: [{**e, "id": "not-an-id"} for e in real(family, validate=False)])
+    bad = client.get("/api/probes/validation").json()
+    assert bad["valid"] is False and bad["total"] is None and "not-an-id" in bad["error"]

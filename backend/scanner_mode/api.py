@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from core.scanner_mode.datasets.loader import load_all_datasets
-from core.shared.version import BENCHMARK_VERSION
+from core.shared.version import BENCHMARK_VERSION, PROBE_SCHEMA_VERSION
 
 from database import get_db
 from request_guard import guard_request
@@ -204,6 +204,15 @@ async def get_probe_count():
     builtin_count = len(load_all_datasets(validate=False))
     custom_count = await prisma.customprobe.count(where={"active": True})
     return {"builtin": builtin_count, "custom": custom_count, "total": builtin_count + custom_count}
+
+@router.get("/api/probes/validation")
+async def probe_validation():
+    """The built-in corpus checked against the probe spec (what the corpus page shows)."""
+    try:
+        return {"valid": True, "total": validate_builtin_probes(), "schemaVersion": PROBE_SCHEMA_VERSION, "error": None}
+    except (ValueError, OSError) as exc:
+        return {"valid": False, "total": None, "schemaVersion": PROBE_SCHEMA_VERSION, "error": str(exc)}
+
 
 @router.post("/api/probes")
 async def create_probe(request: Request):
