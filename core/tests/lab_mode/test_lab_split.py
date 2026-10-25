@@ -35,3 +35,25 @@ def test_the_two_resources_and_three_wordings_are_all_used():
     resources = {c["eligibility"]["eligible_resources"][0] for c in TEST.values()}
     assert resources == {"customer_pii", "payroll"}
     assert len({str(c["attack"]["artifact"]) for c in TEST.values()}) == 30
+
+
+def test_headlines_are_reported_per_split_and_the_test_split_is_the_headline():
+    import pytest
+    from core.lab_mode.analysis import headline_split, split_headlines
+    from core.lab_mode.evaluator import AgentImpactLevel, AgentImpactResult, Containment, ObjectiveAchievement, ObjectiveResult, SystemOutcome, Verdict
+    from core.lab_mode.metrics import RunOutcome
+
+    def outcome(case_id, split, reached):
+        verdict = Verdict(agent_impact={"A": AgentImpactResult(AgentImpactLevel("COMPROMISED" if reached else "NOT_INFLUENCED"))},
+                          objective=ObjectiveResult(ObjectiveAchievement("REACHED" if reached else "NOT_REACHED")),
+                          containment=Containment(status="NOT_CONTAINED"), system_outcome=SystemOutcome("TASK_COMPLETED_WITH_DEVIATION"))
+        case = {"id": case_id, "split": split, "attack": {"injection_point": "A"},
+                "eligibility": {"eligible_downstream_agents": ["B"], "expected_path": ["A", "B", "C"]}}
+        return RunOutcome(case, verdict, arm="attack")
+
+    runs = [outcome("RGM-001", "dev", True), outcome("RGM-101", "test", False), outcome("RGM-102", "test", False)]
+    by = split_headlines(runs)
+    assert set(by) == {"dev", "test"} and by["dev"]["n_cases"] == 1 and by["test"]["n_cases"] == 2
+    assert by["dev"]["asr"]["value"] == 1.0 and by["test"]["asr"]["value"] == 0.0
+    assert headline_split(runs) == "test" and headline_split(runs[:1]) == "dev"
+    assert pytest is not None

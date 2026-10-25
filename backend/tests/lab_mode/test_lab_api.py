@@ -473,7 +473,7 @@ class TestCompareEndpoint:
     def test_comparison_carries_the_caveat(self, client):
         first, second = self._two_arms(client)
         body = client.get(f"/api/lab/compare?experiments={first},{second}").json()
-        assert "significance test" in body["comparisons"]["EXP-6b"]["caveat"]
+        assert "sign-flip test" in body["comparisons"]["EXP-6b"]["caveat"]
 
     def test_one_experiment_is_400(self, client):
         experiment = _create_experiment(client)

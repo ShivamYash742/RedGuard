@@ -44,7 +44,9 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-from core.lab_mode.analysis import ARMS, arm_summary, comparability_problems, compare_standard, headline, scope_report
+from core.lab_mode.analysis import (
+    ARMS, arm_summary, comparability_problems, compare_standard, headline, headline_split, scope_report, split_headlines,
+)
 from core.lab_mode.cases import (
     CASES_DIR,
     FIXTURES_DIR,
@@ -798,6 +800,8 @@ async def experiment_metrics(experiment_id: str):
         # in `excluded`, and the old all-cases headline is `pooled_legacy`.
         "aggregate": headline(outcomes),
         **scope_report(outcomes),
+        "headline_split": headline_split(outcomes),
+        "by_split": split_headlines(outcomes),
         "per_case": per_case,
         # Macro average weights every case equally. The micro figures above
         # weight by run count, so a case that happened to run more often
