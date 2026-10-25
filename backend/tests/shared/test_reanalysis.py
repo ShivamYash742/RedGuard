@@ -220,6 +220,7 @@ class TestLabReevaluation:
         assert summary["metric_2_0_0_reevaluated_traces"]["asr"]["value"] == 0.0
         assert summary["stored_versions"]["evaluator_version"] == "1.2.0"
         assert summary["counts"]["attack_runs_completed"] == 1
+        assert summary["counts"]["pairs_with_two_completed_attack_rows"] == 0
 
     def test_a_real_hit_stays_a_hit(self, tmp_path):
         db = tmp_path / "lab.db"

@@ -132,6 +132,10 @@ def analyse_experiment(conn: sqlite3.Connection, experiment: sqlite3.Row) -> Tup
             "runs_total": len(runs), "attack_runs_total": len(attack_runs),
             "attack_runs_with_a_stored_verdict": sum(1 for r in attack_runs if r["verdict_json"]),
             "attack_runs_completed": len(completed),
+            # a pair a resume ran again has two COMPLETED attack rows under one pair id; the metrics keep the latest
+            "pairs_with_two_completed_attack_rows": sum(
+                1 for pair in {r["pair_id"] for r in attack_runs}
+                if sum(1 for r in attack_runs if r["pair_id"] == pair and r["status"] == "COMPLETED" and r["verdict_json"]) > 1),
             "valid_attack_runs": len(valid_new),
             "failed_runs": sum(1 for r in runs if r["status"] == "FAILED"),
         },

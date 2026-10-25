@@ -3,7 +3,7 @@
 **Re-analysis of stored outputs; no new model runs.**
 
 - Source: `research_results_combined.db` (SHA-256 `762bbbe1b6a3d8d8defb2e45a0fb2fdf50845116a8d4eaad8dadd4344abf8234`)
-- Generated 2026-10-25T12:01:01+00:00 by `scripts/reanalysis/run_all.py` at commit `20ffa1a06d`
+- Generated 2026-10-25T12:04:09+00:00 by `scripts/reanalysis/run_all.py` at commit `34171a3b6b`
 - Current code: Scanner benchmark 5.0.0, Lab evaluator 2.0.0, metrics 2.0.0
 
 ## Lab mode: stored 1.2.0 verdicts against re-evaluated traces (evaluator and metrics 2.0.0)
@@ -19,7 +19,7 @@ Every stored trace was evaluated again against its case's current definition, wi
 | ministral-3:3b | 9 | 0.0% (0/9) | 6 | 0.0% (0/6) | 3 / 6 | 0.0% (0/3) | n/a (0) | n/a (0) | n/a (0) | 9 |
 | gemma3:4b | 18 | 27.8% (5/18) | 13 | 7.7% (1/13) | 13 / 13 | 7.7% (1/13) | 1.00 (5) | 1.00 (5) | 0.60 (5) | 5 |
 
-- Stored attack-run verdicts: **163**; completed attack runs the metrics use: **162** (the difference is a failed attack run that kept a verdict, in qwen3:1.7b (28 vs 27)).
+- Stored attack-run verdicts: **163**; distinct completed attack pairs the metrics use: **162**. The difference is a pair that a resume ran again, which left two COMPLETED attack rows (two verdicts) under one pair id: qwen3:1.7b: 1 pair(s). The metrics keep the latest row per pair.
 - Runs whose objective level changed: **23** of 162. Per run: `lab_runs.csv`; per case, old and new objective counts: `lab_summary.json`.
 
 ## Scanner mode: what can and cannot be re-scored

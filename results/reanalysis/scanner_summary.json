@@ -3,8 +3,8 @@
     "note": "Re-analysis of stored outputs; no new model runs.",
     "source_db": "research_results_combined.db",
     "source_sha256": "762bbbe1b6a3d8d8defb2e45a0fb2fdf50845116a8d4eaad8dadd4344abf8234",
-    "generated_at": "2026-10-25T12:01:01+00:00",
-    "analysis_code_git_commit": "20ffa1a06dc95902cd42bf5228c43aa68c5bd009",
+    "generated_at": "2026-10-25T12:04:09+00:00",
+    "analysis_code_git_commit": "34171a3b6b0d265e5b4e247acc0d72581e1dd5ae",
     "scanner_versions": {
       "benchmark_version": "5.0.0",
       "dataset_version": "5.0.0",

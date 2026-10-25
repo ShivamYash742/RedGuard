@@ -60,10 +60,12 @@ def summary_markdown(stamp_: Dict[str, Any], lab: Dict[str, Any], scanner: Dict[
                    f"{e['runs_whose_verdict_changed']} |")
     total_verdicts = sum(e["counts"]["attack_runs_with_a_stored_verdict"] for e in lab["experiments"])
     total_completed = sum(e["counts"]["attack_runs_completed"] for e in lab["experiments"])
-    out += ["", f"- Stored attack-run verdicts: **{total_verdicts}**; completed attack runs the metrics use: **{total_completed}** "
-                "(the difference is a failed attack run that kept a verdict, in "
-                + ", ".join(f"{e['model']} ({e['counts']['attack_runs_with_a_stored_verdict']} vs {e['counts']['attack_runs_completed']})"
-                            for e in lab["experiments"] if e["counts"]["attack_runs_with_a_stored_verdict"] != e["counts"]["attack_runs_completed"]) + ")."]
+    duplicates = [(e["model"], e["counts"]["pairs_with_two_completed_attack_rows"]) for e in lab["experiments"]
+                  if e["counts"]["pairs_with_two_completed_attack_rows"]]
+    out += ["", f"- Stored attack-run verdicts: **{total_verdicts}**; distinct completed attack pairs the metrics use: **{total_completed}**. "
+                "The difference is a pair that a resume ran again, which left two COMPLETED attack rows (two verdicts) under one pair id: "
+                + (", ".join(f"{m}: {n} pair(s)" for m, n in duplicates) if duplicates else "none")
+                + ". The metrics keep the latest row per pair."]
     changed = [r for r in lab["rows"] if r["old_objective"] != r["new_objective"]]
     out.append(f"- Runs whose objective level changed: **{len(changed)}** of {len(lab['rows'])}. "
                "Per run: `lab_runs.csv`; per case, old and new objective counts: `lab_summary.json`.")
