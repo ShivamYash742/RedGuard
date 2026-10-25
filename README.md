@@ -42,6 +42,9 @@ how to produce a publishable result: [`docs/evaluation_protocol.md`](./docs/eval
 - **Labelling.** `scripts/reanalysis/labels.py export --per-method N` builds a sheet (prompt, reply, tool calls,
   scoring method) for two people; `agree` reports kappa and the scorer's accuracy and recall per method.
 
+Guides: [`docs/viva_guide.md`](./docs/viva_guide.md) (the whole project, for a viva; PDF alongside) and
+[`docs/colab_guide.md`](./docs/colab_guide.md) (run a 7–10B model on a free Colab GPU instead of a local Ollama).
+
 Still true: **no model has been run under 6.0.0**, the scorer has no measured accuracy yet, and the 11
 phrase-scored probes live in the dev split only.
 
