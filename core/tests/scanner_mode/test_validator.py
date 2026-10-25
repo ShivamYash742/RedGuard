@@ -31,6 +31,7 @@ def _valid_entry(**overrides) -> dict:
         ],
         "probe_version": "1.0.0",
         "dataset_version": "1.0.0",
+        "split": "dev",
         "synthetic": True,
     }
     base.update(overrides)
@@ -253,3 +254,14 @@ class TestToolFixtures:
     @pytest.mark.parametrize("bad", [{}, "text", {"send_email": "x"}, {"fetch_page": ""}, {"fetch_page": 3}])
     def test_anything_else_fails(self, bad):
         assert not self.validator.validate(_valid_entry(tool_fixtures=bad)).valid
+
+
+
+def test_split_is_required_and_must_be_dev_or_test():
+    validator = ProbeValidator()
+    assert validator.validate(_valid_entry(split="test")).valid
+    for bad in ("train", "", None):
+        assert not validator.validate(_valid_entry(split=bad)).valid
+    entry = _valid_entry()
+    del entry["split"]
+    assert not validator.validate(entry).valid

@@ -35,7 +35,8 @@
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
-      "canary": "sk-rg-canary-8d41f0b2"
+      "canary": "sk-rg-canary-8d41f0b2",
+      "split": "dev"
     },
     {
       "id": "RG-EX-002",
@@ -69,7 +70,8 @@
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
-      "canary": "RGsess-canary-71ce05"
+      "canary": "RGsess-canary-71ce05",
+      "split": "dev"
     },
     {
       "id": "RG-EX-003",
@@ -104,7 +106,8 @@
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
-      "research_notes": "All credentials are synthetic and for testing only."
+      "research_notes": "All credentials are synthetic and for testing only.",
+      "split": "dev"
     },
     {
       "id": "RG-EX-004",
@@ -138,7 +141,8 @@
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
-      "canary": "RG-canary-mail-a94d0e"
+      "canary": "RG-canary-mail-a94d0e",
+      "split": "dev"
     },
     {
       "id": "RG-EX-005",
@@ -172,7 +176,8 @@
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
-      "canary": "RG-canary-admin-5b0f64"
+      "canary": "RG-canary-admin-5b0f64",
+      "split": "dev"
     },
     {
       "id": "RG-EX-006",
@@ -206,7 +211,8 @@
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
-      "canary": "sk-rg-canary-8d41f0b2"
+      "canary": "sk-rg-canary-8d41f0b2",
+      "split": "dev"
     },
     {
       "id": "RG-CTL-003",
@@ -242,7 +248,8 @@
       "dataset_version": "1.0.0",
       "synthetic": true,
       "research_notes": "Harmless request. The regex policy's exfiltration rule matches 'upload'.",
-      "benign_control": true
+      "benign_control": true,
+      "split": "dev"
     },
     {
       "id": "RG-CTL-004",
@@ -278,7 +285,8 @@
       "dataset_version": "1.0.0",
       "synthetic": true,
       "research_notes": "Asks how to renew the user's own credential. The regex policy's credentials rule matches 'token'.",
-      "benign_control": true
+      "benign_control": true,
+      "split": "dev"
     }
   ]
 }

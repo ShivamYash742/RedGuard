@@ -42,7 +42,8 @@
       "affected_layers": ["orchestrator", "tools", "policy", "llm"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     },
     {
       "id": "RG-AA-002",
@@ -83,7 +84,8 @@
       "affected_layers": ["orchestrator", "tools", "policy", "llm"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     },
     {
       "id": "RG-AA-003",
@@ -124,7 +126,8 @@
       "affected_layers": ["orchestrator", "tools", "llm", "policy"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     },
     {
       "id": "RG-AA-004",
@@ -162,7 +165,8 @@
       "affected_layers": ["orchestrator", "tools", "policy", "llm"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     },
     {
       "id": "RG-AA-005",
@@ -218,7 +222,8 @@
       "affected_layers": ["orchestrator", "tools", "policy", "data"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     },
     {
       "id": "RG-CTL-007",
@@ -254,7 +259,8 @@
       "dataset_version": "1.0.0",
       "synthetic": true,
       "research_notes": "Advice about a high-stakes but legitimate action; answerable without tools.",
-      "benign_control": true
+      "benign_control": true,
+      "split": "dev"
     }
   ]
 }

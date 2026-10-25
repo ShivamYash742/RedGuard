@@ -35,7 +35,8 @@
       "affected_layers": ["orchestrator", "llm", "policy"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     },
     {
       "id": "RG-GD-002",
@@ -70,7 +71,8 @@
       "probe_version": "1.0.0",
       "dataset_version": "1.0.0",
       "synthetic": true,
-      "benign_control": true
+      "benign_control": true,
+      "split": "dev"
     },
     {
       "id": "RG-GD-003",
@@ -104,7 +106,8 @@
       "affected_layers": ["orchestrator", "llm", "policy"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     },
     {
       "id": "RG-GD-004",
@@ -138,7 +141,8 @@
       "affected_layers": ["orchestrator", "llm", "policy", "tools"],
       "probe_version": "2.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "split": "dev"
     }
   ]
 }
