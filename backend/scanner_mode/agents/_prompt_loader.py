@@ -7,11 +7,8 @@ Loads backend/scanner_mode/agents/system_prompts.json. Two modes, each the same
 for every agent so that models are compared on equal terms:
 
   baseline (default) — one neutral prompt; it names no attacks.
-  hardened           — assembled from:
-  1. The baseline prompt plus a security line
-  2. SCENARIO AWARENESS section (all 12 scenarios)
-  3. ATTACK FAMILY DEFENCES section (all 8 families)
-  4. TOOL USE PRINCIPLES
+  hardened           — the baseline prompt, a security line and six general principles.
+                       It names no attack phrase, family or scenario, so it cannot teach the test.
 
 Usage:
     from scanner_mode.agents._prompt_loader import build_system_prompt
@@ -41,52 +38,10 @@ def _load_raw() -> dict[str, Any]:
         return json.load(f)
 
 
-def _build_scenario_block(shared: dict[str, Any]) -> str:
-    """Render the SCENARIO AWARENESS section from shared data."""
-    sa = shared["scenario_awareness"]
-    lines: list[str] = [
-        _DIVIDER,
-        sa["_title"],
-        _DIVIDER,
-        sa["intro"],
-        "",
-    ]
-    for sc in sa["scenarios"].values():
-        lines.append(f"  \u2022 {sc['label']}")
-        for rule in sc["rules"]:
-            lines.append(f"    \u2014 {rule}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
-
-
-def _build_attack_block(shared: dict[str, Any]) -> str:
-    """Render the ATTACK FAMILY DEFENCES section from shared data."""
-    af = shared["attack_family_defences"]
-    lines: list[str] = [
-        "",
-        _DIVIDER,
-        af["_title"],
-        _DIVIDER,
-        "",
-    ]
-    for family in af["families"].values():
-        lines.append(f"{family['number']}. {family['label']}")
-        for rule in family["rules"]:
-            lines.append(f"   {rule}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
-
-
-def _build_tool_block(principles: list[str]) -> str:
-    """Render the TOOL USE PRINCIPLES section."""
-    lines: list[str] = [
-        "",
-        _DIVIDER,
-        "TOOL USE PRINCIPLES",
-        _DIVIDER,
-    ]
-    for p in principles:
-        lines.append(f"- {p}")
+def _build_principles_block(principles: list[str]) -> str:
+    """Render the numbered SECURITY PRINCIPLES section."""
+    lines = ["", _DIVIDER, "SECURITY PRINCIPLES", _DIVIDER]
+    lines += [f"{i}. {p}" for i, p in enumerate(principles, 1)]
     return "\n".join(lines)
 
 
@@ -107,9 +62,7 @@ def build_system_prompt(mode: str = "baseline") -> str:
     return "\n".join([
         raw["baseline"],
         shared["security_line"],
-        "\n" + _build_scenario_block(shared),
-        _build_attack_block(shared),
-        _build_tool_block(shared["tool_principles"]),
+        _build_principles_block(shared["principles"]),
     ])
 
 
