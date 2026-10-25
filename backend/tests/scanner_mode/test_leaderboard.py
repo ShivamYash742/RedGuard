@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timedelta
 from types import SimpleNamespace as NS
 
@@ -153,3 +154,12 @@ def test_attack_success_is_a_range_between_the_two_tie_breaks():
 def test_no_mixed_rows_means_a_degenerate_range():
     (row,) = leaderboard_rows([_session("a", "baseline", _run(True, 0))])
     assert row["asrModel"]["mixed"] == 0 and row["asrModel"]["upper"] == row["asrModel"]["rate"]
+
+
+def test_repeated_runs_do_not_make_the_interval_narrower_than_the_probes_justify():
+    # 6 identical runs of the same 3 probes: P1 always compromised
+    sessions = [_session("a", "baseline", _run(True, i), day=i) for i in range(6)]
+    (row,) = leaderboard_rows(sessions)
+    model = row["asrModel"]
+    assert model["n"] == 18 and model["nEff"] == pytest.approx(3)      # 3 probes, however often repeated
+    assert model["hi"] - model["lo"] > 0.5                              # not the ~0.4 that 18 independent trials would give

@@ -31,7 +31,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, median, pstdev, stdev
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar
+
+T = TypeVar("T")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,6 +115,57 @@ def wilson_ci(successes: int, trials: int, z: float = 1.96) -> Tuple[float, floa
     ) / denominator
 
     return (max(0.0, center - spread), min(1.0, center + spread))
+
+
+def clustered_rate(
+    groups: Mapping[str, Sequence[T]],
+    metric: Callable[[Sequence[T]], Optional[float]],
+) -> Dict[str, Any]:
+    """A rate with a 95% interval that respects clustering.
+
+    `groups` maps a cluster (a probe in Scanner mode, a case in Lab mode) to its
+    items; `metric` turns a group of items into a rate in [0, 1] (or None).
+    Items of one cluster share a task and wording, so they succeed or fail
+    together far more than independent draws do. A Wilson interval over the
+    pooled items treats 9 cases x 5 repetitions, or 46 probes x 3 runs, as that
+    many independent trials and comes out too narrow (Miller 2024, "Adding Error
+    Bars to Evals"). This is Wilson's interval over the Kish effective sample
+    size n / (1 + (m - 1) * icc), the intraclass correlation estimated by
+    one-way ANOVA across clusters. That keeps Wilson's behaviour at 0% and 100%,
+    where a bootstrap over a few clusters collapses to a zero-width interval.
+
+    One item per cluster (a single run): nothing to cluster over, so the plain
+    Wilson interval. No variation at all: the correlation cannot be estimated,
+    and each cluster counts once, the conservative reading since uniform
+    outcomes are exactly what perfectly correlated items produce.
+    """
+    items = [x for group in groups.values() for x in group]
+    value = metric(items)
+    n = len(items)
+    if value is None or n == 0:
+        return {"value": None, "n": n, "ci": None, "ci_method": None, "n_eff": None, "icc": None, "n_cases": 0}
+
+    sizes = [len(g) for g in groups.values()]
+    rates = [metric(g) for g in groups.values()]
+    k = len(groups)
+
+    icc: Optional[float] = None
+    n_eff = float(n)
+    method = "wilson"
+    if k >= 2 and n > k:
+        msb = sum(m * (p - value) ** 2 for m, p in zip(sizes, rates)) / (k - 1)
+        msw = sum(m * p * (1 - p) for m, p in zip(sizes, rates)) / (n - k)
+        n0 = (n - sum(m * m for m in sizes) / n) / (k - 1)
+        spread = msb + (n0 - 1) * msw
+        icc = 1.0 if spread <= 0 else min(1.0, max(0.0, (msb - msw) / spread))
+        n_eff = n / (1 + (n / k - 1) * icc)
+        method = "wilson_design_effect"
+
+    low, high = wilson_ci(value * n_eff, n_eff)
+    return {
+        "value": value, "n": n, "ci": [low, high], "ci_method": method,
+        "n_eff": n_eff, "icc": icc, "n_cases": k,
+    }
 
 
 def compute_statistics(values: List[float]) -> StatisticalSummary:

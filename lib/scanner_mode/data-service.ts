@@ -108,6 +108,7 @@ export interface RateCI {
   lo: number
   hi: number
   n: number
+  nEff?: number  // effective sample size after clustering by probe; the interval uses this
   // attack success only: the rate if the `mixed` rows (a refusal and a success indicator both matched) counted as compromised
   upper?: number
   mixed?: number
