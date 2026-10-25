@@ -91,3 +91,12 @@ def test_scan_start_rejects_an_unknown_agent(client, policy_file):
     response = client.post("/api/scan/start", json={"agentId": "no_such_agent"})
     assert response.status_code == 400 and "no_such_agent" in response.json()["detail"]
     assert len(client.get("/api/sessions").json()) == before
+
+
+@pytest.mark.parametrize("query,status", [
+    ("a=x:baseline&b=y:baseline&split=train", 400),
+    ("a=x&b=y:baseline", 400),
+    ("a=x:baseline&b=y:baseline", 404),       # nothing run
+])
+def test_leaderboard_compare_rejects_bad_requests(client, query, status):
+    assert client.get(f"/api/leaderboard/compare?{query}").status_code == status

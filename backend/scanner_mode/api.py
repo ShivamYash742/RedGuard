@@ -21,7 +21,7 @@ from database import get_db
 from request_guard import guard_request
 from scanner_mode.agent_loader import DEFAULT_AGENT_ID, get_agent, list_agents
 from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError, parse_policy
-from scanner_mode.leaderboard import leaderboard_rows
+from scanner_mode.leaderboard import compare_groups, leaderboard_rows
 from scanner_mode.schema import sha256_hex
 from scanner_mode.report_generator import generate_report_for_session
 from scanner_mode.scanner import (
@@ -65,6 +65,27 @@ async def get_leaderboard():
     prisma = await get_db()
     sessions = await prisma.session.find_many(include={"events": True})
     return leaderboard_rows(sessions)
+
+@router.get("/api/leaderboard/compare")
+async def compare_leaderboard_rows(a: str, b: str, split: str = "test", version: str = BENCHMARK_VERSION):
+    """Paired comparison of two leaderboard rows ("agentId:promptMode" each) on one split.
+
+    Says whether the rows differ at all: the leaderboard's order is only a claim where this does."""
+    if split not in ("dev", "test"):
+        raise HTTPException(status_code=400, detail="split must be 'dev' or 'test'")
+    keys = []
+    for value in (a, b):
+        agent, _, mode = value.partition(":")
+        if not agent or not mode:
+            raise HTTPException(status_code=400, detail="a and b must look like agentId:promptMode")
+        keys.append((agent, mode))
+    prisma = await get_db()
+    sessions = await prisma.session.find_many(include={"events": True})
+    try:
+        return compare_groups(sessions, keys[0], keys[1], split, version)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0]))
+
 
 @router.get("/api/sessions")
 async def list_sessions():

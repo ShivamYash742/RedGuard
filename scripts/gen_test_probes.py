@@ -482,24 +482,28 @@ BUILDERS = [direct_injection, content_injection, memory_poisoning, tool_manipula
             data_exfiltration, autonomous_actions, goal_diversion]
 
 
-def main() -> None:
+def generate() -> dict:
+    """{family: generated attacks followed by their controls}, with final ids. A pure function of this file."""
+    controls.clear()
     by_family = {}
     for build in BUILDERS:
         for e in build():
             by_family.setdefault(e["attack_family"], []).append(e)
-    next_control = 101
-    ctl_by_family: dict = {}
-    for e in controls.values():
-        e["id"] = f"RG-CTL-{next_control:03d}"
-        next_control += 1
-        ctl_by_family.setdefault(e["attack_family"], []).append(e)
+    for number, e in enumerate(controls.values(), start=101):
+        e["id"] = f"RG-CTL-{number:03d}"
+        by_family.setdefault(e["attack_family"], []).append(e)
+    return by_family
+
+
+def main() -> None:
+    generated = generate()
     for family, fname in FILES.items():
         path = DATASETS / fname
         data = json.loads(path.read_text(encoding="utf-8"))
-        kept = [e for e in data["entries"] if e.get("split") != "test"]
-        data["entries"] = kept + by_family.get(family, []) + ctl_by_family.get(family, [])
+        data["entries"] = [e for e in data["entries"] if e.get("split") != "test"] + generated.get(family, [])
         path.write_text(dumps(data) + "\n", encoding="utf-8")
-        print(f"{family:24s} +{len(by_family.get(family, [])):2d} attacks +{len(ctl_by_family.get(family, [])):2d} controls")
+        n_ctl = sum(1 for e in generated.get(family, []) if e.get("benign_control"))
+        print(f"{family:24s} +{len(generated.get(family, [])) - n_ctl:2d} attacks +{n_ctl:2d} controls")
 
 
 if __name__ == "__main__":

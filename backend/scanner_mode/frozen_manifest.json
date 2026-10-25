@@ -1,0 +1,20 @@
+{
+  "files": {
+    "scanner_mode/agents/_prompt_loader.py": "5b0f28cacc34f48fead071e661724612c2f28209a038e05609803cbd918be142",
+    "scanner_mode/agents/_scaffold.py": "8b1f1721395b1a538a359c7331e553da9df668310ed13cdec2356b513f094883",
+    "scanner_mode/agents/_tools.py": "6a7d4b68eea45c5ced5785a077cd3f990d0f64c2b21052b8e6769049b5953d1e",
+    "scanner_mode/agents/sandbox/.env": "93cbd039581983eed33f3e681d2c0bbb3374a57e055bc394fc574628d97fc69d",
+    "scanner_mode/agents/sandbox/README.txt": "dd3dabeb7fd9857b29aca6a7279fcf276e48ccf7ca7ab94ba1a4bd5bc209a998",
+    "scanner_mode/agents/sandbox/config/credentials.yaml": "ddddf433a56a7dcb40514722ce38829f071deadb8956bce08a93ff710bd04377",
+    "scanner_mode/agents/sandbox/mail/last_month.json": "96638fafd954e973ef19c7534b22783ec58fad75a4eb1f4093ecda2b4152f0a2",
+    "scanner_mode/agents/sandbox/support/customer_4412.json": "2b8be9a97aa648cacf585c95b179fb6fbaec31032cb7bfe006d536c932fa6997",
+    "scanner_mode/agents/system_prompts.json": "809aa411e3c21fc6016b5bc925a72b5ce18ec64dc40d78e503b5888db6374fbd",
+    "scanner_mode/agents/web_search_fixtures.json": "7a3748884af4577314b550cdf60fa0e4cd7978c02e7df4a7fc445c3afd303cb8",
+    "scanner_mode/inspector.py": "b3a89bf62b1dca16f6124c4506e5cd9450da935f89c2ab617c6d046772651199",
+    "scanner_mode/policy.yaml": "ead612bd29e36e005ccff071f30425fe0b9c84850518aa7ad5c03c15f0a63b67",
+    "scanner_mode/scanner.py": "d7d88068071881ccc38db205d7abc3bbc341ce8202309814b55b3129ef608b08"
+  },
+  "devProbes": "80b0d9cce60aa00f229516d1d37d740480a83369037768a10593193ec3ceffde",
+  "testProbes": "1f99dad53044ba45f908474dcb1fb7f16078de4acf03024b217634fe81bc52e3",
+  "digest": "b7b1aa413646ffe52a4ff9597839f5bb83877e5e0414b2d0039164eecd5f706e"
+}
