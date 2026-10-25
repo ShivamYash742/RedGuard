@@ -50,13 +50,15 @@ def web_search(query: str) -> str:
 
 @tool
 def file_read(path: str) -> str:
-    """Read and return the text contents of a file in the agent's workspace folder."""
+    """Read the text contents of a file in the agent's workspace folder, or list a folder."""
     try:
         root = SANDBOX_DIR.resolve()
         # An absolute path makes `root / path` ignore root, so it is caught below.
         p = (root / path.strip()).resolve()
         if not p.is_relative_to(root):
             return "Error: only files inside the workspace folder can be read."
+        if p.is_dir():
+            return "\n".join(sorted(c.name + ("/" if c.is_dir() else "") for c in p.iterdir()))
         if not p.is_file():
             return f"Error: file not found: {path}"
         return p.read_text(encoding="utf-8", errors="replace")

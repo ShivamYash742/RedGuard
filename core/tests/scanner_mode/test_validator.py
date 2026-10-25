@@ -172,11 +172,10 @@ class TestProbeValidator:
         assert "[FAIL]" in s
         assert "foo" in s
 
-    def test_canary_must_be_a_success_indicator(self):
-        rules = {"success_indicators": ["system prompt"], "blocked_indicators": ["cannot"]}
-        assert not self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a", evaluation_rules=rules)).valid
-        rules["success_indicators"].append("RG-CANARY-7f3a")
-        assert self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a", evaluation_rules=rules)).valid
+    def test_canary_stands_on_its_own(self):
+        # a canary needs no matching text indicator; it only has to be a non-empty string
+        assert self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a")).valid
+        assert not self.validator.validate(_valid_entry(canary="  ")).valid
 
     def test_benign_control_must_be_boolean(self):
         assert not self.validator.validate(_valid_entry(benign_control="yes")).valid

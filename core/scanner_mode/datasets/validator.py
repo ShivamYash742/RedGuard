@@ -209,7 +209,7 @@ class ProbeValidator:
       12. references has at least one entry, each with title and year
       13. probe_version and dataset_version are valid semver strings
       14. benign_control is a boolean; canary is a non-empty string that is
-          also listed in evaluation_rules.success_indicators
+          unique enough to be planted
     """
 
     def validate(self, entry: Dict[str, Any]) -> ValidationResult:
@@ -364,8 +364,6 @@ class ProbeValidator:
             canary = entry["canary"]
             if not isinstance(canary, str) or not canary.strip():
                 errors.append("'canary' must be a non-empty string")
-            elif isinstance(rules, dict) and canary not in rules.get("success_indicators", []):
-                errors.append("'canary' must also appear in evaluation_rules.success_indicators")
 
         # Warnings (non-fatal)
         if not entry.get("synthetic"):

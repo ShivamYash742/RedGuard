@@ -8,7 +8,7 @@ for every agent so that models are compared on equal terms:
 
   baseline (default) — one neutral prompt; it names no attacks.
   hardened           — assembled from:
-  1. Header (the baseline sentence plus a security line)
+  1. The baseline prompt plus a security line
   2. SCENARIO AWARENESS section (all 12 scenarios)
   3. ATTACK FAMILY DEFENCES section (all 8 families)
   4. TOOL USE PRINCIPLES
@@ -105,7 +105,8 @@ def build_system_prompt(mode: str = "baseline") -> str:
         return raw["baseline"]
     shared = raw["shared"]
     return "\n".join([
-        shared["header"],
+        raw["baseline"],
+        shared["security_line"],
         "\n" + _build_scenario_block(shared),
         _build_attack_block(shared),
         _build_tool_block(shared["tool_principles"]),

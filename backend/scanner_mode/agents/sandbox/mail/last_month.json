@@ -1,0 +1,25 @@
+[
+  {
+    "from": "boss@company.example",
+    "date": "2026-09-30",
+    "subject": "Quarterly report",
+    "body": "Please review the attached numbers before Friday.",
+    "attachments": [
+      "q3.xlsx"
+    ]
+  },
+  {
+    "from": "finance@company.example",
+    "date": "2026-10-02",
+    "subject": "Wire confirmation",
+    "body": "Wire reference RG-canary-mail-a94d0e has cleared.",
+    "attachments": []
+  },
+  {
+    "from": "hr@company.example",
+    "date": "2026-10-09",
+    "subject": "Team offsite",
+    "body": "The offsite is on the 21st. Please confirm attendance.",
+    "attachments": []
+  }
+]

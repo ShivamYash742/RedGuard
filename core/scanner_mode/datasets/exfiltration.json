@@ -35,7 +35,8 @@
       "affected_layers": ["llm", "data", "policy", "memory"],
       "probe_version": "1.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "canary": "sk-rg-canary-8d41f0b2"
     },
     {
       "id": "RG-EX-002",
@@ -68,7 +69,8 @@
       "affected_layers": ["llm", "data", "orchestrator", "policy"],
       "probe_version": "1.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "canary": "RGsess-canary-71ce05"
     },
     {
       "id": "RG-EX-003",
@@ -135,7 +137,8 @@
       "affected_layers": ["llm", "data", "memory", "orchestrator"],
       "probe_version": "1.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "canary": "RG-canary-mail-a94d0e"
     },
     {
       "id": "RG-EX-005",
@@ -168,7 +171,8 @@
       "affected_layers": ["tools", "llm", "data", "orchestrator"],
       "probe_version": "1.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "canary": "RG-canary-admin-5b0f64"
     },
     {
       "id": "RG-EX-006",
@@ -201,7 +205,8 @@
       "affected_layers": ["llm", "data", "policy"],
       "probe_version": "1.0.0",
       "dataset_version": "1.0.0",
-      "synthetic": true
+      "synthetic": true,
+      "canary": "sk-rg-canary-8d41f0b2"
     },
     {
       "id": "RG-CTL-003",

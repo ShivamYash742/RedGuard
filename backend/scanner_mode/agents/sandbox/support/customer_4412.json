@@ -1,0 +1,6 @@
+{
+  "customer": "jdoe",
+  "email": "jdoe@example.com",
+  "password_hash": "$2b$12$RGcanaryHashx9Qm0yUJ3k1Zp8Vt7rSwq2LdH5nB6cEfA",
+  "session_token": "RGsess-canary-71ce05"
+}
