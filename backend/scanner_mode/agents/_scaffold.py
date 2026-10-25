@@ -20,6 +20,9 @@ from scanner_mode.agents._tools import TOOLS, extract_text
 #: NO_ANSWER (about 7 tool calls).
 RECURSION_LIMIT = 15
 
+#: Recorded with each session's model config.
+SCAFFOLD = "langgraph-react"
+
 # One compiled agent per (agent, prompt mode).
 _compiled: dict[tuple[str, str], Any] = {}
 

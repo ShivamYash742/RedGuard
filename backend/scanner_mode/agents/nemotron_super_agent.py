@@ -24,6 +24,12 @@ NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
 MODEL_NAME: str = "nvidia/nemotron-3-super-120b-a12b"
 
 
+def model_config() -> dict:
+    """What this agent sends the model, recorded on every session. The hosted APIs are
+    called without a seed, so their runs are not guaranteed to repeat."""
+    return {"provider": "nvidia", "model": MODEL_NAME, "temperature": 0, "seed": None}
+
+
 def _llm():
     if not NVIDIA_API_KEY:
         raise RuntimeError("NVIDIA_API_KEY is not set in .env")

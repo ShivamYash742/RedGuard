@@ -25,7 +25,8 @@ from scanner_mode.leaderboard import leaderboard_rows
 from scanner_mode.schema import sha256_hex
 from scanner_mode.report_generator import generate_report_for_session
 from scanner_mode.scanner import (
-    finalize_scan, init_scan_session, run_family_scan, session_prompt_mode, validate_builtin_probes,
+    finalize_scan, init_scan_session, run_family_scan, session_model_config, session_prompt_mode,
+    validate_builtin_probes,
 )
 
 router = APIRouter(tags=["scanner"], dependencies=[Depends(guard_request)])
@@ -296,6 +297,7 @@ async def start_scan(request: Request):
             "status": "RUNNING",
             "benchmarkVersion": BENCHMARK_VERSION,
             "promptMode": prompt_mode,
+            "modelConfig": session_model_config(agent_id),
         }
     )
 

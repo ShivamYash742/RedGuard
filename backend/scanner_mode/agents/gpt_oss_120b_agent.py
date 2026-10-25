@@ -24,6 +24,12 @@ GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 MODEL_NAME: str = "openai/gpt-oss-120b"
 
 
+def model_config() -> dict:
+    """What this agent sends the model, recorded on every session. The hosted APIs are
+    called without a seed, so their runs are not guaranteed to repeat."""
+    return {"provider": "groq", "model": MODEL_NAME, "temperature": 0, "seed": None}
+
+
 def _llm():
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not set in .env")

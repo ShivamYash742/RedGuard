@@ -40,6 +40,10 @@ TEMPERATURE: float = float(os.getenv("SCANNER_TEMPERATURE", "0"))
 SEED: int = int(os.getenv("SCANNER_SEED", "0"))
 
 
+def model_config() -> dict:
+    return {"provider": "ollama", "model": OLLAMA_MODEL, "temperature": TEMPERATURE, "seed": SEED}
+
+
 def _llm():
     return ChatOpenAI(
         model=OLLAMA_MODEL,

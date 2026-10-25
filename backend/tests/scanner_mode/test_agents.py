@@ -123,3 +123,21 @@ async def test_a_tool_loop_ends_in_the_recursion_error_the_scanner_scores_no_ans
     monkeypatch.setattr(scanner, "get_agent", lambda agent_id: SimpleNamespace(invoke=invoke))
     reply = await scanner._invoke_agent("loop", "What is 1+1?")
     assert reply.startswith("Agent error") and "Recursion limit" in reply
+
+
+def test_the_ollama_agent_sends_temperature_and_seed(monkeypatch):
+    mod = _load_module("ollama_local_agent")
+    llm = mod._llm()
+    assert (llm.temperature, llm.seed, llm.model_name) == (0, 0, "granite3.3:2b")
+    assert llm.openai_api_base == "http://localhost:11434/v1"
+
+    monkeypatch.setattr(mod, "SEED", 7)
+    monkeypatch.setattr(mod, "TEMPERATURE", 0.3)
+    assert (mod._llm().seed, mod._llm().temperature) == (7, 0.3)
+    assert mod.model_config() == {"provider": "ollama", "model": "granite3.3:2b", "temperature": 0.3, "seed": 7}
+
+
+def test_every_agent_reports_its_model_config():
+    for agent_id in AGENT_IDS:
+        config = _load_module(agent_id).model_config()
+        assert set(config) == {"provider", "model", "temperature", "seed"}, agent_id

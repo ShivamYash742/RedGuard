@@ -36,6 +36,10 @@ LLM_MODEL: str    = os.getenv("CUSTOM_AGENT_MODEL", "custom-model")
 LLM_KEY: str      = os.getenv("CUSTOM_AGENT_KEY", "")
 
 
+def model_config() -> dict:
+    return {"provider": "custom", "model": LLM_MODEL, "temperature": 0, "seed": None}
+
+
 def _llm():
     # The client wants the API root (".../v1"), not the full chat-completions URL.
     base = LLM_ENDPOINT.removesuffix("/chat/completions").rstrip("/")

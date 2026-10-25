@@ -13,6 +13,7 @@ from database import get_db
 from scanner_mode.schema import sha256_hex
 from scanner_mode.agent_loader import get_agent
 from scanner_mode.agents._prompt_loader import PROMPT_MODES
+from scanner_mode.agents._scaffold import SCAFFOLD
 
 # Add parent directory to sys.path to access redguard module (guard against duplicates)
 _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -121,6 +122,14 @@ def tier_counts(statuses: List[str]) -> Dict[str, int]:
 
 def control_counts(statuses: List[str]) -> Dict[str, int]:
     return {t: statuses.count(t) for t in CONTROL_OUTCOMES}
+
+
+def session_model_config(agent_id: str) -> str:
+    """JSON recorded on the session: what the agent sends the model (provider, model,
+    temperature, seed) and the scaffold it runs in. `{}` if the agent does not say."""
+    mod = get_agent(agent_id)
+    config = mod.model_config() if hasattr(mod, "model_config") else {}
+    return json.dumps({**config, "scaffold": SCAFFOLD})
 
 
 def session_prompt_mode(agent_id: str, requested: str) -> str:

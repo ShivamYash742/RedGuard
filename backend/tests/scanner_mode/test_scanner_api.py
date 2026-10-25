@@ -73,3 +73,13 @@ def test_probe_validation_endpoint_reports_the_real_result(client, monkeypatch):
                         lambda family, validate=True: [{**e, "id": "not-an-id"} for e in real(family, validate=False)])
     bad = client.get("/api/probes/validation").json()
     assert bad["valid"] is False and bad["total"] is None and "not-an-id" in bad["error"]
+
+
+def test_session_records_the_model_config(client, policy_file):
+    import json
+
+    started = client.post("/api/scan/start", json={"agentId": "ollama_local_agent"})
+    assert started.status_code == 200, started.text
+    session = next(s for s in client.get("/api/sessions").json() if s["id"] == started.json()["sessionId"])
+    assert json.loads(session["modelConfig"]) == {
+        "provider": "ollama", "model": "granite3.3:2b", "temperature": 0, "seed": 0, "scaffold": "langgraph-react"}
