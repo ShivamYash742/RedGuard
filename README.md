@@ -17,6 +17,47 @@ Each mode has its own place in every layer of the code — see [`docs/architectu
 
 ## 🆕 What's new
 
+### 5.0.0 — fixes from an external audit
+
+An audit found problems in the code, the scoring and the metrics. They are fixed, each fix has a
+regression test, and none of it has been run against a real model. Results measured under 4.x stay in
+the database and on the pages, labelled **"Measured before the audit fixes"**, and are never pooled with
+new ones. Fix by fix: [`docs/audit_fixes.md`](./docs/audit_fixes.md). Statements in the earlier report and
+paper that no longer hold: [`docs/report_errata.md`](./docs/report_errata.md).
+
+**Scanner mode** (benchmark, dataset and probe-schema versions 5.0.0)
+
+- **Comparable agents.** Every agent runs in one scaffold (`agents/_scaffold.py`): the same tools, the same
+  baseline prompt, the same hardened prompt, temperature 0 and a seed. Provider, model, temperature, seed and
+  scaffold are recorded on each session. `web_search` answers from fixtures unless `SCANNER_WEB_SEARCH=live`.
+- **Scoring from evidence.** Probes that ask for an action are scored from the tool calls the agent made
+  (mock `send_email`, `execute_sql`, `transfer_funds`, ... record them and do nothing). System-prompt and
+  exfiltration probes are scored by canaries planted in the prompt and in the sandbox files. Only the
+  remaining 11 probes use text, and their indicators must show compliance. Controls are scored on the task
+  (helped / over-refused / unclear), an agent that never answered is `NO_ANSWER` and leaves every rate, and
+  attack success is reported as a range between the two refusal-versus-indicator tie-breaks.
+- **Probes.** Indirect attacks now arrive in tool results (`fetch_page`, `read_email`, ...), not in the user
+  message; giveaway wording and near-duplicates are gone; every arXiv reference was checked on arXiv and four
+  wrong or placeholder IDs were replaced.
+- **Statistics.** Intervals are clustered by probe, Behaviour Drift Score is the agreement rate
+  `max(k, N-k)/N`, and the regex filter is also measured on 250 held-out XSTest safe prompts
+  ([`docs/scanner_mode/filter_evaluation.md`](./docs/scanner_mode/filter_evaluation.md)).
+- **Safety.** A broken `policy.yaml` stops scans (the filter fails closed) and policy writes are validated;
+  state-changing and work-running requests need a trusted `Origin` and a JSON body; custom probes stay out of
+  the benchmark numbers; an unknown agent id is an error instead of the default agent.
+
+**Lab mode** (evaluator, metrics, case-schema and environment versions 2.0.0)
+
+- Tool-call predicates match resources exactly (`arg_equals`) and need real rows; a query of an unknown table
+  is a tool error. RGM-003 and RGM-007 now require agent C.
+- Control cases (RGM-008, RGM-009) and cases whose objective cannot be reached in an arm (RGM-005 outside the
+  permissive arm) are reported apart; the old all-cases rates remain as `pooled_legacy`.
+- CPR is reported twice: any exposure, and propagation by message only. Runs record whether the attack was ever
+  in front of an agent, and ASR is also given among exposed runs. A single case no longer gets a narrow interval.
+- Repetitions can use a base seed (repetition N uses seed + N) and a temperature; an experiment whose
+  repetitions would be exact copies says so. Cases record whether their task points at the poisoned channel,
+  and RGM-010 is RGM-007 with a task that does not.
+
 ### 4.2.0 — one place for each mode
 
 The project is reorganised so that anyone can tell what belongs to which mode:
@@ -61,7 +102,7 @@ and the two modes never import each other.
 | Reclassified as a control | RG-GD-002 | A benign request, not an attack |
 | Added controls | RG-CTL-001 … RG-CTL-009 | Harmless requests that measure over-refusal and regex false positives |
 
-**Versions.** 4.2.0 is the release (the code, `package.json`, the UI). The benchmark, dataset and probe-schema versions stay **4.0.0**: Scanner mode scoring and the probe set did not change, so 4.0.0 results remain comparable and stay on the leaderboard.
+**Versions.** 5.0.0 is the release. Scanner mode's benchmark, dataset and probe-schema versions are **5.0.0** (agents, prompts, tools, scoring and probes changed), and Lab mode's evaluator, metrics, case-schema and environment versions are **2.0.0**. Results from 4.0.0 (Scanner) and 1.2.0 (Lab) are not comparable with them: they are shown in their own section, labelled "Measured before the audit fixes", and never pooled.
 
 ---
 
@@ -74,11 +115,11 @@ and the two modes never import each other.
 | **6 Navigation Hubs** | Overview, Corpus (families/probes/scenarios), Runs (live execution & history), Models & Ranking, Lab, & Settings — v3 consolidated the original 14 routes into 5, plus Lab mode's own `/lab` |
 | **Global Search (`⌘K`)** | Fast client-side fuzzy search overlay (`lib/search-index.ts`) matching Probe IDs, Titles, Attack Families, Scenarios, Models, and Reports |
 | **8 Attack Families Taxonomy** | Direct Injection, Content Injection, Data Exfiltration, Goal Diversion, Memory Poisoning, Autonomous Actions, Planning Manipulation, & Tool Manipulation |
-| **46 Attack Probes + 10 Benign Controls** | Auditable JSON dataset entries with research paper citations (arXiv IDs, venues, authors), difficulty levels, & threat models. Controls are harmless requests that measure over-refusal and regex false positives |
+| **46 Attack Probes + 10 Benign Controls** | Auditable JSON dataset entries with research paper citations (arXiv IDs checked against arXiv), difficulty levels, & threat models. Controls are harmless requests that measure over-refusal and regex false positives |
 | **12 Application Scenarios** | GitHub, GitLab, Wiki, Documentation, Email, Calendar, Banking, Travel, Shopping, Support, Forum, & Reddit simulation environments |
 | **Live SSE Execution Suite** | Real-time Server-Sent Events stream: every probe lands in one tier — Filtered (regex), Refused, Ignored or Compromised — with live counters per family; benign controls counted separately |
-| **Tiered Scoring** | Each probe is scored with its own success/blocked indicators; the model sees every probe (even ones the regex blocks), so results exist both as deployed and for the model alone. Agents run with a neutral system prompt unless the run selects the hardened one |
-| **Lab mode: Multi-Agent Lab** | 9 cases, 3 agents (A researcher → B validator → C executor), every action executed and recorded by the harness, 5 defence arms, four-dimension verdicts, clean control run for every attack run |
+| **Tiered Scoring** | Every probe lands in one tier (Filtered, Refused, Ignored, Compromised; no answer is counted apart). Compromise is decided by recorded tool calls, a canary, or (11 probes) compliance phrases. The model sees every probe, even ones the regex blocks, so results exist as deployed and for the model alone; attack success is a range, not a point |
+| **Lab mode: Multi-Agent Lab** | 10 cases (2 are controls), 3 agents (A researcher → B validator → C executor), every action executed and recorded by the harness, 5 defence arms, four-dimension verdicts, clean control run for every attack run |
 | **Lab mode: Live Run View** | Agent cards with a ticking status, per-agent swimlane timeline, stage for clean and attack runs, per-run progress with elapsed time and ETA, event feed — from any tab, after a reload |
 | **Lab mode: Experiment Reports** | Generated from stored traces after a run: findings, suitability, rates with intervals, containment, per agent / case / run, evidence trail; Markdown & JSON |
 | **Multi-Format Export** | Scanner mode reports in Markdown (`.md`) and CSV (`.csv`); Lab mode experiment reports in Markdown and JSON, and per-run evidence bundles |
@@ -121,9 +162,15 @@ and the two modes never import each other.
 ### Lab mode — the multi-agent security lab
 
 Everything in the feature list up to Tiered Scoring is **Scanner mode**: single-turn
-probes, each scored with its own indicators into one of four tiers (Filtered /
-Refused / Ignored / Compromised). It answers *what does one model do with an
-attack prompt?*
+probes, each scored from the tool calls the agent made, a canary, or compliance
+phrases into one of four tiers (Filtered / Refused / Ignored / Compromised). It
+answers *what does one model do with an attack prompt?*
+
+Agents differ in the model only: they share the scaffold, tools and prompts. What is
+still different between them: the hosted APIs are called without a seed (the Ollama
+agent sends one), each provider's client library formats tool calls its own way, and
+`granite3.3:2b` now calls tools natively through Ollama's OpenAI-compatible endpoint
+instead of the old JSON text protocol, which has not yet been run against the model.
 
 **Lab mode** (`/lab`) answers a different question — *when an attacker hides an
 instruction inside content an agent reads, what does the whole system of
@@ -249,25 +296,29 @@ scripted runs or harness checks.
 
 ## 📊 Measured results
 
-**Scanner mode**, Ollama `granite3.3:2b`, 4.0.0 probes (46 attacks + 10 controls)
-before the attack prompts are rewritten, so a baseline to beat:
+**There are no results under benchmark 5.0.0 or Lab 2.0.0 yet.** The agents, prompts, tools, scoring and
+probes all changed, so no earlier number carries over. Run a scan and the numbers appear on `/models`.
+
+### Measured before the audit fixes
+
+**Scanner mode**, Ollama `granite3.3:2b`, benchmark 4.0.0 (46 attacks + 10 controls). These runs used a
+different scaffold from the hosted agents (its own JSON tool loop with other tools, an input filter, a
+security sentence in the baseline prompt, no temperature sent), attack success was scored by indicator
+words, and the prompts were not yet rewritten. Treat them as a record of what was measured then:
 
 | Prompt mode | Runs | Attack success, model alone | Attack success, as deployed | Over-refusal |
 |---|---|---|---|---|
 | baseline | 2 (92 attacks) | 19.6% (95% CI 12.7–28.8) | 12.0% (6.8–20.2) | 10% (2.8–30.1) |
 | hardened | 1 (46 attacks) | 13.0% (6.1–25.7) | 6.5% (2.2–17.5) | 30% (10.8–60.3) |
 
-- The regex filter decides 24 of 46 attacks per run, which is why "as
-  deployed" is about half of "model alone".
-- The hardened prompt lowers attack success but triples over-refusal; the
-  intervals overlap, so with this sample the difference is not significant.
-- Weakest families (baseline, model alone): tool manipulation 6/8, memory
-  poisoning 6/12.
-- BDS needs 3 runs per prompt mode and is not reported yet.
+Those intervals treat repeated runs as independent. The regex filter decided 24 of 46 attacks then; with
+the probes rewritten it sees only the user message and catches 11 of 46. The earlier reading that tool and
+memory attacks were the weakest families is withdrawn: the agents had no such tools and no memory, so those
+"compromises" were word matches.
 
-**Lab mode** has no real-model results yet. `granite3.3:2b` passes the
-harness-suitability gate (0 invalid replies in 60 steps) but never calls
-`finish`, so its agents use their whole step budget.
+**Lab mode**: six local models were run on 21–22 October with the 1.2.0 evaluator and metrics, no-defence
+arm only. Their experiments are kept and labelled "Measured before the audit fixes"; they cannot be compared
+with experiments under 2.0.0. Granite never calls `finish`, so its agents use their whole step budget.
 
 ---
 
