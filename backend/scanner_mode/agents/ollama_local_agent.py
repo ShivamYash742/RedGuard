@@ -159,4 +159,5 @@ async def invoke(prompt: str, prompt_mode: str = "baseline") -> str:
 
         return reply
 
-    return messages[-1]["content"]
+    # The last message is a tool result, not an answer; the scanner scores this NO_ANSWER.
+    raise RuntimeError("Recursion limit of 5 tool steps reached without a final answer")

@@ -120,7 +120,8 @@ export interface LeaderboardRow {
   tiers: TierCounts
   asrModel: RateCI | null
   asrDeployed: RateCI | null
-  families: Record<string, { total: number; compromised: number; modelCompromised: number }>
+  families: Record<string, { total: number; compromised: number; modelAnswered: number; modelCompromised: number }>
+  noAnswer: { attacks: number; controls: number }
   controls: { total: number; overRefused: number; filtered: number }
   overRefusal: RateCI | null
   bds: number | null
@@ -199,6 +200,9 @@ export interface ReportOverall {
   refused?: number
   ignored?: number
   model_compromised?: number
+  model_answered?: number
+  no_answer?: number
+  controls_no_answer?: number
 }
 
 export interface RunReport {

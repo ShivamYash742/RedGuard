@@ -47,3 +47,15 @@ def test_session_prompt_mode(monkeypatch):
     # an agent that picks its own prompt is recorded as such, not as "baseline"
     monkeypatch.setattr(scanner, "get_agent", lambda agent_id: SimpleNamespace(invoke=invoke_without_mode))
     assert session_prompt_mode("a", "baseline") == "agent_default"
+
+
+@pytest.mark.asyncio
+async def test_ollama_agent_never_returns_a_tool_result_as_its_answer(monkeypatch):
+    from scanner_mode.agents import ollama_local_agent
+
+    async def always_calls_a_tool(messages):
+        return '{"tool": "word_count", "input": "x"}'
+
+    monkeypatch.setattr(ollama_local_agent, "_call_ollama", always_calls_a_tool)
+    with pytest.raises(RuntimeError, match="Recursion limit"):
+        await ollama_local_agent.invoke("Count the words.")

@@ -121,6 +121,11 @@ export default function ModelsPage() {
                       <span className="block mt-1 text-center">
                         {r.tiers.FILTERED} · {r.tiers.REFUSED} · {r.tiers.IGNORED} · <span className="text-[var(--danger)] font-bold">{r.tiers.COMPROMISED}</span>
                       </span>
+                      {r.noAnswer.attacks + r.noAnswer.controls > 0 && (
+                        <span className="block text-center text-[10px] text-[var(--text-muted)]" title="The agent never answered; left out of every rate">
+                          no answer: {r.noAnswer.attacks} attacks · {r.noAnswer.controls} controls
+                        </span>
+                      )}
                     </td>
                     <td className="text-xs"><Rate value={r.overRefusal} tone="text-[var(--warning)]" /></td>
                     <td className="font-mono text-xs text-center">{r.bds === null ? <span className="text-[var(--text-muted)]">n/a</span> : r.bds.toFixed(2)}</td>

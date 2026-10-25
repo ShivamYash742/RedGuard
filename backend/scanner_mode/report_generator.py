@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from database import get_db
 from scanner_mode.schema import sha256_hex
-from scanner_mode.scanner import TIERS, control_counts, tier_counts
+from scanner_mode.scanner import NO_ANSWER, TIERS, control_counts, tier_counts
 
 async def generate_report_for_session(session_id: str) -> dict:
     prisma = await get_db()
@@ -40,9 +40,10 @@ async def generate_report_for_session(session_id: str) -> dict:
     blocked_with_rules = []
     
     for category, group in by_category.items():
-        c_total = len(group)
+        scored = [e for e in group if e.status != NO_ANSWER]  # unanswered probes are counted apart
+        c_total = len(scored)
         # COMPROMISED (legacy rows: ALLOWED) is the only tier where the attack worked.
-        c_allowed = sum(1 for e in group if e.status in ("COMPROMISED", "ALLOWED"))
+        c_allowed = sum(1 for e in scored if e.status in ("COMPROMISED", "ALLOWED"))
         c_blocked = c_total - c_allowed
         c_mismatch = sum(1 for e in group if e.mismatch)
         c_top_risk = max([e.regexRiskScore for e in group] + [0.0])
@@ -52,8 +53,9 @@ async def generate_report_for_session(session_id: str) -> dict:
             "probes": c_total,
             "blocked": c_blocked,
             "allowed": c_allowed,
-            **{t.lower(): n for t, n in tier_counts([e.status for e in group]).items()},
+            **{t.lower(): n for t, n in tier_counts([e.status for e in scored]).items()},
             "model_compromised": sum(1 for e in group if e.modelOutcome == "COMPROMISED"),
+            "no_answer": sum(1 for e in group if e.modelOutcome == NO_ANSWER),
             "mismatches": c_mismatch,
             "highest_risk_score": round(c_top_risk, 4)
         })
@@ -119,6 +121,9 @@ async def generate_report_for_session(session_id: str) -> dict:
             "benchmark_version": session.benchmarkVersion,
             **tiers,
             "model_compromised": session.modelCompromised,
+            "model_answered": len(events) - session.noAnswer,
+            "no_answer": session.noAnswer,
+            "controls_no_answer": session.controlsNoAnswer,
             "controls_over_refused": session.controlsOverRefused,
             "controls": controls,
         },
@@ -150,7 +155,8 @@ async def generate_report_for_session(session_id: str) -> dict:
         f"- **Refused by the model:** {tiers['refused']}",
         f"- **Ignored by the model (no refusal, no compliance):** {tiers['ignored']}",
         f"- **Compromised (attack succeeded):** {allowed} — ASR {allowed / total_probes * 100 if total_probes else 0:.1f}%",
-        f"- **Compromised with the filter off (model alone):** {session.modelCompromised}",
+        f"- **Compromised with the filter off (model alone):** {session.modelCompromised} of {len(events) - session.noAnswer} answered",
+        f"- **No answer (hit the step limit; left out of every rate):** {session.noAnswer} attacks, {session.controlsNoAnswer} controls",
         f"- **Intent Mismatches:** {mismatches}",
         f"- **Benign controls:** {sum(controls.values())} — helped {controls['HELPED']}, "
         f"over-refused by the model {controls['OVER_REFUSED']} ({session.controlsOverRefused} with the regex off), "
