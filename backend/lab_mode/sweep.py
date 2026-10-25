@@ -43,7 +43,7 @@ from prisma import Prisma
 from lab_mode import store as lab_store
 from lab_mode.api import ARMS, _build_config, _outcomes, rescore_case
 from core.lab_mode.analysis import arm_summary, comparability_problems, compare_standard, compromise_by_agent
-from core.lab_mode.cases import case_ids, fixture_factory, load_case
+from core.lab_mode.cases import case_ids, fixture_factory, load_all_cases, load_case
 from core.lab_mode.evaluator import evaluate
 from core.lab_mode.evidence import build_bundle
 from core.lab_mode.metrics import RunOutcome
@@ -69,9 +69,10 @@ async def run_arm(
     max_steps: int,
     experiment_id: Optional[str] = None,
     quiet: bool = False,
+    exposure: str = "natural",
 ) -> str:
     """Execute one arm, resuming into `experiment_id` when given."""
-    run_config = _build_config(arm, model_config, "linear_abc", max_steps)
+    run_config = _build_config(arm, model_config, "linear_abc", max_steps, exposure)
 
     if experiment_id:
         experiment = await lab_store.get_experiment(db, experiment_id)
@@ -87,7 +88,8 @@ async def run_arm(
         model_config = ModelConfig.from_stored(config_data.get("model"))
         max_steps = config_data.get("max_steps", DEFAULT_MAX_STEPS)
         scripted = bool(config_data.get("scripted", False))
-        run_config = _build_config(arm, model_config, config_data.get("topology_id", "linear_abc"), max_steps)
+        run_config = _build_config(arm, model_config, config_data.get("topology_id", "linear_abc"), max_steps,
+                                   config_data.get("exposure", "natural"))
         print(f"  resuming with the stored config: "
               f"{'(scripted)' if scripted else f'{model_config.provider} / {model_config.model}'}, "
               f"temperature={model_config.temperature}, seed={model_config.seed}, max_steps={max_steps}")
@@ -318,7 +320,7 @@ def print_report(by_arm: Dict[str, List[RunOutcome]]) -> None:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--arms", default="attack", help=f"comma-separated; valid: {','.join(ARMS)}")
-    parser.add_argument("--cases", default="", help="comma-separated case ids (default: all 9)")
+    parser.add_argument("--cases", default="", help="comma-separated case ids (default: every case of --split)")
     parser.add_argument("--reps", type=int, default=5)
     parser.add_argument("--provider", default="ollama", choices=["ollama", "nvidia", "groq"])
     parser.add_argument("--model", default=None)
@@ -327,6 +329,10 @@ async def main() -> int:
                         help="sampling temperature (default 0: repetitions are then likely exact copies unless --seed is set)")
     parser.add_argument("--seed", type=int, default=None,
                         help="base seed; repetition N uses seed + N. Recorded with every run")
+    parser.add_argument("--split", choices=["dev", "test", "all"], default="all",
+                        help="which cases to run when --cases is not given (published numbers come from 'test')")
+    parser.add_argument("--exposure", choices=["natural", "forced"], default="natural",
+                        help="forced: the harness performs the entry agent's read of the planted location")
     parser.add_argument("--scripted", action="store_true", help="replay clean scripts; no model calls")
     parser.add_argument("--resume", default=None, help="experiment id to continue")
     parser.add_argument("--report", default=None, help="comma-separated experiment ids; analysis only")
@@ -359,7 +365,8 @@ async def main() -> int:
         model_config = ModelConfig.from_env(
             provider=args.provider, model=args.model, temperature=args.temperature, seed=args.seed,
         )
-        cases = [c.strip() for c in args.cases.split(",") if c.strip()] or case_ids()
+        cases = [c.strip() for c in args.cases.split(",") if c.strip()] or [
+            c["id"] for c in load_all_cases(validate=False) if args.split == "all" or c.get("split", "dev") == args.split]
         arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
         if args.resume and len(arms) > 1:
@@ -381,7 +388,7 @@ async def main() -> int:
             experiment_id = await run_arm(
                 db, arm=arm, cases=cases, reps=args.reps, model_config=model_config,
                 scripted=args.scripted, max_steps=args.max_steps,
-                experiment_id=args.resume, quiet=args.quiet,
+                experiment_id=args.resume, quiet=args.quiet, exposure=args.exposure,
             )
             experiment_ids.append(experiment_id)
             arm_key, outcomes = await _outcomes_for(db, experiment_id)
