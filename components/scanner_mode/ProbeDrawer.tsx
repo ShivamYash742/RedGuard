@@ -90,6 +90,16 @@ export default function ProbeDrawer({ probe, onClose }: ProbeDrawerProps) {
             <div className="relative font-mono text-xs bg-[var(--surface-base)] border border-[var(--border-subtle)] p-4 rounded-lg text-[var(--text-primary)] whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
               {probe.prompt}
             </div>
+            {probe.tool_fixtures && Object.entries(probe.tool_fixtures).map(([tool, text]) => (
+              <div key={tool} className="mt-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-1">
+                  Planted result of the <span className="font-mono">{tool}</span> tool
+                </h4>
+                <div className="font-mono text-xs bg-[var(--surface-base)] border border-[var(--border-subtle)] p-4 rounded-lg text-[var(--text-primary)] whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                  {text}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Expected vs Failure Behavior */}

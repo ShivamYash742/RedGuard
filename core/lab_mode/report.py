@@ -21,6 +21,8 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
+from ..shared.version import PRE_AUDIT_LABEL
+from .runner import repetition_warnings
 from .smoke import PARSE_FAILURE_GATE
 from .trace import EventType, TraceEvent
 
@@ -291,6 +293,7 @@ def build_report(
             "channel": (attack.get("delivery") or {}).get("channel"),
             "injection_point": attack.get("injection_point"),
             "severity": case.get("severity"),
+            "task_endorses_channel": case.get("task_endorses_channel"),
             "objective": (case.get("objective") or {}).get("description"),
             "n": m.get("n", 0),
             "icr": m.get("icr"), "asr": m.get("asr"), "partial_rate": m.get("partial_rate"),
@@ -321,6 +324,8 @@ def build_report(
             "provider": None if scripted else model.get("provider"),
             "model": None if scripted else model.get("model"),
             "temperature": model.get("temperature"),
+            "seed": model.get("seed"),
+            "warnings": repetition_warnings(config),
             "max_steps": config.get("max_steps"),
             "topology": config.get("topology_id"),
             "validation_mode": config.get("validation_mode"),
@@ -328,6 +333,7 @@ def build_report(
             "repetitions": config.get("repetitions"),
             "created_at": experiment.get("created_at"),
             "versions": experiment.get("versions") or {},
+            "vintage": experiment.get("vintage"),
         },
         "execution": {
             "pairs_planned": planned_pairs,
@@ -412,6 +418,11 @@ def _findings(r: Dict[str, Any]) -> List[str]:
     agg = res["aggregate"]
     n = res["n_attack_runs"]
 
+    if exp.get("vintage") == "pre_audit":
+        out.append(f"{PRE_AUDIT_LABEL}: these runs were judged with the 1.2.0 evaluator and metrics (substring predicates, "
+                   "controls and unreachable cases pooled, unexposed runs counted as resisted). Their numbers are not "
+                   "comparable with results from the current definitions and must not be pooled with them.")
+    out.extend(exp["warnings"])
     if exp["scripted"]:
         out.append("This was a scripted replay: each case's compliant clean script stood in for the model, so the "
                    "numbers test the harness, not a model, and attacks cannot land by construction.")
@@ -461,6 +472,10 @@ def _findings(r: Dict[str, Any]) -> List[str]:
     hit = [c["id"] for c in r["cases"] if c["asr"]]
     if hit:
         out.append("Cases where the objective was reached at least once: " + ", ".join(hit) + ".")
+        endorsed = [c["id"] for c in r["cases"] if c["asr"] and c.get("task_endorses_channel")]
+        if endorsed:
+            out.append("In " + ", ".join(endorsed) + " the task itself points the agents at the channel the attack arrives "
+                       "through, so success there partly measures following the task, not only susceptibility.")
     separated = [cid for cid, d in ((c["id"], c["drift"]) for c in r["cases"]) if d and d.get("separated")]
     if separated:
         out.append("Attack runs drifted measurably from clean behaviour (beyond the clean-vs-clean noise floor) in: "
@@ -550,6 +565,7 @@ def to_markdown(r: Dict[str, Any]) -> str:
             ["Defence arm", f"`{exp['arm']}`: {exp['arm_description']}"],
             ["Model", who],
             ["Temperature", exp["temperature"]],
+            ["Seed", "none" if exp["seed"] is None else f"{exp['seed']} + repetition number"],
             ["Step budget per agent", exp["max_steps"]],
             ["Cases", f"{len(exp['cases'])} ({', '.join(exp['cases'])})"],
             ["Repetitions per case", exp["repetitions"]],
@@ -624,8 +640,9 @@ def to_markdown(r: Dict[str, Any]) -> str:
 
     out += ["", "## Cases", ""]
     out.append(_table(
-        ["Case", "Title", "Family · entry", "n", "ICR", "ASR", "Partial", "CPR", "SOC", "Objectives", "Stopped", "Drift (attack / null)"],
-        [[c["id"], c["title"], f"{c['family']} · {c['channel']} at {c['injection_point']}", c["n"],
+        ["Case", "Title", "Family · entry", "Task points at channel", "n", "ICR", "ASR", "Partial", "CPR", "SOC", "Objectives", "Stopped", "Drift (attack / null)"],
+        [[c["id"], c["title"], f"{c['family']} · {c['channel']} at {c['injection_point']}",
+          {True: "yes", False: "no", None: "—"}[c.get("task_endorses_channel")], c["n"],
           _pct(c["icr"]), _pct(c["asr"]), _pct(c["partial_rate"]), _pct(c["cpr"]), _pct(c["soc"]),
           _counts(c["objectives"]), _counts(c["stopped_at"]),
           _drift(c["drift"])]

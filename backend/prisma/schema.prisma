@@ -33,6 +33,11 @@ model Session {
   compromised         Int     @default(0)
   modelCompromised    Int     @default(0) @map("model_compromised")
   controlsOverRefused Int     @default(0) @map("controls_over_refused")
+  controlsUnclear     Int     @default(0) @map("controls_unclear")
+  policySha256        String? @map("policy_sha256")
+  modelConfig         String? @map("model_config")  // JSON: provider, model, temperature, seed, scaffold
+  noAnswer            Int     @default(0) @map("no_answer")
+  controlsNoAnswer    Int     @default(0) @map("controls_no_answer")
   events      ProbeEvent[]
   report      Report?
   policy      PolicySnapshot?
@@ -61,11 +66,12 @@ model ProbeEvent {
   classifierScore      Float?   @map("classifier_score")
   classifierResult     String?  @map("classifier_result")
 
-  status               String   // FILTERED | REFUSED | IGNORED | COMPROMISED (controls: FILTERED | OVER_REFUSED | HELPED); legacy: BLOCKED | ALLOWED
+  status               String   // FILTERED | REFUSED | IGNORED | COMPROMISED (controls: FILTERED | OVER_REFUSED | HELPED | UNCLEAR); legacy: BLOCKED | ALLOWED
   modelOutcome         String?  @map("model_outcome")   // what the model did, even when the filter decided the tier
   probeId              String?  @map("probe_id")
   isControl            Boolean  @default(false) @map("is_control")
   scoredBy             String?  @map("scored_by")
+  recordedActions      String?  @map("recorded_actions")  // JSON: the action-tool calls the agent made on this probe
   mismatch             Boolean  @default(false)
   declaredIntent       String   @map("declared_intent")
   detectedIntent       String   @map("detected_intent")

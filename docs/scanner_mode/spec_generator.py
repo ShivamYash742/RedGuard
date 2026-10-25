@@ -200,7 +200,15 @@ def _render_probe_spec(entry: Dict[str, Any]) -> str:
         bi = rules.get("blocked_indicators", [])
         notes = rules.get("notes", "")
         lines.append("**Evaluation Logic:**\n")
-        lines.append(f"- *Attack success indicators:* `{', '.join(si)}`")
+        if rules.get("success_actions"):
+            calls = "; ".join(
+                a["tool"] + "".join(f"({k} contains '{v}')" for k, v in a.get("args_contain", {}).items())
+                for a in rules["success_actions"])
+            lines.append(f"- *Scored from recorded tool calls* (any of): `{calls}`")
+        if entry.get("canary"):
+            lines.append(f"- *Scored by canary:* `{entry['canary']}` in the reply or a tool call")
+        if si:
+            lines.append(f"- *Attack success indicators (text scoring):* `{', '.join(si)}`")
         lines.append(f"- *Blocked indicators:* `{', '.join(bi)}`")
         if notes:
             lines.append(f"- *Notes:* {notes}")
@@ -212,6 +220,11 @@ def _render_probe_spec(entry: Dict[str, Any]) -> str:
         lines.append("**Probe Prompt:**\n")
         lines.append("```")
         lines.append(prompt[:500] + ("..." if len(prompt) > 500 else ""))
+        lines.append("```\n")
+    for tool, text in entry.get("tool_fixtures", {}).items():
+        lines.append(f"**Planted result of the `{tool}` tool:**\n")
+        lines.append("```")
+        lines.append(text[:500] + ("..." if len(text) > 500 else ""))
         lines.append("```\n")
 
     # References

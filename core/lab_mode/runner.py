@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .cee import ControlledExecutionEnvironment
@@ -124,6 +124,32 @@ class RunConfig:
             "validation_agents": list(self.validation_agents) if self.validation_agents else None,
             "seed": self.seed,
         }
+
+
+def repetition_config(config: RunConfig, rep: int) -> RunConfig:
+    """The config of repetition `rep` (1-based): the experiment's base seed plus `rep`.
+
+    At temperature 0 a local model answers the same prompt with the same tokens, so five
+    repetitions with one seed are five copies of one run (five of the six reported models did
+    exactly that). A different seed per repetition lets them differ while keeping every run
+    reproducible; each run's actual seed is in its config_snapshot event. No base seed: unchanged.
+    """
+    if config.model.seed is None:
+        return config
+    return replace(config, model=replace(config.model, seed=config.model.seed + rep))
+
+
+def repetition_warnings(config: Dict[str, Any]) -> List[str]:
+    """Warnings about an experiment's stored config (`RunConfig.to_dict()` plus repetitions)."""
+    model = config.get("model") or {}
+    if (config.get("repetitions") or 1) > 1 and not config.get("scripted") \
+            and not model.get("temperature") and model.get("seed") is None:
+        return [
+            f"{config['repetitions']} repetitions at temperature 0 with no seed: the repetitions are likely exact "
+            "copies of each other, so the number of cases, not the number of runs, is the sample size. "
+            "Set a seed (it is varied per repetition) or a temperature above 0."
+        ]
+    return []
 
 
 @dataclass

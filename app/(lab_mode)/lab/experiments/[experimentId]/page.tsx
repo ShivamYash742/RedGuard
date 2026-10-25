@@ -374,6 +374,16 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
             {' · '}{config.max_steps ?? '—'} steps per agent · {config.cases?.length ?? 0} cases × {config.repetitions ?? 1} repetitions
           </p>
           {arm && <p className="mt-1 max-w-3xl text-xs text-[var(--text-secondary)]">{arm.description}</p>}
+          {experiment.vintage === 'pre_audit' && (
+            <p role="note" className="mt-2 max-w-3xl rounded-[var(--radius)] border border-[var(--warning)] px-3 py-2 text-xs text-[var(--text-primary)]">
+              <span className="font-semibold">{experiment.vintage_label ?? 'Measured before the audit fixes'}.</span>{' '}
+              Judged with the 1.2.0 evaluator and metrics: substring predicates, controls and unreachable cases pooled,
+              unexposed runs counted as resisted. Not comparable with newer experiments and never pooled with them.
+            </p>
+          )}
+          {experiment.warnings?.map((warning) => (
+            <p key={warning} role="alert" className="mt-2 max-w-3xl rounded-[var(--radius)] border border-[var(--warning)] px-3 py-2 text-xs text-[var(--text-primary)]">{warning}</p>
+          ))}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {!running && board.order.some((id) => board.pairs[id].phase === 'done') && (
@@ -851,6 +861,8 @@ function Rates({ metrics }: { metrics: ExperimentMetrics }) {
           Runs of one case succeed or fail together, so each interval is computed over the effective number of
           independent observations, not over the raw run count.
           {metrics.n_failed_pairs > 0 && ` ${metrics.n_failed_pairs} pair(s) hit a harness error and are left out of every rate.`}
+          {!!metrics.excluded && (metrics.excluded.n_controls + metrics.excluded.n_unreachable) > 0 &&
+            ` ${metrics.excluded.n_controls} run(s) of control cases (${Object.keys(metrics.excluded.controls).join(', ') || 'none'}) and ${metrics.excluded.n_unreachable} run(s) of cases whose objective cannot be reached in this arm (${Object.keys(metrics.excluded.unreachable_in_arm).join(', ') || 'none'}) are reported apart and left out of these rates.`}
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -873,13 +885,35 @@ function Rates({ metrics }: { metrics: ExperimentMetrics }) {
               </tr>
             ))}
             <tr>
-              <td>Propagated past a compromised entry <span className="text-xs text-[var(--text-secondary)]">CPR</span></td>
+              <td>Propagated past a compromised entry <span className="text-xs text-[var(--text-secondary)]">CPR, any exposure</span></td>
               <td className="text-right font-mono tabular-nums">{formatRate(a.cpr)}</td>
               <td className="text-sm text-[var(--text-secondary)]">
                 {a.cpr === 'n/a' ? 'Undefined, not 0%: no run compromised an entry agent that had anywhere to propagate to.' : 'No interval: the denominator is itself an outcome.'}
               </td>
               <td className="text-sm text-[var(--text-secondary)]">{a.cpr_denominator_size} eligible runs</td>
             </tr>
+            {a.exposure && (
+              <tr>
+                <td>Attack reached an agent <span className="text-xs text-[var(--text-secondary)]">exposure</span></td>
+                <td className="text-right font-mono tabular-nums">{a.exposure.n_exposed} / {a.exposure.n_valid}</td>
+                <td className="text-sm text-[var(--text-secondary)]">
+                  A run in which no agent ever read the planted content counts as resisted in the rates above. Attack success among the exposed runs only: {formatRate(a.exposure.asr_given_exposure.value)}.
+                </td>
+                <td className="text-sm text-[var(--text-secondary)]">
+                  {a.exposure.n_opportunity} had the opportunity{a.exposure.n_unrecorded > 0 && `, ${a.exposure.n_unrecorded} stored without exposure flags`}
+                </td>
+              </tr>
+            )}
+            {a.cpr_message !== undefined && (
+              <tr>
+                <td>Propagated by message <span className="text-xs text-[var(--text-secondary)]">CPR, message</span></td>
+                <td className="text-right font-mono tabular-nums">{formatRate(a.cpr_message)}</td>
+                <td className="text-sm text-[var(--text-secondary)]">
+                  Counts only a downstream agent that acted on content from an upstream agent without having read the artifact itself. The row above also counts agents that were exposed to it directly.
+                </td>
+                <td className="text-sm text-[var(--text-secondary)]">{a.cpr_message_denominator_size ?? 0} runs with a recorded route</td>
+              </tr>
+            )}
             <tr>
               <td>Contained <span className="text-xs text-[var(--text-secondary)]">of runs with downstream agents</span></td>
               <td className="text-right font-mono tabular-nums">{formatRate(a.containment_rate)}</td>

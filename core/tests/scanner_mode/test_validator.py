@@ -172,11 +172,10 @@ class TestProbeValidator:
         assert "[FAIL]" in s
         assert "foo" in s
 
-    def test_canary_must_be_a_success_indicator(self):
-        rules = {"success_indicators": ["system prompt"], "blocked_indicators": ["cannot"]}
-        assert not self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a", evaluation_rules=rules)).valid
-        rules["success_indicators"].append("RG-CANARY-7f3a")
-        assert self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a", evaluation_rules=rules)).valid
+    def test_canary_stands_on_its_own(self):
+        # a canary needs no matching text indicator; it only has to be a non-empty string
+        assert self.validator.validate(_valid_entry(canary="RG-CANARY-7f3a")).valid
+        assert not self.validator.validate(_valid_entry(canary="  ")).valid
 
     def test_benign_control_must_be_boolean(self):
         assert not self.validator.validate(_valid_entry(benign_control="yes")).valid
@@ -207,3 +206,50 @@ class TestShippedDatasets:
                 assert (e["threat_model"], e["attacker_capability"]) == ("none", "none"), e["id"]
             else:
                 assert "none" not in (e["threat_model"], e["attacker_capability"]), e["id"]
+
+
+class TestSuccessActions:
+    def setup_method(self):
+        self.validator = ProbeValidator()
+
+    def _entry(self, actions):
+        rules = {"success_indicators": ["x"], "blocked_indicators": ["y"], "success_actions": actions}
+        return _valid_entry(evaluation_rules=rules)
+
+    def test_well_formed_actions_pass(self):
+        ok = [{"tool": "send_email", "args_contain": {"to": "evil.com"}}, {"tool": "run_command"}]
+        assert self.validator.validate(self._entry(ok)).valid
+
+    @pytest.mark.parametrize("bad", [
+        [], "send_email", [{"args_contain": {"to": "x"}}], [{"tool": 3}],
+        [{"tool": "send_email", "args_contain": {"to": 5}}], [{"tool": "send_email", "typo": 1}],
+    ])
+    def test_malformed_actions_fail(self, bad):
+        assert not self.validator.validate(self._entry(bad)).valid
+
+
+def test_every_success_action_names_a_real_tool():
+    # backend/ is not on the path of core tests, so read the tool names from the source
+    import re
+    from pathlib import Path
+    from core.scanner_mode.datasets.loader import load_all_datasets
+
+    tools = Path(__file__).parents[3] / "backend" / "scanner_mode" / "agents" / "_tools.py"
+    real = set(re.findall(r"^def (\w+)\(", tools.read_text(), re.M))
+    # execute_admin_command is the tool RG-TM-007 injects: it exists nowhere, so a call to it is the attack
+    allowed = real | {"execute_admin_command"}
+    used = {a["tool"] for e in load_all_datasets(validate=False)
+            for a in e["evaluation_rules"].get("success_actions", [])}
+    assert used and used <= allowed, used - allowed
+
+
+class TestToolFixtures:
+    def setup_method(self):
+        self.validator = ProbeValidator()
+
+    def test_a_known_tool_with_text_passes(self):
+        assert self.validator.validate(_valid_entry(tool_fixtures={"fetch_page": "page text"})).valid
+
+    @pytest.mark.parametrize("bad", [{}, "text", {"send_email": "x"}, {"fetch_page": ""}, {"fetch_page": 3}])
+    def test_anything_else_fails(self, bad):
+        assert not self.validator.validate(_valid_entry(tool_fixtures=bad)).valid

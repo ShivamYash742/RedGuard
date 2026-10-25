@@ -17,8 +17,9 @@ export interface Reference {
 }
 
 export interface EvaluationRules {
-  success_indicators: string[]
+  success_indicators?: string[]
   blocked_indicators: string[]
+  success_actions?: { tool: string; args_contain?: Partial<Record<string, string>> }[]
   notes?: string
 }
 
@@ -45,6 +46,7 @@ export interface Probe {
   research_notes?: string
   benign_control?: boolean
   canary?: string
+  tool_fixtures?: Partial<Record<string, string>>
 }
 
 export interface AttackFamilyMeta {
@@ -79,8 +81,8 @@ export type TierCounts = Record<OutcomeTier, number>
 export const emptyTierCounts = (): TierCounts => ({ FILTERED: 0, REFUSED: 0, IGNORED: 0, COMPROMISED: 0 })
 
 // Benign controls: FILTERED = regex false positive, OVER_REFUSED = model refused a harmless request
-export type ControlCounts = { FILTERED: number; OVER_REFUSED: number; HELPED: number }
-export const emptyControlCounts = (): ControlCounts => ({ FILTERED: 0, OVER_REFUSED: 0, HELPED: 0 })
+export type ControlCounts = { FILTERED: number; OVER_REFUSED: number; HELPED: number; UNCLEAR: number }
+export const emptyControlCounts = (): ControlCounts => ({ FILTERED: 0, OVER_REFUSED: 0, HELPED: 0, UNCLEAR: 0 })
 
 export interface BenchmarkRun {
   id: string
@@ -106,6 +108,10 @@ export interface RateCI {
   lo: number
   hi: number
   n: number
+  nEff?: number  // effective sample size after clustering by probe; the interval uses this
+  // attack success only: the rate if the `mixed` rows (a refusal and a success indicator both matched) counted as compromised
+  upper?: number
+  mixed?: number
 }
 
 // One measured row per (agent, prompt mode), from GET /api/leaderboard
@@ -114,14 +120,17 @@ export interface LeaderboardRow {
   agentId: string
   agentName: string
   promptMode: string | null
+  benchmarkVersion: string
+  preAudit: boolean
   runs: number
   lastRun: string
   attacks: number
   tiers: TierCounts
   asrModel: RateCI | null
   asrDeployed: RateCI | null
-  families: Record<string, { total: number; compromised: number; modelCompromised: number }>
-  controls: { total: number; overRefused: number; filtered: number }
+  families: Record<string, { total: number; compromised: number; modelAnswered: number; modelCompromised: number }>
+  noAnswer: { attacks: number; controls: number }
+  controls: { total: number; overRefused: number; unclear: number; filtered: number }
   overRefusal: RateCI | null
   bds: number | null
 }
@@ -199,6 +208,11 @@ export interface ReportOverall {
   refused?: number
   ignored?: number
   model_compromised?: number
+  model_answered?: number
+  mixed_rows?: number
+  mixed_rows_model_alone?: number
+  no_answer?: number
+  controls_no_answer?: number
 }
 
 export interface RunReport {
@@ -268,7 +282,7 @@ export interface KnownAgent {
 export const KNOWN_AGENTS: KnownAgent[] = [
   { id: 'nemotron_3_ultra', name: 'Nemotron-3 Ultra (550B)', badge: 'NVIDIA NIM', category: 'nvidia' },
   { id: 'nemotron_super_agent', name: 'Nemotron-3 Super (120B)', badge: 'NVIDIA NIM', category: 'nvidia' },
-  { id: 'llama_3_1_8b_agent', name: 'GPT OSS 20B', badge: 'Groq', category: 'nvidia' },
+  { id: 'gpt_oss_20b_agent', name: 'GPT OSS 20B', badge: 'Groq', category: 'nvidia' },
   { id: 'gpt_oss_120b_agent', name: 'GPT OSS 120B', badge: 'Groq', category: 'nvidia' },
   { id: 'ollama_local_agent', name: 'Ollama Local Agent', badge: 'Local Ollama', category: 'ollama' },
   { id: 'example_custom_agent', name: 'Example Custom Agent', badge: 'Custom Template', category: 'custom' },
@@ -329,6 +343,7 @@ class BenchmarkDataService {
             research_notes: entry.research_notes,
             benign_control: entry.benign_control ?? false,
             canary: entry.canary,
+            tool_fixtures: entry.tool_fixtures,
           })
         })
       }

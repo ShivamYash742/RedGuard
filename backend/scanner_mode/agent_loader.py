@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,17 @@ from typing import Any
 AGENTS_DIR = Path(__file__).parent / "agents"
 DEFAULT_AGENT_ID = "nemotron_3_ultra"
 
+#: Old agent ids that stored sessions still carry -> the agent they now run as.
+#: GPT OSS 20B used to live in llama_3_1_8b_agent.py.
+AGENT_ALIASES = {"llama_3_1_8b_agent": "gpt_oss_20b_agent"}
+
 
 def _load_module(agent_id: str):
     """Import an agent module by its stem name (filename without .py)."""
+    agent_id = AGENT_ALIASES.get(agent_id, agent_id)
+    # agentId arrives in a URL: only a bare module name, never a path or a private module.
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", agent_id) or not (AGENTS_DIR / f"{agent_id}.py").is_file():
+        raise KeyError(f"Unknown agent: {agent_id!r}")
     cache_key = f"scanner_mode.agents.{agent_id}"
 
     # Return cached module if already loaded — prevents re-executing module body
@@ -83,8 +92,7 @@ def list_agents() -> list[dict[str, str]]:
 
 
 def get_agent(agent_id: str):
-    """Load and return an agent module by ID. Falls back to default on error."""
-    try:
-        return _load_module(agent_id)
-    except Exception:
-        return _load_module(DEFAULT_AGENT_ID)
+    """Load and return an agent module by ID (old ids resolve through AGENT_ALIASES).
+    Raises KeyError for an unknown id and the import error for a broken agent:
+    silently running a different agent would put its results under this id."""
+    return _load_module(agent_id)

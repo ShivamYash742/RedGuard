@@ -3,10 +3,75 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, List
 
+from scanner_mode.schema import sha256_hex
+
 #: The rule file. Opened by path, not relative to the working directory, so
 #: the policy endpoints and the scan record read the same file wherever the
 #: server was started from.
 POLICY_PATH = Path(__file__).parent / "policy.yaml"
+
+
+class PolicyError(ValueError):
+    """policy.yaml is missing, unreadable or invalid. The filter fails closed:
+    a scan never starts on a policy that did not load."""
+
+
+ACTIONS = ("DENY", "ALLOW", "LOG")
+MATCH_TYPES = ("boolean", "exact", "threshold")
+#: Fields a condition may test besides the contains_<pattern> flags. The shipped
+#: policy also names ml_aligned_block / ml_aligned_allow, which nothing sets, so
+#: those two rules never match.
+_METADATA_FIELDS = {"token_count", "intent_category", "risk_score", "ml_aligned_block", "ml_aligned_allow"}
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def parse_policy(text: str) -> Dict[str, Any]:
+    """Parse and validate policy YAML; raise PolicyError on the first problem.
+    Used for the file at load time and for every PUT /api/policy body."""
+    try:
+        policy = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise PolicyError(f"invalid YAML: {exc}") from exc
+    if not isinstance(policy, dict):
+        raise PolicyError("policy must be a mapping with ingress_rules")
+    if policy.get("default_action", "ALLOW") not in ACTIONS:
+        raise PolicyError(f"default_action must be one of {ACTIONS}")
+    rules = policy.get("ingress_rules")
+    if not isinstance(rules, list):
+        raise PolicyError("ingress_rules must be a list")
+
+    fields = {f"contains_{key}" for key in Inspector._compile_patterns()} | _METADATA_FIELDS
+    for i, rule in enumerate(rules):
+        where = f"ingress_rules[{i}]"
+        if not isinstance(rule, dict):
+            raise PolicyError(f"{where} must be a mapping")
+        if not isinstance(rule.get("name"), str) or not rule["name"]:
+            raise PolicyError(f"{where} needs a name")
+        where = f"rule {rule['name']!r}"
+        if not _is_number(rule.get("priority")):
+            raise PolicyError(f"{where}: priority must be a number")
+        if rule.get("action") not in ACTIONS:
+            raise PolicyError(f"{where}: action must be one of {ACTIONS}")
+        conditions = rule.get("conditions")
+        # A rule without conditions would match every prompt.
+        if not isinstance(conditions, list) or not conditions:
+            raise PolicyError(f"{where}: conditions must be a non-empty list")
+        for cond in conditions:
+            if not isinstance(cond, dict):
+                raise PolicyError(f"{where}: each condition must be a mapping")
+            if cond.get("field") not in fields:
+                raise PolicyError(f"{where}: unknown field {cond.get('field')!r}")
+            match_type, value = cond.get("match_type"), cond.get("value")
+            if match_type not in MATCH_TYPES:
+                raise PolicyError(f"{where}: match_type must be one of {MATCH_TYPES}")
+            ok = {"boolean": isinstance(value, bool), "threshold": _is_number(value),
+                  "exact": isinstance(value, (str, int, float))}[match_type]
+            if not ok:
+                raise PolicyError(f"{where}: value {value!r} does not fit match_type {match_type}")
+    return policy
 
 
 class Inspector:
@@ -14,17 +79,22 @@ class Inspector:
         if policy_path is None:
             policy_path = str(POLICY_PATH)
         self.policy_path = policy_path
-        self.policy = self._load_policy()
+        self.policy_text = self._read_policy()
+        self.policy_sha256 = sha256_hex(self.policy_text)
+        try:
+            self.policy = parse_policy(self.policy_text)
+        except PolicyError as exc:
+            raise PolicyError(f"{self.policy_path}: {exc}") from exc
         self.patterns = self._compile_patterns()
 
-    def _load_policy(self) -> Dict[str, Any]:
+    def _read_policy(self) -> str:
         try:
-            with open(self.policy_path, "r") as f:
-                return yaml.safe_load(f)
-        except Exception:
-            return {"ingress_rules": [], "default_action": "ALLOW"}
+            return Path(self.policy_path).read_text()
+        except OSError as exc:
+            raise PolicyError(f"cannot read policy {self.policy_path}: {exc}") from exc
 
-    def _compile_patterns(self):
+    @staticmethod
+    def _compile_patterns():
         # Each pattern matches the shape of an attack (a verb aimed at a target),
         # not a single word: "token", "upload", "kill" or a URL alone blocked
         # 20 of 25 ordinary questions. Two matches reach the 0.2 risk threshold

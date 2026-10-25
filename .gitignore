@@ -1,6 +1,7 @@
 .env
 .env.local
 .env.*
+!backend/scanner_mode/agents/sandbox/.env
 audit.jsonl
 report.md
 report.json
@@ -19,3 +20,7 @@ venv/
 graphify-out/
 
 
+
+# audit scratch (DB copies, re-analysis inputs)
+scratch/
+/papr/

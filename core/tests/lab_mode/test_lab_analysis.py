@@ -132,7 +132,10 @@ class TestCompareArms:
         assert asr["difference"] == pytest.approx(-1.0)
 
     def test_separated_intervals_are_flagged_as_such(self):
-        result = compare_arms("attack", _compromised(20), "attack_validated", _clean(20))
+        # six cases that all succeed against six that never do: separated even after clustering
+        many = [f"RGM-00{i}" for i in range(1, 7)]
+        result = compare_arms("attack", [o for c in many for o in _compromised(5, c)],
+                              "attack_validated", [o for c in many for o in _clean(5, c)])
         assert result["metrics"]["asr"]["overlapping"] is False
 
     def test_overlapping_intervals_are_flagged(self):
@@ -202,10 +205,13 @@ class TestClusteredIntervals:
     or fail together. Pooling them as independent trials gave intervals that
     were too narrow."""
 
-    def test_one_case_keeps_the_plain_wilson_interval(self):
+    def test_one_case_counts_as_one_independent_observation(self):
+        """L6: five repetitions of one case are not five trials. The old fallback gave the plain
+        Wilson interval over the repetitions, which no single case can justify."""
         icr = arm_summary(_compromised(3) + _clean(2))["icr"]
-        assert icr["ci_method"] == "wilson"
-        assert icr["ci"] == pytest.approx(list(rate_ci(3, 5)))
+        assert icr["ci_method"] == "wilson_single_cluster" and icr["n_eff"] == 1.0
+        assert icr["ci"] == pytest.approx(list(rate_ci(0.6, 1)))
+        assert icr["ci"][1] - icr["ci"][0] > rate_ci(3, 5)[1] - rate_ci(3, 5)[0]
 
     def test_cases_that_move_together_widen_the_interval(self):
         icr = arm_summary(_compromised(5, "RGM-001") + _clean(5, "RGM-002"))["icr"]
@@ -256,3 +262,14 @@ class TestPairedComparison:
         variant = _clean(3, "RGM-002") + _clean(3, "RGM-003")
         paired = compare_arms("attack", baseline, "attack_validated", variant)["metrics"]["asr"]["paired"]
         assert paired["n_cases"] == 1
+
+
+def test_the_capability_gateway_is_not_called_camel():
+    """L8: the arm is a task-scoped resource allowlist inspired by CaMeL, not CaMeL."""
+    from core.lab_mode import tools
+    from core.lab_mode.analysis import ARMS
+
+    description = ARMS["attack_capability_gateway"]["description"]
+    assert "inspired by CaMeL" in description and "CaMeL-style" not in description
+    doc = " ".join(tools.capability_policy.__doc__.split())   # the docstring wraps lines
+    assert "inspired by CaMeL" in doc and "It is not CaMeL" in doc

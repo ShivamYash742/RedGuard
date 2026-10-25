@@ -35,7 +35,7 @@ import sys
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
@@ -44,7 +44,7 @@ _PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-from core.lab_mode.analysis import ARMS, arm_summary, comparability_problems, compare_standard
+from core.lab_mode.analysis import ARMS, arm_summary, comparability_problems, compare_standard, headline, scope_report
 from core.lab_mode.cases import (
     CASES_DIR,
     FIXTURES_DIR,
@@ -59,6 +59,8 @@ from core.lab_mode.evaluator import _RESOURCE_ARG_KEYS, evaluate, verdict_from_d
 from core.lab_mode.evidence import build_bundle
 from core.lab_mode.metrics import (
     asr,
+    case_role,
+    in_scope,
     containment_histogram,
     containment_rate,
     coverage,
@@ -78,14 +80,18 @@ from core.lab_mode.metrics import (
 from core.lab_mode.model_client import ModelClient, ModelConfig
 from core.lab_mode.repro import reproducibility_stamp
 from core.lab_mode.report import build_report, to_markdown
-from core.lab_mode.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, run_case
+from core.shared.version import PRE_AUDIT_LABEL, lab_vintage
+from core.lab_mode.runner import (
+    ATTACK, CLEAN, DEFAULT_MAX_STEPS, RunConfig, ScriptedClient, repetition_config, repetition_warnings, run_case,
+)
 from core.lab_mode.tools import TOOLS
 from core.lab_mode.trace import EventCategory, EventType, TraceEvent
 
 from lab_mode import store as lab_store
 from database import get_db
+from request_guard import guard_request
 
-router = APIRouter(prefix="/api/lab", tags=["lab"])
+router = APIRouter(prefix="/api/lab", tags=["lab"], dependencies=[Depends(guard_request)])
 
 DEFAULT_REPS = 5
 MAX_REPS = 25
@@ -124,6 +130,8 @@ def _case_summary(case: Dict[str, Any]) -> Dict[str, Any]:
         "injection_point": case["attack"]["injection_point"],
         "channel": case["attack"]["delivery"]["channel"],
         "severity": case["severity"],
+        "task_endorses_channel": case.get("task_endorses_channel"),
+        "role": case.get("role", "attack"),
         "topology_id": case["topology_id"],
         "cee_fixture": case["cee_fixture"],
         "objective": case["objective"]["description"],
@@ -212,8 +220,17 @@ async def create_experiment(request: Request):
         raise HTTPException(status_code=400, detail=f"Unknown case ids: {unknown}")
 
     try:
+        temperature = float(body.get("temperature", 0.0))
+        seed = body.get("seed")
+        seed = None if seed in (None, "") else int(seed)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="temperature must be a number and seed an integer")
+    if not 0.0 <= temperature <= 2.0:
+        raise HTTPException(status_code=400, detail="temperature must be between 0 and 2")
+
+    try:
         model_config = ModelConfig.from_env(
-            provider=body.get("provider", "ollama"), model=body.get("model"),
+            provider=body.get("provider", "ollama"), model=body.get("model"), temperature=temperature, seed=seed,
         )
     except ValueError as exc:  # unknown provider — the caller's mistake, not ours
         raise HTTPException(status_code=400, detail=str(exc))
@@ -221,21 +238,22 @@ async def create_experiment(request: Request):
     # Validates arm and topology, and fails before anything is persisted.
     config = _build_config(arm, model_config, topology_id, max_steps)
 
+    stored_config = {
+        **config.to_dict(),
+        "arm": arm,
+        "cases": selected,
+        "repetitions": reps,
+        "scripted": scripted,
+        # Slows the scripted replay so a demo can be watched; a model
+        # run is slow enough on its own.
+        **({"step_delay_ms": step_delay_ms} if scripted and step_delay_ms else {}),
+    }
     db = await get_db()
     experiment = await lab_store.create_experiment(
         db,
         name=body.get("name") or f"{arm} × {len(selected)} cases × {reps}",
         arm_key=arm,
-        config={
-            **config.to_dict(),
-            "arm": arm,
-            "cases": selected,
-            "repetitions": reps,
-            "scripted": scripted,
-            # Slows the scripted replay so a demo can be watched; a model
-            # run is slow enough on its own.
-            **({"step_delay_ms": step_delay_ms} if scripted and step_delay_ms else {}),
-        },
+        config=stored_config,
         versions=reproducibility_stamp(),
     )
     return {
@@ -245,6 +263,7 @@ async def create_experiment(request: Request):
         "repetitions": reps,
         "total_runs": len(selected) * reps * 2,
         "config": config.to_dict(),
+        "warnings": repetition_warnings(stored_config),
     }
 
 
@@ -255,7 +274,11 @@ def _experiment_row(experiment: Any, runs: Optional[List[Any]] = None) -> Dict[s
         "name": experiment.name,
         "arm": experiment.armKey,
         "config": config,
+        "warnings": repetition_warnings(config),
         "versions": json.loads(experiment.versionsJson),
+        # "current", "pre_audit" (measured with the 1.2.0 evaluator and metrics) or "other"
+        "vintage": lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")),
+        "vintage_label": PRE_AUDIT_LABEL if lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")) == "pre_audit" else None,
         "created_at": experiment.createdAt.isoformat(),
         # Runs per run, so `/lab` can badge a live experiment from any tab.
         "live": _JOBS[experiment.id].progress if experiment.id in _JOBS else None,
@@ -436,10 +459,7 @@ async def _execute(experiment: Any):
     selected = config_data["cases"]
     reps = config_data["repetitions"]
 
-    model_config = ModelConfig.from_env(
-        provider=(config_data.get("model") or {}).get("provider", "ollama"),
-        model=(config_data.get("model") or {}).get("model"),
-    )
+    model_config = ModelConfig.from_stored(config_data.get("model"))
     run_config = _build_config(
         config_data["arm"], model_config,
         config_data.get("topology_id", "linear_abc"),
@@ -467,12 +487,14 @@ async def _execute(experiment: Any):
     for case_id in selected:
         case = load_case(case_id)
         cee_factory = fixture_factory(case)
-        client = _client_for(config_data, model_config, case)
 
         for rep in range(1, reps + 1):
             pair_id = f"{experiment.id}-{case_id}-r{rep}"
             if pair_id in done:
                 continue
+            # Same seed for the clean and attack half of a pair, a different one per repetition.
+            rep_config = repetition_config(run_config, rep)
+            client = _client_for(config_data, rep_config.model, case)
             results: Dict[str, Any] = {}
             rows: Dict[str, Any] = {}
 
@@ -490,7 +512,7 @@ async def _execute(experiment: Any):
 
                 started = time.monotonic()
                 async for item in _run_streaming(
-                    case, cee_factory(), run_config, client, mode=mode, run_id=row.id,
+                    case, cee_factory(), rep_config, client, mode=mode, run_id=row.id,
                 ):
                     if isinstance(item, TraceEvent):
                         yield {"event": "trace_event", "data": _event_payload(row.id, item)}
@@ -720,13 +742,15 @@ async def _outcomes(db: Any, experiment_id: str) -> Tuple[List[RunOutcome], List
     this same function so the two can never disagree about what counts.
     """
     runs = await lab_store.list_runs(db, experiment_id)
+    experiment = await lab_store.get_experiment(db, experiment_id)
+    arm = experiment.armKey if experiment else None
     outcomes = []
     for run in lab_store.completed_attack_runs(runs):
         try:
             case = load_case(run.caseId)
         except FileNotFoundError:
             continue
-        outcomes.append(RunOutcome(case=case, verdict=verdict_from_dict(json.loads(run.verdictJson))))
+        outcomes.append(RunOutcome(case=case, verdict=verdict_from_dict(json.loads(run.verdictJson)), arm=arm))
     return outcomes, runs
 
 
@@ -739,8 +763,6 @@ async def experiment_metrics(experiment_id: str):
 
     outcomes, runs = await _outcomes(db, experiment_id)
     n = len(outcomes)
-    denominator = cpr_denominator(outcomes)
-    cpr_value = cpr(outcomes)
 
     per_case: Dict[str, Any] = {}
     for case_id in sorted({o.case["id"] for o in outcomes}):
@@ -754,41 +776,31 @@ async def experiment_metrics(experiment_id: str):
             # SOC needs N>=3 valid repetitions and returns None below that,
             # rather than a confident-looking 1.0 from a single run.
             "soc": soc(subset),
+            "role": case_role(subset[0].case),
+            "in_scope": in_scope(subset[0]),
         }
+    counted = [c for c in per_case.values() if c["in_scope"]]
 
     return {
         "experiment_id": experiment_id,
         "arm": experiment.armKey,
+        "vintage": lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")),
         "n_attack_runs": n,
         # Pairs left out because a run hit a harness error or never finished.
         # Visible, never silently absorbed (§21.8).
         "n_failed_pairs": len(lab_store.failed_pair_ids(runs)),
-        "aggregate": {
-            "icr": rate_summary(outcomes, icr),
-            "asr": rate_summary(outcomes, asr),
-            "partial_rate": rate_summary(outcomes, partial_rate),
-            # CPR is "n/a" when D is empty — never 0.0 (§10.3). An empty
-            # denominator means the question was never asked, not that
-            # propagation never happened.
-            "cpr": cpr_value,
-            "cpr_denominator_size": len(denominator),
-            "depth": depth(outcomes),
-            "coverage": coverage(outcomes),
-            "mean_coverage": mean_coverage(outcomes),
-            "containment_rate": containment_rate(outcomes),
-            "containment_histogram": [
-                {"agent": agent, "mechanism": mechanism, "count": count}
-                for (agent, mechanism), count in containment_histogram(outcomes).items()
-            ],
-        },
+        # Attack cases whose objective is reachable in this arm; controls and unreachable cases are
+        # in `excluded`, and the old all-cases headline is `pooled_legacy`.
+        "aggregate": headline(outcomes),
+        **scope_report(outcomes),
         "per_case": per_case,
         # Macro average weights every case equally. The micro figures above
         # weight by run count, so a case that happened to run more often
         # would otherwise dominate the headline (§10's aggregation note).
         "macro": {
-            "icr": macro_average([c["icr"] for c in per_case.values()]),
-            "asr": macro_average([c["asr"] for c in per_case.values()]),
-            "partial_rate": macro_average([c["partial_rate"] for c in per_case.values()]),
+            "icr": macro_average([c["icr"] for c in counted]),
+            "asr": macro_average([c["asr"] for c in counted]),
+            "partial_rate": macro_average([c["partial_rate"] for c in counted]),
         },
         "trajectory_drift": await _drift(db, runs),
         "run_counts": _count_by(runs, lambda r: r.status),
@@ -888,15 +900,17 @@ async def compare_experiments(experiments: str):
     db = await get_db()
     by_arm: Dict[str, List[RunOutcome]] = {}
     configs: Dict[str, Dict[str, Any]] = {}
+    versions: Dict[str, Dict[str, Any]] = {}
     for experiment_id in ids:
         experiment = await lab_store.get_experiment(db, experiment_id)
         if experiment is None:
             raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
         configs[experiment_id] = json.loads(experiment.configJson)
+        versions[experiment_id] = (json.loads(experiment.versionsJson) or {}).get("versions") or {}
         outcomes, _ = await _outcomes(db, experiment_id)
         by_arm.setdefault(experiment.armKey, []).extend(outcomes)
 
-    errors, warnings = comparability_problems(configs)
+    errors, warnings = comparability_problems(configs, versions)
     if errors:
         raise HTTPException(
             status_code=400,
