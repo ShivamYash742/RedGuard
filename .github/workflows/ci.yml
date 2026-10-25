@@ -1,0 +1,51 @@
+# Tests and static checks. No model is called and no secret is needed: the Python suite uses
+# scripted fakes and blocks non-loopback sockets (core/tests/conftest.py, backend/tests/conftest.py).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # The Prisma Python client drives the Node-based Prisma CLI.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned dependencies
+        run: pip install -r backend/requirements.txt -c backend/requirements.lock
+      - name: Generate the Prisma client and fetch its engines
+        run: |
+          prisma generate --schema backend/prisma/schema.prisma
+          prisma py fetch
+      - name: Tests (core and backend)
+        working-directory: backend
+        run: |
+          cp prisma/dev.db "$RUNNER_TEMP/ci.db"   # the committed seed data is never opened for writing
+          DATABASE_URL="file:$RUNNER_TEMP/ci.db" python -m pytest ../core/tests tests -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck

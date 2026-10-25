@@ -52,7 +52,7 @@ Without Docker:
 
 ```bash
 npm ci
-cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cd ..
+cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt -c requirements.lock && cd ..
 cp .env.example .env   # then fill in the keys for whichever agents you need
 ```
 

@@ -408,7 +408,7 @@ npm ci
 cd backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -c requirements.lock   # the lock pins every package the tests ran with
 prisma generate --schema prisma/schema.prisma
 cd ..
 ```
