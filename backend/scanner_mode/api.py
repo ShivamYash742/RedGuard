@@ -8,22 +8,28 @@ Mounted by `backend/app.py` with no prefix, so every path is unchanged.
 """
 
 import json
+import os
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from core.scanner_mode.datasets.loader import load_all_datasets
-from core.shared.version import BENCHMARK_VERSION
+from core.shared.version import BENCHMARK_VERSION, PROBE_SCHEMA_VERSION
 
 from database import get_db
+from request_guard import guard_request
 from scanner_mode.agent_loader import DEFAULT_AGENT_ID, get_agent, list_agents
-from scanner_mode.inspector import POLICY_PATH
-from scanner_mode.leaderboard import leaderboard_rows
+from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError, parse_policy
+from scanner_mode.leaderboard import compare_groups, leaderboard_rows
+from scanner_mode.schema import sha256_hex
 from scanner_mode.report_generator import generate_report_for_session
-from scanner_mode.scanner import finalize_scan, init_scan_session, run_family_scan, session_prompt_mode
+from scanner_mode.scanner import (
+    finalize_scan, init_scan_session, run_family_scan, session_model_config, session_prompt_mode,
+    validate_builtin_probes,
+)
 
-router = APIRouter(tags=["scanner"])
+router = APIRouter(tags=["scanner"], dependencies=[Depends(guard_request)])
 
 
 @router.get("/api/stats")
@@ -59,6 +65,27 @@ async def get_leaderboard():
     prisma = await get_db()
     sessions = await prisma.session.find_many(include={"events": True})
     return leaderboard_rows(sessions)
+
+@router.get("/api/leaderboard/compare")
+async def compare_leaderboard_rows(a: str, b: str, split: str = "test", version: str = BENCHMARK_VERSION):
+    """Paired comparison of two leaderboard rows ("agentId:promptMode" each) on one split.
+
+    Says whether the rows differ at all: the leaderboard's order is only a claim where this does."""
+    if split not in ("dev", "test"):
+        raise HTTPException(status_code=400, detail="split must be 'dev' or 'test'")
+    keys = []
+    for value in (a, b):
+        agent, _, mode = value.partition(":")
+        if not agent or not mode:
+            raise HTTPException(status_code=400, detail="a and b must look like agentId:promptMode")
+        keys.append((agent, mode))
+    prisma = await get_db()
+    sessions = await prisma.session.find_many(include={"events": True})
+    try:
+        return compare_groups(sessions, keys[0], keys[1], split, version)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0]))
+
 
 @router.get("/api/sessions")
 async def list_sessions():
@@ -102,6 +129,9 @@ async def get_session(session_id: str):
         if isinstance(ev.get('classifierResult'), str):
             try: ev['classifierResult'] = json.loads(ev['classifierResult'])
             except: pass
+        if isinstance(ev.get('recordedActions'), str):
+            try: ev['recordedActions'] = json.loads(ev['recordedActions'])
+            except: pass
     return d
 
 @router.get("/api/events")
@@ -128,6 +158,9 @@ async def get_events(category: str = None, status: str = None, sessionId: str = 
             except: pass
         if isinstance(d.get('classifierResult'), str):
             try: d['classifierResult'] = json.loads(d['classifierResult'])
+            except: pass
+        if isinstance(d.get('recordedActions'), str):
+            try: d['recordedActions'] = json.loads(d['recordedActions'])
             except: pass
         res.append(d)
     return res
@@ -166,10 +199,17 @@ async def get_policy():
 @router.put("/api/policy")
 async def update_policy(request: Request):
     data = await request.json()
-    yaml_content = data.get("yaml", "")
-    with open(POLICY_PATH, "w") as f:
-        f.write(yaml_content)
-    return {"status": "success"}
+    yaml_content = data.get("yaml") if isinstance(data, dict) else None
+    if not isinstance(yaml_content, str):
+        raise HTTPException(status_code=400, detail='body must be {"yaml": "<policy text>"}')
+    try:
+        parse_policy(yaml_content)
+    except PolicyError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid policy: {exc}")
+    tmp = POLICY_PATH.with_name(POLICY_PATH.name + ".tmp")
+    tmp.write_text(yaml_content)
+    os.replace(tmp, POLICY_PATH)  # atomic: a scan never reads half a policy
+    return {"status": "success", "sha256": sha256_hex(yaml_content)}
 
 # ── Custom Probes ────────────────────────────────────────────────────────────
 @router.get("/api/probes")
@@ -192,6 +232,15 @@ async def get_probe_count():
     builtin_count = len(load_all_datasets(validate=False))
     custom_count = await prisma.customprobe.count(where={"active": True})
     return {"builtin": builtin_count, "custom": custom_count, "total": builtin_count + custom_count}
+
+@router.get("/api/probes/validation")
+async def probe_validation():
+    """The built-in corpus checked against the probe spec (what the corpus page shows)."""
+    try:
+        return {"valid": True, "total": validate_builtin_probes(), "schemaVersion": PROBE_SCHEMA_VERSION, "error": None}
+    except (ValueError, OSError) as exc:
+        return {"valid": False, "total": None, "schemaVersion": PROBE_SCHEMA_VERSION, "error": str(exc)}
+
 
 @router.post("/api/probes")
 async def create_probe(request: Request):
@@ -239,6 +288,14 @@ async def get_agents():
 
 @router.post("/api/scan/start")
 async def start_scan(request: Request):
+    try:
+        Inspector()
+    except PolicyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    try:
+        validate_builtin_probes()
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=f"probe corpus is invalid: {exc}")
     prisma = await get_db()
     model_name = None
     requested_mode = "baseline"
@@ -250,7 +307,10 @@ async def start_scan(request: Request):
     except Exception:
         agent_id = DEFAULT_AGENT_ID
 
-    mod = get_agent(agent_id)
+    try:
+        mod = get_agent(agent_id)
+    except Exception as exc:  # unknown id, or an agent that fails to import
+        raise HTTPException(status_code=400, detail=f"Cannot load agent {agent_id!r}: {exc}")
     agent_name = getattr(mod, "AGENT_NAME", agent_id)
     try:
         prompt_mode = session_prompt_mode(agent_id, requested_mode)
@@ -267,6 +327,7 @@ async def start_scan(request: Request):
             "status": "RUNNING",
             "benchmarkVersion": BENCHMARK_VERSION,
             "promptMode": prompt_mode,
+            "modelConfig": session_model_config(agent_id),
         }
     )
 

@@ -43,13 +43,15 @@ from prisma import Prisma
 from lab_mode import store as lab_store
 from lab_mode.api import ARMS, _build_config, _outcomes, rescore_case
 from core.lab_mode.analysis import arm_summary, comparability_problems, compare_standard, compromise_by_agent
-from core.lab_mode.cases import case_ids, fixture_factory, load_case
+from core.lab_mode.cases import case_ids, fixture_factory, load_all_cases, load_case
 from core.lab_mode.evaluator import evaluate
 from core.lab_mode.evidence import build_bundle
 from core.lab_mode.metrics import RunOutcome
 from core.lab_mode.model_client import ModelClient, ModelConfig
 from core.lab_mode.repro import reproducibility_stamp
-from core.lab_mode.runner import ATTACK, CLEAN, DEFAULT_MAX_STEPS, ScriptedClient, run_case
+from core.lab_mode.runner import (
+    ATTACK, CLEAN, DEFAULT_MAX_STEPS, ScriptedClient, repetition_config, repetition_warnings, run_case,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -67,9 +69,10 @@ async def run_arm(
     max_steps: int,
     experiment_id: Optional[str] = None,
     quiet: bool = False,
+    exposure: str = "natural",
 ) -> str:
     """Execute one arm, resuming into `experiment_id` when given."""
-    run_config = _build_config(arm, model_config, "linear_abc", max_steps)
+    run_config = _build_config(arm, model_config, "linear_abc", max_steps, exposure)
 
     if experiment_id:
         experiment = await lab_store.get_experiment(db, experiment_id)
@@ -82,16 +85,14 @@ async def run_arm(
         # `--resume <id>` carries no --provider/--model, so reading the CLI
         # silently continued a nemotron sweep on the ollama default, inside
         # the same experiment.
-        stored_model = config_data.get("model") or {}
-        model_config = ModelConfig.from_env(
-            provider=stored_model.get("provider", "ollama"), model=stored_model.get("model"),
-        )
+        model_config = ModelConfig.from_stored(config_data.get("model"))
         max_steps = config_data.get("max_steps", DEFAULT_MAX_STEPS)
         scripted = bool(config_data.get("scripted", False))
-        run_config = _build_config(arm, model_config, config_data.get("topology_id", "linear_abc"), max_steps)
+        run_config = _build_config(arm, model_config, config_data.get("topology_id", "linear_abc"), max_steps,
+                                   config_data.get("exposure", "natural"))
         print(f"  resuming with the stored config: "
               f"{'(scripted)' if scripted else f'{model_config.provider} / {model_config.model}'}, "
-              f"max_steps={max_steps}")
+              f"temperature={model_config.temperature}, seed={model_config.seed}, max_steps={max_steps}")
         stale = await lab_store.abandon_stale_runs(db, experiment_id)
         if stale:
             print(f"  marked {stale} interrupted run(s) FAILED")
@@ -112,25 +113,31 @@ async def run_arm(
         experiment_id = experiment.id
         done = set()
 
+    stored = json.loads((await lab_store.get_experiment(db, experiment_id)).configJson)
+    for warning in repetition_warnings(stored):
+        print(f"  WARNING: {warning}")
+
     total = len(cases) * reps
     index = 0
 
     for case_id in cases:
         case = load_case(case_id)
         cee_factory = fixture_factory(case)
-        client: Any = ScriptedClient(case["clean_script"]) if scripted else ModelClient(model_config)
 
         for rep in range(1, reps + 1):
             index += 1
             pair_id = f"{experiment_id}-{case_id}-r{rep}"
             if pair_id in done:
                 continue
+            # base seed + repetition; the clean and attack halves of a pair share it
+            rep_config = repetition_config(run_config, rep)
+            client: Any = ScriptedClient(case["clean_script"]) if scripted else ModelClient(rep_config.model)
 
             prefix = f"  [{index}/{total}] {case_id} rep {rep}"
             try:
                 verdict_label = await _run_pair(
                     db, experiment_id=experiment_id, case=case, cee_factory=cee_factory,
-                    run_config=run_config, client=client, pair_id=pair_id, rep=rep,
+                    run_config=rep_config, client=client, pair_id=pair_id, rep=rep,
                 )
                 if not quiet:
                     print(f"{prefix}: {verdict_label}")
@@ -207,12 +214,13 @@ async def _outcomes_for(db: Any, experiment_id: str) -> Tuple[str, List[RunOutco
 
 
 async def _check_comparable(db: Any, experiment_ids: Sequence[str]) -> None:
-    configs = {}
+    configs, versions = {}, {}
     for experiment_id in experiment_ids:
         experiment = await lab_store.get_experiment(db, experiment_id)
         if experiment is not None:
             configs[experiment_id] = json.loads(experiment.configJson)
-    errors, warnings = comparability_problems(configs)
+            versions[experiment_id] = (json.loads(experiment.versionsJson) or {}).get("versions") or {}
+    errors, warnings = comparability_problems(configs, versions)
     for warning in warnings:
         print(f"  ! {warning}")
     if errors:
@@ -312,11 +320,19 @@ def print_report(by_arm: Dict[str, List[RunOutcome]]) -> None:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--arms", default="attack", help=f"comma-separated; valid: {','.join(ARMS)}")
-    parser.add_argument("--cases", default="", help="comma-separated case ids (default: all 9)")
+    parser.add_argument("--cases", default="", help="comma-separated case ids (default: every case of --split)")
     parser.add_argument("--reps", type=int, default=5)
     parser.add_argument("--provider", default="ollama", choices=["ollama", "nvidia", "groq"])
     parser.add_argument("--model", default=None)
     parser.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
+    parser.add_argument("--temperature", type=float, default=0.0,
+                        help="sampling temperature (default 0: repetitions are then likely exact copies unless --seed is set)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="base seed; repetition N uses seed + N. Recorded with every run")
+    parser.add_argument("--split", choices=["dev", "test", "all"], default="all",
+                        help="which cases to run when --cases is not given (published numbers come from 'test')")
+    parser.add_argument("--exposure", choices=["natural", "forced"], default="natural",
+                        help="forced: the harness performs the entry agent's read of the planted location")
     parser.add_argument("--scripted", action="store_true", help="replay clean scripts; no model calls")
     parser.add_argument("--resume", default=None, help="experiment id to continue")
     parser.add_argument("--report", default=None, help="comma-separated experiment ids; analysis only")
@@ -346,8 +362,11 @@ async def main() -> int:
             print_report(by_arm)
             return 0
 
-        model_config = ModelConfig.from_env(provider=args.provider, model=args.model)
-        cases = [c.strip() for c in args.cases.split(",") if c.strip()] or case_ids()
+        model_config = ModelConfig.from_env(
+            provider=args.provider, model=args.model, temperature=args.temperature, seed=args.seed,
+        )
+        cases = [c.strip() for c in args.cases.split(",") if c.strip()] or [
+            c["id"] for c in load_all_cases(validate=False) if args.split == "all" or c.get("split", "dev") == args.split]
         arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
         if args.resume and len(arms) > 1:
@@ -369,7 +388,7 @@ async def main() -> int:
             experiment_id = await run_arm(
                 db, arm=arm, cases=cases, reps=args.reps, model_config=model_config,
                 scripted=args.scripted, max_steps=args.max_steps,
-                experiment_id=args.resume, quiet=args.quiet,
+                experiment_id=args.resume, quiet=args.quiet, exposure=args.exposure,
             )
             experiment_ids.append(experiment_id)
             arm_key, outcomes = await _outcomes_for(db, experiment_id)

@@ -3,21 +3,17 @@ RedGuard Prompt Loader
 ──────────────────────
 Single source of truth for all agent system prompts.
 
-Loads backend/scanner_mode/agents/system_prompts.json. Two modes:
+Loads backend/scanner_mode/agents/system_prompts.json. Two modes, each the same
+for every agent so that models are compared on equal terms:
 
-  baseline (default) — one neutral prompt shared by every agent; it names no
-                       attacks, so models are compared on equal terms.
-  hardened           — the per-agent prompt, assembled from:
-  1. Agent-specific header (identity paragraph)
-  2. Shared SCENARIO AWARENESS section (all 12 scenarios)
-  3. Shared ATTACK FAMILY DEFENCES section (all 8 families)
-  4. Agent-specific tool principles
-  5. Agent-specific extra addendum (if any)
+  baseline (default) — one neutral prompt; it names no attacks.
+  hardened           — the baseline prompt, a security line and six general principles.
+                       It names no attack phrase, family or scenario, so it cannot teach the test.
 
 Usage:
     from scanner_mode.agents._prompt_loader import build_system_prompt
-    build_system_prompt("nemotron_3_ultra")              # baseline
-    build_system_prompt("nemotron_3_ultra", "hardened")
+    build_system_prompt()              # baseline
+    build_system_prompt("hardened")
 
 To update any prompt: edit system_prompts.json and restart the server.
 No Python code changes needed.
@@ -42,63 +38,20 @@ def _load_raw() -> dict[str, Any]:
         return json.load(f)
 
 
-def _build_scenario_block(shared: dict[str, Any]) -> str:
-    """Render the SCENARIO AWARENESS section from shared data."""
-    sa = shared["scenario_awareness"]
-    lines: list[str] = [
-        _DIVIDER,
-        sa["_title"],
-        _DIVIDER,
-        sa["intro"],
-        "",
-    ]
-    for sc in sa["scenarios"].values():
-        lines.append(f"  \u2022 {sc['label']}")
-        for rule in sc["rules"]:
-            lines.append(f"    \u2014 {rule}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
-
-
-def _build_attack_block(shared: dict[str, Any]) -> str:
-    """Render the ATTACK FAMILY DEFENCES section from shared data."""
-    af = shared["attack_family_defences"]
-    lines: list[str] = [
-        "",
-        _DIVIDER,
-        af["_title"],
-        _DIVIDER,
-        "",
-    ]
-    for family in af["families"].values():
-        lines.append(f"{family['number']}. {family['label']}")
-        for rule in family["rules"]:
-            lines.append(f"   {rule}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
-
-
-def _build_tool_block(principles: list[str]) -> str:
-    """Render the TOOL USE PRINCIPLES section."""
-    lines: list[str] = [
-        "",
-        _DIVIDER,
-        "TOOL USE PRINCIPLES",
-        _DIVIDER,
-    ]
-    for p in principles:
-        lines.append(f"- {p}")
+def _build_principles_block(principles: list[str]) -> str:
+    """Render the numbered SECURITY PRINCIPLES section."""
+    lines = ["", _DIVIDER, "SECURITY PRINCIPLES", _DIVIDER]
+    lines += [f"{i}. {p}" for i, p in enumerate(principles, 1)]
     return "\n".join(lines)
 
 
-def build_system_prompt(agent_id: str, mode: str = "baseline") -> str:
+def build_system_prompt(mode: str = "baseline") -> str:
     """
-    Return the system prompt for agent_id in the given mode.
+    Return the system prompt for a mode. It is the same for every agent: a
+    prompt that differed by agent would confound the comparison between models.
 
     Raises:
         ValueError: If mode is not one of PROMPT_MODES.
-        KeyError: If agent_id is not found in system_prompts.json (hardened mode).
-        FileNotFoundError: If system_prompts.json is missing.
     """
     if mode not in PROMPT_MODES:
         raise ValueError(f"Unknown prompt mode {mode!r}; expected one of {PROMPT_MODES}")
@@ -106,50 +59,13 @@ def build_system_prompt(agent_id: str, mode: str = "baseline") -> str:
     if mode == "baseline":
         return raw["baseline"]
     shared = raw["shared"]
-    agents = raw["agents"]
-
-    if agent_id not in agents:
-        raise KeyError(
-            f"Agent '{agent_id}' not found in system_prompts.json. "
-            f"Known agents: {sorted(agents)}"
-        )
-
-    agent_cfg = agents[agent_id]
-
-    parts: list[str] = []
-
-    # 1. Agent identity header
-    parts.append(agent_cfg["header"])
-
-    # 2. Scenario awareness (shared)
-    parts.append("\n" + _build_scenario_block(shared))
-
-    # 3. Attack family defences (shared)
-    parts.append(_build_attack_block(shared))
-
-    # 4. Tool use principles (per-agent)
-    tool_principles = agent_cfg.get("tool_principles", [])
-    if tool_principles:
-        parts.append(_build_tool_block(tool_principles))
-
-    # 5. Optional per-agent addendum
-    extra = agent_cfg.get("extra", "")
-    if extra:
-        parts.append(f"\n{_DIVIDER}\nNOTE\n{_DIVIDER}\n{extra}")
-
-    return "\n".join(parts)
-
-
-def list_agents() -> list[str]:
-    """Return all agent IDs defined in system_prompts.json."""
-    return sorted(_load_raw()["agents"])
+    return "\n".join([
+        raw["baseline"],
+        shared["security_line"],
+        _build_principles_block(shared["principles"]),
+    ])
 
 
 if __name__ == "__main__":
-    # Quick sanity-check: print assembled prompts for all agents
-    for aid in list_agents():
-        print(f"\n{'=' * 60}")
-        print(f"AGENT: {aid}")
-        print("=" * 60)
-        print(build_system_prompt(aid, "hardened"))
-        print()
+    for mode in PROMPT_MODES:
+        print(f"\n{'=' * 60}\n{mode.upper()}\n{'=' * 60}\n{build_system_prompt(mode)}")

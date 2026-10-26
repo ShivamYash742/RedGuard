@@ -208,3 +208,42 @@ class TestExportCSV:
         nested_output = tmp_path / "nested" / "dir" / "test.csv"
         export_csv(results, str(nested_output))
         assert nested_output.exists()
+
+
+class TestClusteredRate:
+    """clustered_rate: Wilson over the effective sample size when items share a cluster."""
+
+    @staticmethod
+    def _mean(xs):
+        return sum(xs) / len(xs) if xs else None
+
+    def test_one_item_per_cluster_is_the_plain_wilson_interval(self):
+        from core.shared.statistics import clustered_rate, wilson_ci
+
+        groups = {f"p{i}": [1 if i < 3 else 0] for i in range(10)}
+        result = clustered_rate(groups, self._mean)
+        assert result["ci_method"] == "wilson" and result["n_eff"] == 10
+        assert tuple(result["ci"]) == wilson_ci(3, 10)
+
+    def test_runs_that_repeat_each_other_do_not_narrow_the_interval(self):
+        from core.shared.statistics import clustered_rate, wilson_ci
+
+        # 10 probes x 3 identical runs: 3 always succeed, 7 never do
+        groups = {f"p{i}": [1 if i < 3 else 0] * 3 for i in range(10)}
+        result = clustered_rate(groups, self._mean)
+        naive_lo, naive_hi = wilson_ci(9, 30)
+        assert result["value"] == 0.3 and result["n"] == 30
+        assert result["n_eff"] == pytest.approx(10)          # three copies of a probe are one observation
+        assert result["ci"][1] - result["ci"][0] > (naive_hi - naive_lo) * 1.4
+
+    def test_independent_runs_keep_most_of_their_weight(self):
+        from core.shared.statistics import clustered_rate
+
+        groups = {"a": [1, 0, 1], "b": [0, 1, 0], "c": [1, 0, 0], "d": [0, 0, 1]}
+        result = clustered_rate(groups, self._mean)
+        assert result["n_eff"] == pytest.approx(12) and result["icc"] == 0
+
+    def test_nothing_to_estimate(self):
+        from core.shared.statistics import clustered_rate
+
+        assert clustered_rate({}, self._mean)["ci"] is None

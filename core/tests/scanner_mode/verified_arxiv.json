@@ -1,0 +1,46 @@
+{
+  "2302.12173": {
+    "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2306.05499": {
+    "title": "Prompt Injection attack against LLM-integrated Applications",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2307.02483": {
+    "title": "Jailbroken: How Does LLM Safety Training Fail?",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2307.03172": {
+    "title": "Lost in the Middle: How Language Models Use Long Contexts",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2308.01263": {
+    "title": "XSTest: A Test Suite for Identifying Exaggerated Safety Behaviours in Large Language Models",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2310.06387": {
+    "title": "Jailbreak and Guard Aligned Language Models with Only Few In-Context Demonstrations",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2310.19156": {
+    "title": "Poisoning Retrieval Corpora by Injecting Adversarial Passages",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2311.16119": {
+    "title": "Ignore This Title and HackAPrompt: Exposing Systemic Vulnerabilities of LLMs through a Global Scale Prompt Hacking Competition",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2406.10162": {
+    "title": "Sycophancy to Subterfuge: Investigating Reward-Tampering in Large Language Models",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2406.13352": {
+    "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+    "checked": "2026-10-25, export.arxiv.org API"
+  },
+  "2407.12784": {
+    "title": "AgentPoison: Red-teaming LLM Agents via Poisoning Memory or Knowledge Bases",
+    "checked": "2026-10-25, export.arxiv.org API"
+  }
+}

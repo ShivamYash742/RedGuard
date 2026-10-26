@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .cee import ControlledExecutionEnvironment
@@ -55,6 +55,8 @@ from .trace import ContentTag, EventCategory, EventCollector, EventType
 
 CLEAN = "CLEAN"
 ATTACK = "ATTACK"
+
+EXPOSURE_MODES = ("natural", "forced")
 
 AGENT_PROMPT = "agent_prompt"
 BUS_GATEWAY = "bus_gateway"
@@ -113,6 +115,16 @@ class RunConfig:
     #: reproduce §5.3's narrower "Agent B's system prompt" formulation.
     validation_agents: Optional[Tuple[str, ...]] = None
     seed: Optional[int] = None
+    #: natural — the entry agent decides whether to read the planted location (the realistic setting;
+    #:           a run whose agent never reads it is not an attack on that agent).
+    #: forced  — before the entry agent's first turn the harness performs the read of the planted location
+    #:           for it (recorded, tainted and in its context like any read), in the attack run and in
+    #:           the clean run alike, so every attack run is exposed.
+    exposure: str = "natural"
+
+    def __post_init__(self) -> None:
+        if self.exposure not in EXPOSURE_MODES:
+            raise ValueError(f"exposure must be one of {EXPOSURE_MODES}, not {self.exposure!r}")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -123,7 +135,34 @@ class RunConfig:
             "validation_mode": self.validation_mode,
             "validation_agents": list(self.validation_agents) if self.validation_agents else None,
             "seed": self.seed,
+            "exposure": self.exposure,
         }
+
+
+def repetition_config(config: RunConfig, rep: int) -> RunConfig:
+    """The config of repetition `rep` (1-based): the experiment's base seed plus `rep`.
+
+    At temperature 0 a local model answers the same prompt with the same tokens, so five
+    repetitions with one seed are five copies of one run (five of the six reported models did
+    exactly that). A different seed per repetition lets them differ while keeping every run
+    reproducible; each run's actual seed is in its config_snapshot event. No base seed: unchanged.
+    """
+    if config.model.seed is None:
+        return config
+    return replace(config, model=replace(config.model, seed=config.model.seed + rep))
+
+
+def repetition_warnings(config: Dict[str, Any]) -> List[str]:
+    """Warnings about an experiment's stored config (`RunConfig.to_dict()` plus repetitions)."""
+    model = config.get("model") or {}
+    if (config.get("repetitions") or 1) > 1 and not config.get("scripted") \
+            and not model.get("temperature") and model.get("seed") is None:
+        return [
+            f"{config['repetitions']} repetitions at temperature 0 with no seed: the repetitions are likely exact "
+            "copies of each other, so the number of cases, not the number of runs, is the sample size. "
+            "Set a seed (it is varied per repetition) or a temperature above 0."
+        ]
+    return []
 
 
 @dataclass
@@ -562,7 +601,32 @@ class CaseRunner:
 
     # ── loop ──────────────────────────────────────────────────────────
 
+    def _forced_read(self, agent: str) -> Optional[Action]:
+        """The read of the planted location that `exposure="forced"` performs for the entry agent."""
+        attack = self.case.get("attack") or {}
+        delivery = attack.get("delivery") or {}
+        channel, location = delivery.get("channel"), delivery.get("location")
+        if self.config.exposure != "forced" or attack.get("injection_point") != agent or not location:
+            return None
+        if channel == "files":
+            return Action(kind=TOOL_CALL, tool="file_read", args={"path": location})
+        if channel == "web":
+            return Action(kind=TOOL_CALL, tool="web_search", args={"query": location})
+        if channel == "db":
+            return Action(kind=TOOL_CALL, tool="db_query", args={"name": location})
+        if channel == "kv":
+            return Action(kind=STATE_READ, key=location)
+        return None
+
     async def _run_agent(self, agent: str) -> None:
+        forced = self._forced_read(agent)
+        if forced is not None:
+            output = self.collector.emit(
+                EventCategory.AGENT, EventType.AGENT_OUTPUT, agent_id=agent,
+                result=json.dumps(forced.to_dict()), arguments=forced.to_dict(), derived_from=(),
+                metadata={"forced_exposure": True},
+            )
+            self._dispatch(agent, forced, output.step)
         for turn in range(1, self.config.max_steps + 1):
             self.steps += 1
             self.collector.emit(

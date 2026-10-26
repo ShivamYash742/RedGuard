@@ -244,6 +244,20 @@ class ModelConfig:
             **overrides,
         )
 
+    @classmethod
+    def from_stored(cls, stored: Optional[Dict[str, Any]]) -> "ModelConfig":
+        """Rebuild the config an experiment was created with (resume, rerun), including
+        temperature, seed and token budget. Rebuilding from provider and model alone silently
+        changed the sampling of a resumed sweep."""
+        stored = stored or {}
+        return cls.from_env(
+            provider=stored.get("provider", "ollama"),
+            model=stored.get("model"),
+            temperature=stored.get("temperature", 0.0),
+            seed=stored.get("seed"),
+            max_tokens=stored.get("max_tokens", cls.max_tokens),
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """API keys are never included — this goes into evidence bundles."""
         return {

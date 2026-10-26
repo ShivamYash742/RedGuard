@@ -8,6 +8,7 @@ may write to it.
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -193,3 +194,31 @@ class TestSweepResumeUsesTheStoredExperiment:
             model_config=ModelConfig(model="cli-model"), max_steps=99, experiment_id=experiment.id,
         )
         assert seen == {"max_steps": 7, "model": "stored-model", "client": "ScriptedClient"}
+
+
+class TestSweepExposure:
+    @pytest.mark.asyncio
+    async def test_a_new_experiment_stores_the_exposure_and_a_resume_restores_it(self, db, monkeypatch):
+        from lab_mode import sweep
+        from core.lab_mode.model_client import ModelConfig
+
+        seen = []
+        original = sweep._run_pair
+
+        async def spy(db_, **kwargs):
+            seen.append(kwargs["run_config"].exposure)
+            return await original(db_, **kwargs)
+
+        monkeypatch.setattr(sweep, "_run_pair", spy)
+        experiment_id = await sweep.run_arm(db, arm="attack", cases=["RGM-001"], reps=1, quiet=True, scripted=True,
+                                            model_config=ModelConfig(model="m"), max_steps=7, exposure="forced")
+        assert json.loads((await lab_store.get_experiment(db, experiment_id)).configJson)["exposure"] == "forced"
+        # resume with a CLI that says nothing about exposure: the stored value wins
+        await sweep.run_arm(db, arm="attack", cases=["RGM-002"], reps=1, quiet=True, scripted=True,
+                            model_config=ModelConfig(model="m"), max_steps=7, experiment_id=experiment_id)
+        assert seen and set(seen) == {"forced"}
+
+    def test_split_selects_the_cases(self):
+        from core.lab_mode.cases import load_all_cases
+        cases = load_all_cases(validate=False)
+        assert {c["id"] for c in cases if c.get("split", "dev") == "test"} == {f"RGM-{n}" for n in range(101, 131)}

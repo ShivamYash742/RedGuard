@@ -1,6 +1,7 @@
 .env
 .env.local
 .env.*
+!backend/scanner_mode/agents/sandbox/.env
 audit.jsonl
 report.md
 report.json
@@ -23,3 +24,10 @@ graphify-out/
 # Local progress reports and exported documents
 /*.pdf
 /*.pptx
+
+# audit scratch (DB copies, re-analysis inputs)
+scratch/
+/papr/
+
+# Local Prisma SQLite development database and backups
+/backend/prisma/dev.db*

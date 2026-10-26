@@ -180,6 +180,7 @@ export default function RunsPage() {
     FILTERED: acc.FILTERED + f.controlCounts.FILTERED,
     OVER_REFUSED: acc.OVER_REFUSED + f.controlCounts.OVER_REFUSED,
     HELPED: acc.HELPED + f.controlCounts.HELPED,
+    UNCLEAR: acc.UNCLEAR + (f.controlCounts.UNCLEAR ?? 0),
   }), emptyControlCounts())
   const agentsByCategory = agents.filter(a => a.category === activeCategory)
 
@@ -223,7 +224,7 @@ export default function RunsPage() {
       <div className="research-card space-y-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Target Model & Agent Selection</h2>
-          <span className="font-mono text-[11px] text-[var(--text-muted)]">Benchmark Version: v4.0.0</span>
+          <span className="font-mono text-[11px] text-[var(--text-muted)]">Benchmark Version: v6.0.0</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -355,7 +356,7 @@ export default function RunsPage() {
 
         {controlTotal > 0 && (
           <p className="text-[11px] text-[var(--text-secondary)] font-mono">
-            Benign controls ({controlTotal}): {overallControls.HELPED} helped · {overallControls.OVER_REFUSED} over-refused by the model · {overallControls.FILTERED} blocked by the regex
+            Benign controls ({controlTotal}): {overallControls.HELPED} helped · {overallControls.OVER_REFUSED} over-refused by the model · {overallControls.UNCLEAR} unclear · {overallControls.FILTERED} blocked by the regex
           </p>
         )}
       </div>

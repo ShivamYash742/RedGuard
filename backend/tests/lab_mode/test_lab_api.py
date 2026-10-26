@@ -94,12 +94,13 @@ def _run_to_completion(client: TestClient, **overrides) -> Dict[str, Any]:
 class TestCatalogEndpoints:
     def test_list_cases(self, client):
         body = client.get("/api/lab/cases").json()
-        assert body["total"] == 9
-        assert len(body["cases"]) == 9
+        assert body["total"] == 40
+        assert len(body["cases"]) == 40
         first = body["cases"][0]
         for key in ("id", "title", "family", "injection_point", "channel",
-                    "eligible_downstream_agents", "expected_path"):
+                    "eligible_downstream_agents", "expected_path", "split"):
             assert key in first
+        assert {c["split"] for c in body["cases"]} == {"dev", "test"}
 
     def test_get_one_case_returns_the_full_json(self, client):
         case = client.get("/api/lab/cases/RGM-001").json()
@@ -157,7 +158,7 @@ class TestExperimentCreation:
 
     def test_defaults_to_the_whole_case_set(self, client):
         body = client.post("/api/lab/experiments", json={"scripted": True, "repetitions": 1}).json()
-        assert len(body["cases"]) == 9
+        assert len(body["cases"]) == 40
 
     def test_unknown_arm_is_400(self, client):
         response = client.post("/api/lab/experiments", json={"arm": "arm-clean"})
@@ -228,9 +229,9 @@ class TestExperimentExecution:
     def test_verdict_event_carries_all_four_dimensions(self, client):
         result = _run_to_completion(client)
         verdict = next(e["data"] for e in result["events"] if e["event"] == "run_verdict")["verdict"]
-        # `baseline_runs` is provenance (how many clean runs defined normal
-        # behaviour), not a fifth dimension — and never a collapsed score.
-        assert set(verdict) - {"baseline_runs"} == {"agent_impact", "objective", "containment", "system_outcome"}
+        # `baseline_runs` and `propagation` are provenance (how many clean runs defined normal
+        # behaviour; how the attack reached each influenced agent), not a fifth dimension.
+        assert set(verdict) - {"baseline_runs", "propagation", "exposure"} == {"agent_impact", "objective", "containment", "system_outcome"}
         assert set(verdict["agent_impact"]) == {"A", "B", "C"}
 
     def test_progress_counts_reach_the_declared_total(self, client):
@@ -337,6 +338,20 @@ class TestRunEndpoints:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestMetricsEndpoint:
+    def test_controls_and_unreachable_cases_are_left_out_of_the_headline(self, client):
+        """L4: RGM-009 and RGM-008 are controls and RGM-005 is unreachable in the strict arm."""
+        result = _run_to_completion(client, cases=["RGM-001", "RGM-005", "RGM-008", "RGM-009"], repetitions=2)
+        body = client.get(f"/api/lab/experiments/{result['experiment']['experiment_id']}/metrics").json()
+
+        assert body["aggregate"]["asr"]["n"] == 2                       # RGM-001 x 2 only
+        assert body["n_in_scope"] == 2 and body["n_attack_runs"] == 8
+        assert body["excluded"]["n_controls"] == 4 and body["excluded"]["n_unreachable"] == 2
+        assert set(body["excluded"]["controls"]) == {"RGM-008", "RGM-009"}
+        assert set(body["excluded"]["unreachable_in_arm"]) == {"RGM-005"}
+        assert body["pooled_legacy"]["asr"]["n"] == 8                   # the 1.2.0 headline can still be reproduced
+        assert {c: v["in_scope"] for c, v in body["per_case"].items()} == {
+            "RGM-001": True, "RGM-005": False, "RGM-008": False, "RGM-009": False}
+
     def test_aggregate_shape(self, client):
         result = _run_to_completion(client, repetitions=3)
         body = client.get(
@@ -459,7 +474,7 @@ class TestCompareEndpoint:
     def test_comparison_carries_the_caveat(self, client):
         first, second = self._two_arms(client)
         body = client.get(f"/api/lab/compare?experiments={first},{second}").json()
-        assert "significance test" in body["comparisons"]["EXP-6b"]["caveat"]
+        assert "sign-flip test" in body["comparisons"]["EXP-6b"]["caveat"]
 
     def test_one_experiment_is_400(self, client):
         experiment = _create_experiment(client)
@@ -770,6 +785,16 @@ class TestExperimentReport:
         assert report["suitability"]["applies"] is False  # scripted
         assert any("scripted replay" in f for f in report["findings"])
 
+    def test_report_shows_which_tasks_point_at_the_poisoned_channel(self, client):
+        """L9: RGM-007's task tells the agents to read the poisoned key; RGM-010's only names it."""
+        experiment_id = _run_to_completion(client, cases=["RGM-007", "RGM-010"], repetitions=1)["experiment"]["experiment_id"]
+        report = client.get(f"/api/lab/experiments/{experiment_id}/report").json()
+        assert {c["id"]: c["task_endorses_channel"] for c in report["cases"]} == {"RGM-007": True, "RGM-010": False}
+        markdown = client.get(f"/api/lab/experiments/{experiment_id}/report?format=md").text
+        assert "Task points at channel" in markdown
+        cases = {c["id"]: c for c in client.get("/api/lab/cases").json()["cases"]}
+        assert cases["RGM-007"]["task_endorses_channel"] is True and cases["RGM-010"]["task_endorses_channel"] is False
+
     def test_markdown_download(self, client):
         experiment_id = _run_to_completion(client)["experiment"]["experiment_id"]
         response = client.get(f"/api/lab/experiments/{experiment_id}/report?format=md")
@@ -787,3 +812,88 @@ class TestExperimentReport:
         assert not report["complete"] and report["runs"] == []
         assert any("Only 0 of 2 pairs" in c for c in report["caveats"])
         assert client.get("/api/lab/experiments/nope/report").status_code == 404
+
+
+class TestRepetitionSeeds:
+    """L7: temperature and a base seed are accepted, stored, and warned about when missing."""
+
+    def test_temperature_and_seed_are_stored_with_the_experiment(self, client):
+        created = _create_experiment(client, temperature=0.7, seed=41, repetitions=3)
+        assert (created["config"]["model"]["temperature"], created["config"]["model"]["seed"]) == (0.7, 41)
+        stored = client.get(f"/api/lab/experiments/{created['experiment_id']}").json()
+        assert stored["config"]["model"]["seed"] == 41 and stored["warnings"] == []
+
+    def test_repetitions_at_temperature_zero_without_a_seed_come_with_a_warning(self, client):
+        created = _create_experiment(client, scripted=False, repetitions=5)
+        assert len(created["warnings"]) == 1 and "exact copies" in created["warnings"][0]
+        assert client.get(f"/api/lab/experiments/{created['experiment_id']}").json()["warnings"] == created["warnings"]
+
+    def test_a_scripted_experiment_is_not_warned(self, client):
+        assert _create_experiment(client, repetitions=5)["warnings"] == []
+
+    @pytest.mark.parametrize("bad", [{"temperature": -0.1}, {"temperature": 2.5}, {"temperature": "hot"}, {"seed": "x"}])
+    def test_bad_values_are_rejected(self, client, bad):
+        response = client.post("/api/lab/experiments", json={"arm": "attack", "cases": ["RGM-001"], "scripted": True, **bad})
+        assert response.status_code == 400
+
+    def test_every_run_records_its_own_seed_and_a_pair_shares_it(self, client):
+        result = _run_to_completion(client, cases=["RGM-001"], repetitions=2, seed=10)
+        experiment = client.get(f"/api/lab/experiments/{result['experiment']['experiment_id']}").json()
+        seeds = {}
+        for run in experiment["runs"]:
+            detail = client.get(f"/api/lab/runs/{run['run_id']}").json()
+            snapshot = next(e for e in detail["events"] if e["event_type"] == "config_snapshot")
+            seeds.setdefault(run["pair_id"], set()).add(snapshot["arguments"]["model"]["seed"])
+        assert sorted(tuple(s) for s in seeds.values()) == [(11,), (12,)]     # one seed per pair, different per repetition
+
+
+class TestPreAuditExperiments:
+    """Experiments measured with the 1.2.0 evaluator and metrics stay visible, labelled, apart."""
+
+    OLD = {"versions": {"benchmark_version": "4.0.0", "lab_schema_version": "1.1.0", "case_schema_version": "1.1.0",
+                        "cee_version": "1.1.0", "topology_version": "1.1.0", "evaluator_version": "1.2.0",
+                        "metric_version": "1.2.0"}, "git_commit": "de61e53", "git_clean": True}
+
+    def _old_experiment(self, client, monkeypatch, **overrides):
+        with monkeypatch.context() as scope:      # not monkeypatch.undo(): that would also undo the client's database swap
+            scope.setattr(lab_api, "reproducibility_stamp", lambda: self.OLD)
+            return _run_to_completion(client, **overrides)["experiment"]
+
+    def test_rows_report_their_vintage_and_the_label(self, client, monkeypatch):
+        old = self._old_experiment(client, monkeypatch)
+        new = _run_to_completion(client)["experiment"]
+        rows = {e["experiment_id"]: e for e in client.get("/api/lab/experiments").json()["experiments"]}
+        assert (rows[old["experiment_id"]]["vintage"], rows[old["experiment_id"]]["vintage_label"]) == ("pre_audit", "Measured before the audit fixes")
+        assert (rows[new["experiment_id"]]["vintage"], rows[new["experiment_id"]]["vintage_label"]) == ("current", None)
+
+    def test_metrics_and_report_carry_the_label(self, client, monkeypatch):
+        old = self._old_experiment(client, monkeypatch)["experiment_id"]
+        assert client.get(f"/api/lab/experiments/{old}/metrics").json()["vintage"] == "pre_audit"
+        report = client.get(f"/api/lab/experiments/{old}/report").json()
+        assert report["experiment"]["vintage"] == "pre_audit"
+        assert report["findings"][0].startswith("Measured before the audit fixes")
+
+    def test_a_pre_audit_experiment_cannot_be_compared_with_a_current_one(self, client, monkeypatch):
+        old = self._old_experiment(client, monkeypatch, arm="attack")["experiment_id"]
+        new = _run_to_completion(client, arm="attack_validated")["experiment"]["experiment_id"]
+        response = client.get(f"/api/lab/compare?experiments={old},{new}")
+        assert response.status_code == 400 and "cannot be pooled or compared" in response.json()["detail"]
+
+    def test_two_current_experiments_still_compare(self, client):
+        a = _run_to_completion(client, arm="attack")["experiment"]["experiment_id"]
+        b = _run_to_completion(client, arm="attack_validated")["experiment"]["experiment_id"]
+        assert client.get(f"/api/lab/compare?experiments={a},{b}").status_code == 200
+
+
+class TestForcedExposure:
+    def _config(self, client, **extra):
+        made = client.post("/api/lab/experiments", json={"scripted": True, "repetitions": 1, "cases": ["RGM-001"], **extra}).json()
+        return client.get(f"/api/lab/experiments/{made['experiment_id']}").json()["config"]
+
+    def test_exposure_defaults_to_natural_and_is_stored(self, client):
+        assert self._config(client)["exposure"] == "natural"
+        assert self._config(client, exposure="forced")["exposure"] == "forced"
+
+    def test_an_unknown_exposure_mode_is_400(self, client):
+        response = client.post("/api/lab/experiments", json={"exposure": "always"})
+        assert response.status_code == 400 and "exposure" in response.json()["detail"]

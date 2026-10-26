@@ -13,8 +13,10 @@ pushed the schema locally.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -43,3 +45,60 @@ def migrated_db_template(tmp_path_factory) -> Path:
     if result.returncode != 0:
         raise RuntimeError(f"prisma db push failed:\n{result.stdout}\n{result.stderr}")
     return template
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch, migrated_db_template):
+    """A TestClient on a disposable database copy (never the committed dev.db).
+
+    Synchronous on purpose: the Prisma client must connect on the event loop
+    that serves the requests, so the swap is at the `database.prisma` global
+    and the app's own lifespan connects it inside TestClient's loop.
+    """
+    from fastapi.testclient import TestClient
+    from prisma import Prisma
+
+    import database
+    from app import app
+
+    test_db = tmp_path / "api.db"
+    shutil.copyfile(migrated_db_template, test_db)
+    monkeypatch.setenv("DATABASE_URL", f"file:{test_db}")
+    monkeypatch.setattr(database, "prisma", Prisma(datasource={"url": f"file:{test_db}"}))
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def policy_file(tmp_path, monkeypatch):
+    """A private copy of policy.yaml that every module reads instead of the real one."""
+    from scanner_mode import api, inspector, scanner
+
+    path = tmp_path / "policy.yaml"
+    shutil.copyfile(inspector.POLICY_PATH, path)
+    for module in (inspector, api, scanner):
+        monkeypatch.setattr(module, "POLICY_PATH", path)
+    return path
+
+@pytest.fixture(autouse=True)
+def no_outbound_network(monkeypatch):
+    """Fail any test that opens a non-loopback connection, so no test can reach a
+    model API. Loopback stays open (Prisma talks to its local query engine)."""
+
+    def check(address):
+        host = address[0] if isinstance(address, tuple) else None  # AF_UNIX paths are local
+        if host is None or host == "localhost":
+            return
+        try:
+            if ipaddress.ip_address(host).is_loopback:
+                return
+        except ValueError:
+            pass
+        raise RuntimeError(f"tests must not use the network (tried to connect to {address!r})")
+
+    for name in ("connect", "connect_ex"):
+        def guarded(self, address, _real=getattr(socket.socket, name)):
+            check(address)
+            return _real(self, address)
+
+        monkeypatch.setattr(socket.socket, name, guarded)

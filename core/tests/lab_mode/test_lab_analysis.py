@@ -132,7 +132,10 @@ class TestCompareArms:
         assert asr["difference"] == pytest.approx(-1.0)
 
     def test_separated_intervals_are_flagged_as_such(self):
-        result = compare_arms("attack", _compromised(20), "attack_validated", _clean(20))
+        # six cases that all succeed against six that never do: separated even after clustering
+        many = [f"RGM-00{i}" for i in range(1, 7)]
+        result = compare_arms("attack", [o for c in many for o in _compromised(5, c)],
+                              "attack_validated", [o for c in many for o in _clean(5, c)])
         assert result["metrics"]["asr"]["overlapping"] is False
 
     def test_overlapping_intervals_are_flagged(self):
@@ -150,10 +153,35 @@ class TestCompareArms:
         assert cpr["baseline"] == "n/a"
         assert cpr["comparable"] is False
 
-    def test_carries_the_no_significance_test_caveat(self):
+    def test_caveat_says_when_a_claim_is_made(self):
         result = compare_arms("attack", _compromised(5), "attack_validated", _clean(5))
-        assert "significance test" in result["caveat"]
-        assert "§21.6" in result["caveat"]
+        assert "sign-flip test" in result["caveat"] and "§21.6" in result["caveat"]
+
+    def test_few_cases_are_marked_underpowered_and_make_no_claim(self):
+        cases = lambda make, n: [o for i in range(n) for o in make(1, f"RGM-{i + 1:03d}")]
+        result = compare_arms("attack", cases(_compromised, 5), "attack_validated", cases(_clean, 5))
+        paired = result["metrics"]["asr"]["paired"]
+        assert paired["underpowered"] is True and paired["n_cases"] == 5
+        # 5 cases all flipping from compromised to clean cannot reach p < 0.05 (smallest possible p is 2/32 = 0.0625)
+        assert paired["p"] == pytest.approx(2 / 2 ** 5) and paired["verdict"]["claim"] == "none"
+
+    def test_enough_cases_all_moving_the_same_way_is_a_claim(self):
+        many = lambda make: [o for i in range(12) for o in make(1, f"RGM-{i + 1:03d}")]
+        result = compare_arms("attack", many(_compromised), "attack_validated", many(_clean))
+        paired = result["metrics"]["asr"]["paired"]
+        assert paired["verdict"]["claim"] == "difference" and paired["verdict"]["higher"] == "attack"
+        assert paired["underpowered"] is True              # 12 cases: a claim, but fewer than 30
+
+    def test_the_cost_to_the_benign_task_is_reported_as_pair_validity(self):
+        invalid = [RunOutcome(_case(), _verdict({"A": "COMPROMISED"}, system_outcome="RUN_INVALID")) for _ in range(2)]
+        result = compare_arms("attack", _clean(4), "attack_capability_gateway", _clean(2) + invalid)
+        assert result["pair_validity"] == {"baseline": 1.0, "variant": 0.5, "difference": -0.5}
+
+    def test_standard_comparisons_get_a_holm_adjusted_p(self):
+        results = compare_standard({"attack": _compromised(6), "attack_validated": _clean(6), "attack_permissive_tools": _compromised(6)})
+        for label in ("EXP-4", "EXP-6"):
+            paired = results[label]["metrics"]["asr"]["paired"]
+            assert paired["p_holm"] >= paired["p"]
 
     def test_both_full_summaries_are_embedded(self):
         result = compare_arms("attack", _compromised(5), "attack_validated", _clean(5))
@@ -202,10 +230,13 @@ class TestClusteredIntervals:
     or fail together. Pooling them as independent trials gave intervals that
     were too narrow."""
 
-    def test_one_case_keeps_the_plain_wilson_interval(self):
+    def test_one_case_counts_as_one_independent_observation(self):
+        """L6: five repetitions of one case are not five trials. The old fallback gave the plain
+        Wilson interval over the repetitions, which no single case can justify."""
         icr = arm_summary(_compromised(3) + _clean(2))["icr"]
-        assert icr["ci_method"] == "wilson"
-        assert icr["ci"] == pytest.approx(list(rate_ci(3, 5)))
+        assert icr["ci_method"] == "wilson_single_cluster" and icr["n_eff"] == 1.0
+        assert icr["ci"] == pytest.approx(list(rate_ci(0.6, 1)))
+        assert icr["ci"][1] - icr["ci"][0] > rate_ci(3, 5)[1] - rate_ci(3, 5)[0]
 
     def test_cases_that_move_together_widen_the_interval(self):
         icr = arm_summary(_compromised(5, "RGM-001") + _clean(5, "RGM-002"))["icr"]
@@ -256,3 +287,14 @@ class TestPairedComparison:
         variant = _clean(3, "RGM-002") + _clean(3, "RGM-003")
         paired = compare_arms("attack", baseline, "attack_validated", variant)["metrics"]["asr"]["paired"]
         assert paired["n_cases"] == 1
+
+
+def test_the_capability_gateway_is_not_called_camel():
+    """L8: the arm is a task-scoped resource allowlist inspired by CaMeL, not CaMeL."""
+    from core.lab_mode import tools
+    from core.lab_mode.analysis import ARMS
+
+    description = ARMS["attack_capability_gateway"]["description"]
+    assert "inspired by CaMeL" in description and "CaMeL-style" not in description
+    doc = " ".join(tools.capability_policy.__doc__.split())   # the docstring wraps lines
+    assert "inspired by CaMeL" in doc and "It is not CaMeL" in doc

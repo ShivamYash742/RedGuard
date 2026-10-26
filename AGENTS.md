@@ -52,7 +52,7 @@ Without Docker:
 
 ```bash
 npm ci
-cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cd ..
+cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt -c requirements.lock && cd ..
 cp .env.example .env   # then fill in the keys for whichever agents you need
 ```
 
@@ -87,6 +87,9 @@ in a browser plus `lint`/`typecheck`.
   `backend/scanner_mode/agent_loader.py` as long as it defines `AGENT_NAME`,
   `AGENT_DESCRIPTION`, and an async `invoke(prompt)`. Copy
   `example_custom_agent.py` to add a new one rather than touching the loader.
+  Agents differ in the model only: `invoke` calls `_scaffold.run_agent`, which
+  supplies the shared tools, prompts and step limit. Never give one agent its
+  own prompt text, tools or input filter; that confounds a model comparison.
 - **`backend/prisma/dev.db` is intentionally committed** (whitelisted in
   `.gitignore` as demo seed data); regenerating it loses the seeded scan
   history. If your clone flags it assume-unchanged, `git stash` replaces your
@@ -95,7 +98,7 @@ in a browser plus `lint`/`typecheck`.
   separate from the ML classifier (`CLASSIFIER_URL` in `.env`). Changing it
   changes detection behavior, not just configuration.
 - **Version numbers are canonical** in `core/shared/version.py`
-  (`BENCHMARK_VERSION`, `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`). Nothing
+  (`BENCHMARK_VERSION`, `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`, and Lab mode's `EVALUATOR_VERSION` / `METRIC_VERSION`). Nothing
   reads them at runtime on the frontend, so after a bump also update the copies
   listed in `CLAUDE.md` and run `python docs/scanner_mode/spec_generator.py`.
 - Don't remove the Next.js-managed block above this section — `next dev`

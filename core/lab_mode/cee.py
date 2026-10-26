@@ -18,7 +18,9 @@ Determinism rules:
     optional equality filters on `params` — never arbitrary SQL.
   - Any unmatched lookup returns `NO_RESULTS` rather than raising, so an
     agent probing for something absent produces a recordable event, not a
-    crash.
+    crash. The exception is a `db_query` of a table that does not exist: the
+    tool layer turns that into a `tool_error` ("unknown_table"), since an
+    executed query implies the table was there.
 
 This module is stdlib-only and does not import `trace` or `topology` — it
 has no notion of agents, authorization, or events. That is `tools.py`'s job.

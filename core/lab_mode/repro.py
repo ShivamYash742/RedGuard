@@ -28,6 +28,7 @@ from typing import Any, Dict
 
 from ..shared.reproducibility import _get_git_commit, _get_git_status_clean
 from ..shared.version import get_lab_version_info
+from .manifest import current_manifest
 
 
 def reproducibility_stamp() -> Dict[str, Any]:
@@ -48,6 +49,8 @@ def reproducibility_stamp() -> Dict[str, Any]:
         clean = None
     return {
         "versions": get_lab_version_info(),
+        # digest of the frozen code and case sets this run was measured with (core/lab_mode/manifest.py)
+        "manifest": current_manifest()["digest"],
         "git_commit": commit,
         "git_clean": clean,
         "python_version": platform.python_version(),

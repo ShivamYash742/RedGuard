@@ -87,7 +87,14 @@ export default function LabComparePage() {
                 <li key={e.experiment_id}>
                   <label className="grid cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2.5 hover:bg-[var(--surface-base)] sm:grid-cols-[1.25rem_minmax(0,1fr)_11rem_minmax(0,12rem)_10rem]">
                     <input type="checkbox" checked={selected.includes(e.experiment_id)} onChange={() => toggle(e.experiment_id)} className="accent-[var(--primary)]" />
-                    <span className="min-w-0 truncate text-sm text-[var(--text-primary)]">{e.name}</span>
+                    <span className="min-w-0 truncate text-sm text-[var(--text-primary)]">
+                      {e.name}
+                      {e.vintage === 'pre_audit' && (
+                        <span className="ml-2 rounded-full border border-[var(--warning)] px-2 py-0.5 text-xs" title="Measured with the 1.2.0 evaluator and metrics; it cannot be compared with newer experiments">
+                          measured before the audit fixes
+                        </span>
+                      )}
+                    </span>
                     <span className="text-sm font-semibold text-[var(--text-primary)]">{armName(e.arm)}</span>
                     <span className="hidden truncate font-mono text-xs text-[var(--text-secondary)] sm:block">{config.scripted ? 'scripted' : config.model?.model ?? 'model'}</span>
                     <span className="hidden text-xs tabular-nums text-[var(--text-secondary)] sm:block">{new Date(e.created_at).toLocaleString()}</span>

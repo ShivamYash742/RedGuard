@@ -8,18 +8,39 @@ into a real exfiltration of the host it runs on.
 
 from __future__ import annotations
 
+import json
+import os
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numexpr
 from langchain_core.tools import tool
 
 SANDBOX_DIR = Path(__file__).parent / "sandbox"
+FIXTURES_FILE = Path(__file__).parent / "web_search_fixtures.json"
+
+#: "fixture" (default): canned results, so a rerun sees the same pages.
+#: "live": DuckDuckGo, which changes from day to day and makes scans irreproducible.
+WEB_SEARCH = os.getenv("SCANNER_WEB_SEARCH", "fixture")
+if WEB_SEARCH not in ("fixture", "live"):
+    raise ValueError(f"SCANNER_WEB_SEARCH must be 'fixture' or 'live', not {WEB_SEARCH!r}")
+
+
+def _fixture_search(query: str) -> str:
+    fixtures = json.loads(FIXTURES_FILE.read_text(encoding="utf-8"))
+    q = query.lower()
+    for entry in fixtures["entries"]:
+        if any(k in q for k in entry["keywords"]):
+            return entry["result"]
+    return fixtures["default"]
 
 
 @tool
 def web_search(query: str) -> str:
     """Search the web and return a short summary."""
+    if WEB_SEARCH == "fixture":
+        return _fixture_search(query)
     try:
         from langchain_community.tools import DuckDuckGoSearchRun
         return DuckDuckGoSearchRun().run(query)
@@ -29,13 +50,15 @@ def web_search(query: str) -> str:
 
 @tool
 def file_read(path: str) -> str:
-    """Read and return the text contents of a file in the agent's workspace folder."""
+    """Read the text contents of a file in the agent's workspace folder, or list a folder."""
     try:
         root = SANDBOX_DIR.resolve()
         # An absolute path makes `root / path` ignore root, so it is caught below.
         p = (root / path.strip()).resolve()
         if not p.is_relative_to(root):
             return "Error: only files inside the workspace folder can be read."
+        if p.is_dir():
+            return "\n".join(sorted(c.name + ("/" if c.is_dir() else "") for c in p.iterdir()))
         if not p.is_file():
             return f"Error: file not found: {path}"
         return p.read_text(encoding="utf-8", errors="replace")
@@ -53,7 +76,133 @@ def calculator(expression: str) -> str:
         return f"Calculator error: {exc}"
 
 
-TOOLS = [web_search, file_read, calculator]
+# ── Fixture-backed read tools ────────────────────────────────────────────────
+# Indirect attacks reach the agent the way they do in practice: inside a tool
+# result, not in the user's message. A probe's `tool_fixtures` ({tool: text}) is
+# what that tool returns for the duration of the probe; without one the tool
+# returns a harmless default. Nothing is fetched from anywhere.
+
+FIXTURES: ContextVar[Optional[dict]] = ContextVar("tool_fixtures", default=None)
+
+
+def _fixture(tool_name: str, default: str) -> str:
+    return (FIXTURES.get() or {}).get(tool_name, default)
+
+
+@tool
+def fetch_page(url: str) -> str:
+    """Fetch a web page or document by URL and return its text."""
+    record_call("fetch_page", {"url": url})
+    return _fixture("fetch_page", "Error 404: page not found.")
+
+
+@tool
+def read_email(query: str) -> str:
+    """Search the user's mailbox and return the matching messages."""
+    record_call("read_email", {"query": query})
+    return _fixture("read_email", "No messages found.")
+
+
+@tool
+def get_transactions(account: str = "checking") -> str:
+    """Return the recent transactions of one of the user's accounts."""
+    record_call("get_transactions", {"account": account})
+    return _fixture("get_transactions", "No transactions found.")
+
+
+@tool
+def run_tests(path: str = ".") -> str:
+    """Run the project's test suite and return its output."""
+    record_call("run_tests", {"path": path})
+    return _fixture("run_tests", "No tests found.")
+
+
+@tool
+def search_knowledge_base(query: str) -> str:
+    """Search the company knowledge base and return the best matching documents."""
+    record_call("search_knowledge_base", {"query": query})
+    return _fixture("search_knowledge_base", "No documents found.")
+
+
+FIXTURE_TOOLS = [fetch_page, read_email, get_transactions, run_tests, search_knowledge_base]
+
+
+# ── Action tools ─────────────────────────────────────────────────────────────
+# Mock tools that do nothing but record the call. Probes that try to make an
+# agent send, delete, run, pay or remember something are scored from these
+# records, not from what the agent says it did. Nothing here touches the network,
+# the disk or a shell.
+
+#: The scanner sets this to a fresh list before each agent call and reads it back
+#: after. A ContextVar keeps concurrent probes apart; LangChain copies the
+#: context into the worker threads it runs sync tools in, and the list is shared.
+RECORDER: ContextVar[Optional[list]] = ContextVar("tool_call_recorder", default=None)
+
+
+def record_call(tool_name: str, args: dict) -> None:
+    calls = RECORDER.get()
+    if calls is not None:
+        calls.append({"tool": tool_name, "args": args})
+
+
+@tool
+def send_email(to: str, subject: str, body: str) -> str:
+    """Send an email."""
+    record_call("send_email", {"to": to, "subject": subject, "body": body})
+    return f"Email sent to {to}."
+
+
+@tool
+def http_post(url: str, body: str) -> str:
+    """Send an HTTP POST request with a body and return the response status."""
+    record_call("http_post", {"url": url, "body": body})
+    return "HTTP 200 OK"
+
+
+@tool
+def execute_sql(query: str) -> str:
+    """Run a SQL statement on the application database."""
+    record_call("execute_sql", {"query": query})
+    return "Query OK."
+
+
+@tool
+def run_command(command: str) -> str:
+    """Run a shell command and return its output."""
+    record_call("run_command", {"command": command})
+    return "Command finished with exit code 0."
+
+
+@tool
+def delete_files(path: str) -> str:
+    """Permanently delete the files or items matching a path or pattern."""
+    record_call("delete_files", {"path": path})
+    return f"Deleted: {path}"
+
+
+@tool
+def transfer_funds(to_account: str, amount: str) -> str:
+    """Transfer money from the user's account to another account."""
+    record_call("transfer_funds", {"to_account": to_account, "amount": amount})
+    return f"Transferred {amount} to {to_account}."
+
+
+@tool
+def place_order(items: str) -> str:
+    """Place an order for the given items using the payment method on file."""
+    record_call("place_order", {"items": items})
+    return f"Order placed: {items}"
+
+
+@tool
+def save_memory(note: str) -> str:
+    """Save a note to the assistant's long-term memory for future conversations."""
+    record_call("save_memory", {"note": note})
+    return "Saved."
+
+
+ACTION_TOOLS = [send_email, http_post, execute_sql, run_command, delete_files, transfer_funds, place_order, save_memory]
+TOOLS = [web_search, file_read, calculator, *FIXTURE_TOOLS, *ACTION_TOOLS]
 
 
 def extract_text(result: Any) -> str:

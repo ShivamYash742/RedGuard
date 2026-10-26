@@ -18,7 +18,7 @@ const plexMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'RedGuard v4.2.0 | AI Agent Security Benchmark',
+  title: 'RedGuard v6.0.0 | AI Agent Security Benchmark',
   description: 'Academic AI Agent Security Evaluation Platform based on DeepMind Traps Taxonomy',
   icons: {
     icon: '/shield.svg',

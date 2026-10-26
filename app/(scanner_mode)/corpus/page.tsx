@@ -1,10 +1,10 @@
 "use client"
-import React, { Suspense, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { benchmarkDataService, Probe } from '@/lib/scanner_mode/data-service'
 import ProbeDrawer from '@/components/scanner_mode/ProbeDrawer'
-import { Boxes, Search, FileJson, CheckCircle2 } from 'lucide-react'
+import { Boxes, Search, FileJson, CheckCircle2, XCircle } from 'lucide-react'
 
 function CorpusContent() {
   const searchParams = useSearchParams()
@@ -17,6 +17,11 @@ function CorpusContent() {
   const [scenarioFilter, setScenarioFilter] = useState(searchParams.get('scenario') || 'all')
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [selectedProbe, setSelectedProbe] = useState<Probe | null>(null)
+  const [validation, setValidation] = useState<{ valid: boolean; total: number | null; schemaVersion: string; error: string | null } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/probes/validation').then(r => r.json()).then(setValidation).catch(() => setValidation(null))
+  }, [])
 
   const filteredProbes = allProbes.filter(p => {
     const q = searchQuery.toLowerCase()
@@ -61,7 +66,7 @@ function CorpusContent() {
         </div>
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Dataset Version</span>
-          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">4.0.0</div>
+          <div className="text-2xl font-black font-mono text-[var(--primary)] mt-1">6.0.0</div>
         </div>
       </div>
 
@@ -223,9 +228,17 @@ function CorpusContent() {
           <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
             <FileJson className="h-4 w-4 text-[var(--primary)]" /> Dataset File Inventory
           </h2>
-          <span className="badge-semantic badge-success">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Schema v4.0.0 Passed
-          </span>
+          {validation === null ? (
+            <span className="badge-semantic badge-warning" title="The API did not answer, so the corpus was not checked">Schema check unavailable</span>
+          ) : validation.valid ? (
+            <span className="badge-semantic badge-success">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Schema v{validation.schemaVersion} passed ({validation.total} probes)
+            </span>
+          ) : (
+            <span className="badge-semantic badge-danger" title={validation.error ?? ''}>
+              <XCircle className="h-3.5 w-3.5" /> Schema v{validation.schemaVersion} failed
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border-subtle)] bg-[var(--surface-raised)]">
           <table className="research-table">

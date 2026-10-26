@@ -3,59 +3,46 @@ RedGuard Agent — Nemotron 3 Ultra (550B)
 ──────────────────────────────────────────
 Powered by NVIDIA NIM: nvidia/nemotron-3-ultra-550b-a55b.
 
-System prompt is loaded from agents/system_prompts.json via _prompt_loader.
-Edit that file to update the prompt — no Python changes needed.
+Runs in the shared scaffold (_scaffold.py): same prompt, tools and step limit as every other agent.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
-from scanner_mode.agents._prompt_loader import build_system_prompt
-from scanner_mode.agents._tools import TOOLS, extract_text
+from scanner_mode.agents._scaffold import run_agent
 
 AGENT_NAME = "Nemotron-3 Ultra (550B)"
 AGENT_DESCRIPTION = (
     "NVIDIA Nemotron 3 Ultra 550B — flagship multi-hundred-billion parameter model via NVIDIA NIM. "
     "Neutral system prompt by default; the hardened prompt is opt-in per scan. "
-    "Tools: web search, file read, calculator with 5-step ReAct reasoning."
+    "Same tools as every agent: web search, file read, calculator and mock action tools."
 )
 
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
 MODEL_NAME: str = "nvidia/nemotron-3-ultra-550b-a55b"
 
-# One compiled agent per prompt mode ("baseline" / "hardened").
-_agents: dict[str, Any] = {}
+
+def model_config() -> dict:
+    """What this agent sends the model, recorded on every session. The hosted APIs are
+    called without a seed, so their runs are not guaranteed to repeat."""
+    return {"provider": "nvidia", "model": MODEL_NAME, "temperature": 0, "seed": None}
 
 
-def _get_agent(prompt_mode: str):
-    if prompt_mode not in _agents:
-        if not NVIDIA_API_KEY:
-            raise RuntimeError("NVIDIA_API_KEY is not set in .env")
-        llm = ChatOpenAI(
-            model=MODEL_NAME,
-            openai_api_key=NVIDIA_API_KEY,
-            base_url="https://integrate.api.nvidia.com/v1",
-            temperature=0,
-            max_retries=2,
-            timeout=60.0,
-        )
-        _agents[prompt_mode] = create_react_agent(
-            model=llm,
-            tools=TOOLS,
-            prompt=build_system_prompt("nemotron_3_ultra", prompt_mode),
-        )
-    return _agents[prompt_mode]
+def _llm():
+    if not NVIDIA_API_KEY:
+        raise RuntimeError("NVIDIA_API_KEY is not set in .env")
+    return ChatOpenAI(
+        model=MODEL_NAME,
+        openai_api_key=NVIDIA_API_KEY,
+        base_url="https://integrate.api.nvidia.com/v1",
+        temperature=0,
+        max_retries=2,
+        timeout=60.0,
+    )
 
 
 async def invoke(prompt: str, prompt_mode: str = "baseline") -> str:
-    """Send a prompt to Nemotron-3 Ultra agent and return text response."""
-    agent = _get_agent(prompt_mode)
-    result = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": prompt}]},
-        config={"recursion_limit": 15},
-    )
-    return extract_text(result)
+    """Send a prompt to the agent and return its text response."""
+    return await run_agent("nemotron_3_ultra", _llm, prompt, prompt_mode)

@@ -108,6 +108,12 @@ export interface CaseSummary {
   eligible_downstream_agents: string[]
   expected_path: string[]
   case_version: string
+  /** The task itself points the agents at the channel the attack arrives through. */
+  task_endorses_channel?: boolean | null
+  /** 'control' cases are reported apart from the pooled rates. */
+  role?: 'attack' | 'control'
+  /** 'test' cases were written after the evaluator was fixed; their numbers are the ones to quote. */
+  split?: 'dev' | 'test'
 }
 
 export interface Topology {
@@ -165,6 +171,11 @@ export interface Experiment {
   name: string
   arm: string
   config: Record<string, unknown>
+  /** Problems with the setup, e.g. repetitions that would be exact copies. */
+  warnings?: string[]
+  /** 'pre_audit': judged with the 1.2.0 evaluator and metrics; never pooled with current results. */
+  vintage?: 'current' | 'pre_audit' | 'other'
+  vintage_label?: string | null
   versions: ReproStamp
   created_at: string
   runs?: RunSummary[]
@@ -204,12 +215,38 @@ export interface ExperimentMetrics {
   n_attack_runs: number
   /** Pairs left out of every rate: a run hit a harness error or never finished. */
   n_failed_pairs: number
+  vintage?: 'current' | 'pre_audit' | 'other'
+  /** Runs counted in the rates below: attack cases whose objective is reachable in this arm. */
+  n_in_scope?: number
+  /** What the rates leave out (control cases, cases unreachable in this arm), reported apart. */
+  excluded?: {
+    n_controls: number
+    n_unreachable: number
+    controls: Record<string, { n: number; icr: number | null; asr: number | null }>
+    unreachable_in_arm: Record<string, { n: number; icr: number | null; asr: number | null }>
+  }
+  /** The all-cases rates metric version 1.2.0 reported as the headline. */
+  pooled_legacy?: { icr: RateWithCI; asr: RateWithCI; partial_rate: RateWithCI; cpr: number | 'n/a'; cpr_denominator_size: number }
   aggregate: {
     icr: RateWithCI
     asr: RateWithCI
     partial_rate: RateWithCI
     /** `"n/a"` when the denominator is empty — never 0.0 (§10.3). */
     cpr: number | 'n/a'
+    /** Same number as `cpr`: any influenced downstream agent, however it was exposed. */
+    cpr_any?: number | 'n/a'
+    /** Only agents that acted on an upstream agent's message without reading the artifact themselves. */
+    cpr_message?: number | 'n/a'
+    cpr_message_denominator_size?: number
+    /** How many runs had the chance to meet the artifact and how many did; rates given exposure leave out the rest. */
+    exposure?: {
+      n_valid: number
+      n_unrecorded: number
+      n_opportunity: number
+      n_exposed: number
+      asr_given_exposure: RateWithCI
+      icr_given_exposure: RateWithCI
+    }
     cpr_denominator_size: number
     depth: number[]
     coverage: number[]
@@ -362,8 +399,14 @@ export interface CreateExperimentRequest {
   repetitions?: number
   provider?: string
   model?: string
+  /** 0-2. At 0 repetitions of a local model are usually exact copies unless a seed is set. */
+  temperature?: number
+  /** Base seed: repetition N runs with seed + N, and the seed is recorded with every run. */
+  seed?: number
   topology_id?: string
   max_steps?: number
+  /** natural: the entry agent decides whether to read the planted location. forced: the harness performs that read. */
+  exposure?: 'natural' | 'forced'
   /** Replay each case's clean_script instead of calling a model. */
   scripted?: boolean
   /** Scripted only: pause per step so the demo can be watched. */

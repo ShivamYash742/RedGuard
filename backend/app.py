@@ -19,6 +19,7 @@ if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
 from database import close_db, get_db, init_db
+from request_guard import CORS_ORIGINS
 from lab_mode.api import router as lab_router, shutdown_jobs
 from scanner_mode.api import router as scanner_router
 
@@ -34,9 +35,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RedGuard API", lifespan=lifespan)
 
 # The UI reaches the API through the Next.js rewrite (same origin), so CORS
-# only matters for direct browser calls; anything else is refused.
-CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
-
+# only matters for direct browser calls; anything else is refused. The routers
+# also reject foreign origins (request_guard.py), since CORS alone does not
+# stop a cross-site request from taking effect.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,

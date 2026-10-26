@@ -182,7 +182,17 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
               <span className="text-xs text-[var(--text-secondary)] mt-1 block font-mono">{overall?.allowed} Compromised</span>
               {hasTiers && (
                 <span className="text-[11px] text-[var(--text-muted)] mt-0.5 block font-mono">
-                  Model alone (filter off): {overall.model_compromised}
+                  Model alone (filter off): {overall.model_compromised} of {overall.model_answered ?? overall.total_probes}
+                </span>
+              )}
+              {!!overall?.mixed_rows_model_alone && (
+                <span className="text-[11px] text-[var(--warning)] mt-0.5 block font-mono" title="A refusal phrase and a success indicator both matched. Counted as refusals; compromised if success took precedence.">
+                  {overall.mixed_rows_model_alone} mixed rows: ASR up to {(100 * ((overall.allowed ?? 0) + (overall.mixed_rows ?? 0)) / (overall.total_probes || 1)).toFixed(1)}%
+                </span>
+              )}
+              {!!overall?.no_answer && (
+                <span className="text-[11px] text-[var(--text-muted)] mt-0.5 block font-mono" title="The agent hit its step limit and never answered; left out of every rate">
+                  No answer: {overall.no_answer} attacks, {overall.controls_no_answer ?? 0} controls
                 </span>
               )}
             </div>

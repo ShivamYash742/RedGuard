@@ -31,8 +31,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app/backend
 
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install -r requirements.txt
+# requirements.txt is the readable list; requirements.lock pins every package in the tested environment.
+COPY backend/requirements.txt backend/requirements.lock ./
+RUN pip install -r requirements.txt -c requirements.lock
 
 # Generate the client and fetch every engine now, so `prisma db push` in the
 # entrypoint works offline.

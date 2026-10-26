@@ -26,15 +26,20 @@ from __future__ import annotations
 
 #: Overall benchmark version. Bump MAJOR for any breaking change to probe IDs,
 #: metric definitions, or evaluation methodology.
-BENCHMARK_VERSION: str = "4.0.0"
+BENCHMARK_VERSION: str = "6.0.0"
+
+#: Earlier benchmark versions whose stored results are still shown, apart from
+#: the current ones and labelled "measured before the audit fixes". Their scoring,
+#: prompts and tools differ, so they are never pooled with BENCHMARK_VERSION runs.
+PRE_AUDIT_BENCHMARK_VERSIONS: tuple = ("4.0.0",)
 
 #: Version of the benchmark dataset (JSON files in core/scanner_mode/datasets/).
 #: Bump when probes are added, removed, or their prompts change materially.
-DATASET_VERSION: str = "4.0.0"
+DATASET_VERSION: str = "6.0.0"
 
 #: Version of the probe JSON schema (core/scanner_mode/datasets/schema.json).
 #: Bump when new required fields are added to dataset entries.
-PROBE_SCHEMA_VERSION: str = "4.0.0"
+PROBE_SCHEMA_VERSION: str = "6.0.0"
 
 #: Minimum number of runs per probe required for statistical metrics (BDS, CI).
 MIN_RUNS_FOR_STATISTICS: int = 3
@@ -63,22 +68,22 @@ MIN_RUNS_FOR_STATISTICS: int = 3
 LAB_SCHEMA_VERSION: str = "1.1.0"
 
 #: Version of the Mode B security test case schema.
-CASE_SCHEMA_VERSION: str = "1.1.0"
+CASE_SCHEMA_VERSION: str = "2.1.0"
 
 #: Version of the Controlled Execution Environment semantics.
-CEE_VERSION: str = "1.1.0"
+CEE_VERSION: str = "2.0.0"
 
 #: Version of the topology definitions and authorization tables.
 TOPOLOGY_VERSION: str = "1.1.0"
 
 #: Version of the verdict definitions and predicate DSL.
-EVALUATOR_VERSION: str = "1.2.0"
+EVALUATOR_VERSION: str = "2.0.0"
 
 #: Version of the Mode B metric formulas.
-METRIC_VERSION: str = "1.2.0"
+METRIC_VERSION: str = "2.0.0"
 
 #: Human-readable release name.
-RELEASE_NAME: str = "RedGuard v4.2.0"
+RELEASE_NAME: str = "RedGuard v6.0.0"
 
 #: Citation key for the benchmark paper (placeholder until published).
 CITATION_KEY: str = "redguard2024"
@@ -105,6 +110,29 @@ def get_version_info() -> dict:
         "release_name": RELEASE_NAME,
         "citation_key": CITATION_KEY,
     }
+
+
+#: The Lab definitions behind results measured before the audit fixes (the Oct 2026 sweeps). Their
+#: verdicts used substring predicates, pooled controls and unreachable cases, and counted unexposed
+#: runs as resisted, so they are shown labelled and never pooled with results from the current ones.
+PRE_AUDIT_LAB_VERSIONS: dict = {"evaluator_version": "1.2.0", "metric_version": "1.2.0"}
+
+#: The stored versions that decide whether two Lab experiments' numbers mean the same thing.
+LAB_DEFINITION_KEYS = ("evaluator_version", "metric_version", "case_schema_version", "cee_version")
+
+PRE_AUDIT_LABEL = "Measured before the audit fixes"
+
+
+def lab_vintage(stored_versions: dict | None) -> str:
+    """"current" if an experiment's stored definitions are the ones in this code, "pre_audit" if
+    they are the 1.2.0 ones, else "other" (a different or unrecorded set)."""
+    stored = stored_versions or {}
+    current = get_lab_version_info()
+    if all(stored.get(k) == current[k] for k in LAB_DEFINITION_KEYS):
+        return "current"
+    if all(stored.get(k) == v for k, v in PRE_AUDIT_LAB_VERSIONS.items()):
+        return "pre_audit"
+    return "other"
 
 
 def get_lab_version_info() -> dict:
@@ -182,6 +210,9 @@ __all__ = [
     "TOPOLOGY_VERSION",
     "EVALUATOR_VERSION",
     "METRIC_VERSION",
+    "PRE_AUDIT_LAB_VERSIONS",
+    "PRE_AUDIT_LABEL",
+    "lab_vintage",
     "get_version_info",
     "get_lab_version_info",
     "parse_version",

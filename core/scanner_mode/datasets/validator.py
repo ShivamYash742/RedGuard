@@ -62,9 +62,13 @@ REQUIRED_FIELDS = [
     "references",
     "probe_version",
     "dataset_version",
+    "split",
 ]
 
-REQUIRED_EVALUATION_RULE_FIELDS = ["success_indicators", "blocked_indicators"]
+#: Read tools whose result a probe may plant (backend/scanner_mode/agents/_tools.py).
+FIXTURE_TOOLS = ("fetch_page", "read_email", "get_transactions", "run_tests", "search_knowledge_base")
+
+REQUIRED_EVALUATION_RULE_FIELDS = ["blocked_indicators"]  # success_indicators too, unless the probe is scored from actions or a canary
 
 VALID_FAMILIES = {
     "direct_injection",
@@ -78,6 +82,8 @@ VALID_FAMILIES = {
 }
 
 VALID_DIFFICULTIES = {"trivial", "easy", "medium", "hard", "expert"}
+#: "dev" items may be used to tune patterns, prompts, indicators and scorers; "test" items never are.
+VALID_SPLITS = {"dev", "test"}
 
 VALID_SCENARIOS = {
     "generic",
@@ -209,7 +215,7 @@ class ProbeValidator:
       12. references has at least one entry, each with title and year
       13. probe_version and dataset_version are valid semver strings
       14. benign_control is a boolean; canary is a non-empty string that is
-          also listed in evaluation_rules.success_indicators
+          unique enough to be planted
     """
 
     def validate(self, entry: Dict[str, Any]) -> ValidationResult:
@@ -303,7 +309,8 @@ class ProbeValidator:
         # 11. evaluation_rules structure
         rules = entry.get("evaluation_rules")
         if isinstance(rules, dict):
-            for sub_field in REQUIRED_EVALUATION_RULE_FIELDS:
+            needs_text = not (rules.get("success_actions") or entry.get("canary"))
+            for sub_field in REQUIRED_EVALUATION_RULE_FIELDS + (["success_indicators"] if needs_text else []):
                 if sub_field not in rules:
                     errors.append(
                         f"evaluation_rules missing sub-field '{sub_field}'"
@@ -316,6 +323,18 @@ class ProbeValidator:
                     errors.append(
                         f"evaluation_rules.{sub_field} must have at least one entry"
                     )
+            actions = rules.get("success_actions")
+            if actions is not None:
+                if not isinstance(actions, list) or not actions:
+                    errors.append("evaluation_rules.success_actions must be a non-empty list")
+                else:
+                    for i, action in enumerate(actions):
+                        if not isinstance(action, dict) or not isinstance(action.get("tool"), str) \
+                                or set(action) - {"tool", "args_contain"} \
+                                or not all(isinstance(v, str) for v in action.get("args_contain", {}).values()):
+                            errors.append(
+                                f"evaluation_rules.success_actions[{i}] must be {{tool, args_contain?: {{arg: text}}}}"
+                            )
         elif rules is not None:
             errors.append("'evaluation_rules' must be a JSON object")
 
@@ -345,15 +364,28 @@ class ProbeValidator:
                     f"'{ver_field}' value '{ver}' is not a valid semver string (X.Y.Z)"
                 )
 
-        # 14. Benign control flag and canary
+        # 14. Evaluation split
+        if entry.get("split") not in VALID_SPLITS:
+            errors.append(f"'split' must be one of {sorted(VALID_SPLITS)}, got {entry.get('split')!r}")
+
+        # 15. Benign control flag and canary
         if "benign_control" in entry and not isinstance(entry["benign_control"], bool):
             errors.append("'benign_control' must be true or false")
         if "canary" in entry:
             canary = entry["canary"]
             if not isinstance(canary, str) or not canary.strip():
                 errors.append("'canary' must be a non-empty string")
-            elif isinstance(rules, dict) and canary not in rules.get("success_indicators", []):
-                errors.append("'canary' must also appear in evaluation_rules.success_indicators")
+
+        fixtures = entry.get("tool_fixtures")
+        if fixtures is not None:
+            if not isinstance(fixtures, dict) or not fixtures:
+                errors.append("'tool_fixtures' must be a non-empty object {tool: text}")
+            else:
+                for name, text in fixtures.items():
+                    if name not in FIXTURE_TOOLS:
+                        errors.append(f"tool_fixtures names unknown tool '{name}'")
+                    if not isinstance(text, str) or not text.strip():
+                        errors.append(f"tool_fixtures.{name} must be non-empty text")
 
         # Warnings (non-fatal)
         if not entry.get("synthetic"):
