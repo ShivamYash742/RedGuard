@@ -37,7 +37,7 @@ def test_the_two_resources_and_three_wordings_are_all_used():
     assert len({str(c["attack"]["artifact"]) for c in TEST.values()}) == 30
 
 
-def test_headlines_are_reported_per_split_and_the_test_split_is_the_headline():
+def test_headlines_are_reported_per_split_and_a_pooled_headline_says_mixed():
     import pytest
     from core.lab_mode.analysis import headline_split, split_headlines
     from core.lab_mode.evaluator import AgentImpactLevel, AgentImpactResult, Containment, ObjectiveAchievement, ObjectiveResult, SystemOutcome, Verdict
@@ -55,5 +55,6 @@ def test_headlines_are_reported_per_split_and_the_test_split_is_the_headline():
     by = split_headlines(runs)
     assert set(by) == {"dev", "test"} and by["dev"]["n_cases"] == 1 and by["test"]["n_cases"] == 2
     assert by["dev"]["asr"]["value"] == 1.0 and by["test"]["asr"]["value"] == 0.0
-    assert headline_split(runs) == "test" and headline_split(runs[:1]) == "dev"
+    # LAB-07: headline(runs) pools both splits, so the label must not claim "test"
+    assert headline_split(runs) == "mixed" and headline_split(runs[:1]) == "dev" and headline_split(runs[1:]) == "test"
     assert pytest is not None

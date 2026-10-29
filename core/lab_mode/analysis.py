@@ -141,7 +141,10 @@ def split_headlines(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
 
 
 def headline_split(valid: Sequence[RunOutcome]) -> str:
-    return "test" if any(o.case.get("split", "dev") == "test" for o in valid) else "dev"
+    """Which split `headline(valid)` was computed on: "dev", "test", or "mixed" when it pools both
+    (the figures to quote for a mix are the per-split ones, `split_headlines`)."""
+    splits = {o.case.get("split", "dev") for o in valid}
+    return "mixed" if len(splits) > 1 else (splits.pop() if splits else "dev")
 
 
 def arm_summary(outcomes: Sequence[RunOutcome]) -> Dict[str, Any]:
