@@ -181,8 +181,11 @@ export interface Stats {
   totalEvaluationsFired: number
   totalBlocked: number
   totalAllowed: number
+  /** Pooled over COMPLETED sessions of `benchmarkVersion` only (the totals above and the rate). */
   overallBlockRate: number
   coverageGap: number
+  scoredSessions?: number
+  benchmarkVersion?: string
 }
 
 export interface AgentInfo {

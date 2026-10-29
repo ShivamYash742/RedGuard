@@ -11,16 +11,19 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
   const [families, setFamilies] = useState<AttackFamilyMeta[]>([])
   const [probeCount, setProbeCount] = useState<number>(benchmarkDataService.getAllProbes().length)
+  const [modelsEvaluated, setModelsEvaluated] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadDashboardData() {
       try {
-        const [statsData, sessionsData, probeCountData] = await Promise.all([
+        const [statsData, sessionsData, probeCountData, leaderboard] = await Promise.all([
           benchmarkDataService.fetchStats(),
           benchmarkDataService.fetchSessions(),
           fetch('/api/probes/count').then(r => r.json()).catch(() => ({})),
+          benchmarkDataService.fetchLeaderboard(),
         ])
+        setModelsEvaluated(new Set(leaderboard.map(r => r.agentId)).size)
         setStats(statsData)
         setSessions(sessionsData)
         setFamilies(benchmarkDataService.getAttackFamilies())
@@ -44,7 +47,7 @@ export default function Dashboard() {
     )
   }
 
-  const hasScore = stats?.overallBlockRate !== undefined && stats?.totalSessions > 0
+  const hasScore = stats?.overallBlockRate !== undefined && (stats?.scoredSessions ?? 0) > 0
   const latestScore = hasScore ? (stats.overallBlockRate * 100).toFixed(1) : null
 
   return (
@@ -111,21 +114,23 @@ export default function Dashboard() {
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Models Evaluated</span>
-          <div className="text-2xl font-black text-[var(--text-primary)] mt-1.5 font-mono">5</div>
-          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">NIM & Local LLMs</span>
+          <div className="text-2xl font-black text-[var(--text-primary)] mt-1.5 font-mono">{modelsEvaluated ?? '—'}</div>
+          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">With a measured leaderboard row</span>
         </div>
 
         <div className="research-card">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Top Security Score</span>
+          <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Resistance Score</span>
           {hasScore ? (
             <>
               <div className="text-2xl font-black text-[var(--success)] mt-1.5 font-mono">{latestScore}%</div>
-              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">From real runs</span>
+              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">
+                {stats?.scoredSessions} completed run{stats?.scoredSessions === 1 ? '' : 's'}, benchmark {stats?.benchmarkVersion} only
+              </span>
             </>
           ) : (
             <>
               <div className="text-2xl font-black text-[var(--text-muted)] mt-1.5 font-mono">—</div>
-              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">No runs yet</span>
+              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">No completed run of benchmark {stats?.benchmarkVersion ?? 'this version'}</span>
             </>
           )}
         </div>

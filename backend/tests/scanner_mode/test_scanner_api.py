@@ -157,3 +157,30 @@ def test_cancel_deletes_a_running_session_only(client, policy_file):
     assert finished in _statuses(client)                                  # still there, with its report
     assert client.post("/api/scan/cancel", json={"sessionId": running}).status_code == 200
     assert running not in _statuses(client) and finished in _statuses(client)
+
+
+def test_stats_score_only_completed_runs_of_the_current_benchmark(client, policy_file):
+    """UI-03: the dashboard's resistance score pooled legacy, older-version and FAILED / RUNNING sessions (921/1087 in dev.db)."""
+    import os
+    import sqlite3
+
+    from core.shared.version import BENCHMARK_VERSION
+
+    before = client.get("/api/stats").json()           # the seed database already holds sessions
+    ids = [client.post("/api/scan/start", json={}).json()["sessionId"] for _ in range(4)]
+    rows = [  # (status, benchmark version, total probes, blocked)
+        ("COMPLETED", BENCHMARK_VERSION, 10, 8),
+        ("COMPLETED", "4.0.0", 10, 0),
+        ("FAILED: boom", BENCHMARK_VERSION, 10, 0),
+        ("RUNNING", BENCHMARK_VERSION, 10, 0),
+    ]
+    with sqlite3.connect(os.environ["DATABASE_URL"].removeprefix("file:")) as conn:
+        for session_id, (status, version, total, blocked) in zip(ids, rows):
+            conn.execute("UPDATE sessions SET status = ?, benchmark_version = ?, total_probes = ?, blocked = ? WHERE id = ?",
+                         (status, version, total, blocked, session_id))
+    stats = client.get("/api/stats").json()
+    assert stats["benchmarkVersion"] == BENCHMARK_VERSION
+    assert stats["scoredSessions"] == before["scoredSessions"] + 1           # only the one completed run of this version
+    assert stats["totalEvaluationsFired"] == before["totalEvaluationsFired"] + 10
+    assert stats["totalBlocked"] == before["totalBlocked"] + 8
+    assert stats["totalSessions"] == before["totalSessions"] + 4             # the run count still counts every session

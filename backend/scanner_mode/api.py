@@ -39,7 +39,9 @@ async def get_stats():
     prisma = await get_db()
     total_sessions = await prisma.session.count()
     
-    sessions = await prisma.session.find_many()
+    # Scores pool only finished runs of the current benchmark version: legacy, older-version and aborted
+    # sessions were scored differently or not at all, and averaging them in is the pooling the leaderboard avoids.
+    sessions = await prisma.session.find_many(where={"status": "COMPLETED", "benchmarkVersion": BENCHMARK_VERSION})
     tp = sum(s.totalProbes or 0 for s in sessions)
     tb = sum(s.blocked or 0 for s in sessions)
     ta = sum(s.allowed or 0 for s in sessions)
@@ -53,6 +55,8 @@ async def get_stats():
     
     return {
         "totalSessions": total_sessions,
+        "scoredSessions": len(sessions),
+        "benchmarkVersion": BENCHMARK_VERSION,
         "totalProbes": total_active_probes,
         "totalEvaluationsFired": tp,
         "totalBlocked": tb,
