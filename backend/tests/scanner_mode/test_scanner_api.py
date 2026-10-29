@@ -45,6 +45,23 @@ def test_session_records_the_policy_hash(client, policy_file):
     assert session["policySha256"] == hashlib.sha256(policy_file.read_bytes()).hexdigest()
 
 
+def test_two_scans_started_in_the_same_second_both_get_a_session(client, policy_file, monkeypatch):
+    """API-03: the session id was run_<YYYYmmdd_HHMMSS>, so a double click on Start hit the unique index and returned 500."""
+    import datetime as dt
+    from scanner_mode import api
+
+    class Frozen(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 29, 12, 0, 0)
+
+    monkeypatch.setattr(api, "datetime", Frozen)
+    first, second = (client.post("/api/scan/start", json={}) for _ in range(2))
+    assert first.status_code == second.status_code == 200, (first.text, second.text)
+    names = {s["sessionId"] for s in client.get("/api/sessions").json() if s["id"] in (first.json()["sessionId"], second.json()["sessionId"])}
+    assert len(names) == 2 and all(n.startswith("run_20261029_120000_") for n in names)
+
+
 def test_scan_start_refuses_an_invalid_probe_corpus(client, policy_file, monkeypatch):
     from scanner_mode import scanner
 

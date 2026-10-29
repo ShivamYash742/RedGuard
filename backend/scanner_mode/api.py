@@ -10,6 +10,7 @@ Mounted by `backend/app.py` with no prefix, so every path is unchanged.
 import asyncio
 import json
 import os
+import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -318,7 +319,8 @@ async def start_scan(request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # The suffix keeps two scans started in the same second (a double click) from colliding on the unique id.
+    session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     
     session = await prisma.session.create(
         data={
