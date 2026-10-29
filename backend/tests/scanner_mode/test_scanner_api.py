@@ -139,3 +139,21 @@ def test_a_body_that_is_not_a_json_object_is_a_bad_request(client, policy_file, 
 ])
 def test_fields_of_the_wrong_type_are_a_bad_request(client, url, body):
     assert client.post(url, json=body).status_code == 400
+
+
+def _statuses(client):
+    return {s["id"]: s["status"] for s in client.get("/api/sessions").json()}
+
+
+def test_cancel_deletes_a_running_session_only(client, policy_file):
+    """API-06: cancel wiped a COMPLETED session and its report, and said 'cancelled' for an id that never existed."""
+    running = client.post("/api/scan/start", json={}).json()["sessionId"]
+    finished = client.post("/api/scan/start", json={}).json()["sessionId"]
+    assert client.post("/api/scan/finalize", json={"sessionId": finished}).status_code == 200
+    assert _statuses(client)[finished] == "COMPLETED"
+
+    assert client.post("/api/scan/cancel", json={"sessionId": "no-such-session"}).status_code == 404
+    assert client.post("/api/scan/cancel", json={"sessionId": finished}).status_code == 409
+    assert finished in _statuses(client)                                  # still there, with its report
+    assert client.post("/api/scan/cancel", json={"sessionId": running}).status_code == 200
+    assert running not in _statuses(client) and finished in _statuses(client)

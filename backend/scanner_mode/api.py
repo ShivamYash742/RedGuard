@@ -386,6 +386,11 @@ async def cancel_scan_route(request: Request):
         raise HTTPException(status_code=400, detail="Missing sessionId")
     
     prisma = await get_db()
+    session = await prisma.session.find_unique(where={"id": session_id})
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id!r}")
+    if session.status != "RUNNING":
+        raise HTTPException(status_code=409, detail=f"Session is {session.status}; only a RUNNING session can be cancelled")
     # Delete cascade or delete manually
     await prisma.probeevent.delete_many(where={"sessionId": session_id})
     await prisma.report.delete_many(where={"sessionId": session_id})
