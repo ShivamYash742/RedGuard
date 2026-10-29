@@ -20,7 +20,7 @@ from core.scanner_mode.datasets.loader import load_all_datasets
 from core.shared.version import BENCHMARK_VERSION, PROBE_SCHEMA_VERSION
 
 from database import get_db
-from request_guard import guard_request
+from request_guard import guard_request, json_object
 from scanner_mode.agent_loader import DEFAULT_AGENT_ID, get_agent, list_agents
 from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError, parse_policy
 from scanner_mode.leaderboard import compare_groups, leaderboard_rows
@@ -200,8 +200,7 @@ async def get_policy():
 
 @router.put("/api/policy")
 async def update_policy(request: Request):
-    data = await request.json()
-    yaml_content = data.get("yaml") if isinstance(data, dict) else None
+    yaml_content = (await json_object(request)).get("yaml")
     if not isinstance(yaml_content, str):
         raise HTTPException(status_code=400, detail='body must be {"yaml": "<policy text>"}')
     try:
@@ -247,10 +246,12 @@ async def probe_validation():
 @router.post("/api/probes")
 async def create_probe(request: Request):
     prisma = await get_db()
-    data = await request.json()
+    data = await json_object(request)
     if "category" not in data or "promptText" not in data:
         raise HTTPException(status_code=400, detail="Missing category or promptText")
-        
+    if not isinstance(data["category"], str) or not isinstance(data["promptText"], str):
+        raise HTTPException(status_code=400, detail="category and promptText must be strings")
+
     probe = await prisma.customprobe.create(
         data={
             "category": data["category"],
@@ -369,10 +370,9 @@ async def scan_family(sessionId: str, agentId: str, category: str, model: str = 
 
 @router.post("/api/scan/finalize")
 async def finalize_scan_route(request: Request):
-    body = await request.json()
-    session_id = body.get("sessionId")
+    session_id = (await json_object(request)).get("sessionId")
     
-    if not session_id:
+    if not session_id or not isinstance(session_id, str):
         raise HTTPException(status_code=400, detail="Missing sessionId")
         
     results = await finalize_scan(session_id)
@@ -381,9 +381,8 @@ async def finalize_scan_route(request: Request):
 
 @router.post("/api/scan/cancel")
 async def cancel_scan_route(request: Request):
-    body = await request.json()
-    session_id = body.get("sessionId")
-    if not session_id:
+    session_id = (await json_object(request)).get("sessionId")
+    if not session_id or not isinstance(session_id, str):
         raise HTTPException(status_code=400, detail="Missing sessionId")
     
     prisma = await get_db()

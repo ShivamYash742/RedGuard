@@ -150,6 +150,30 @@ class TestCatalogEndpoints:
 # Experiment creation
 # ─────────────────────────────────────────────────────────────────────────────
 
+JSON = {"content-type": "application/json"}
+
+
+class TestMalformedBodiesAreBadRequests:
+    """API-04 / API-05: a body that is not what the route expects is the caller's mistake (400), not a crash (500)."""
+
+    @pytest.mark.parametrize("raw", ["{bad", "", '"abc"', "[]", "5", "null"])
+    def test_the_body_must_be_a_json_object(self, client, raw):
+        assert client.post("/api/lab/experiments", content=raw, headers=JSON).status_code == 400
+
+    @pytest.mark.parametrize("body", [
+        {"repetitions": "x"}, {"max_steps": "x"}, {"step_delay_ms": "x"}, {"repetitions": [1]}, {"max_steps": {}},
+        {"arm": ["attack"]}, {"provider": ["ollama"]}, {"topology_id": ["linear_abc"]}, {"model": ["m"]},
+        {"cases": [["RGM-001"]]}, {"cases": "RGM-001"}, {"cases": {"RGM-001": 1}},
+        {"max_steps": 0}, {"max_steps": -3}, {"max_steps": 10 ** 9},
+    ])
+    def test_fields_of_the_wrong_type_or_range(self, client, body):
+        assert client.post("/api/lab/experiments", json=body).status_code == 400
+
+    def test_duplicate_cases_run_once(self, client):
+        experiment = _create_experiment(client, cases=["RGM-001", "RGM-001", "RGM-002"])
+        assert experiment["cases"] == ["RGM-001", "RGM-002"] and experiment["total_runs"] == 2 * 1 * 2
+
+
 class TestExperimentCreation:
     def test_create_returns_id_and_run_count(self, client):
         body = _create_experiment(client, cases=["RGM-001", "RGM-002"], repetitions=3)

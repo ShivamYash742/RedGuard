@@ -92,12 +92,14 @@ from core.lab_mode.trace import EventCategory, EventType, TraceEvent
 
 from lab_mode import store as lab_store
 from database import get_db
-from request_guard import guard_request
+from request_guard import guard_request, json_object
 
 router = APIRouter(prefix="/api/lab", tags=["lab"], dependencies=[Depends(guard_request)])
 
 DEFAULT_REPS = 5
 MAX_REPS = 25
+#: Upper bound on an agent's step budget (the UI's field stops at 50).
+MAX_STEPS = 50
 #: Upper bound on the scripted demo's pause per step.
 MAX_STEP_DELAY_MS = 5000
 
@@ -204,19 +206,33 @@ async def list_arms():
 
 @router.post("/experiments")
 async def create_experiment(request: Request):
-    body = await request.json()
+    body = await json_object(request)
 
+    def integer(name: str, default: Any) -> int:
+        try:
+            return int(default if body.get(name) in (None, "") else body[name])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{name} must be an integer")
+
+    for name in ("arm", "provider", "topology_id", "model"):  # looked up by hash; a list or object would raise
+        if not isinstance(body.get(name, ""), str):
+            raise HTTPException(status_code=400, detail=f"{name} must be a string")
     arm = body.get("arm", "attack")
     selected = body.get("cases") or case_ids()
-    reps = int(body.get("repetitions", DEFAULT_REPS))
+    if not isinstance(selected, list) or not all(isinstance(c, str) for c in selected):
+        raise HTTPException(status_code=400, detail="cases must be a list of case ids")
+    selected = list(dict.fromkeys(selected))  # a case listed twice would run twice under one pair id
+    reps = integer("repetitions", DEFAULT_REPS)
     topology_id = body.get("topology_id", "linear_abc")
-    max_steps = int(body.get("max_steps", DEFAULT_MAX_STEPS))
+    max_steps = integer("max_steps", DEFAULT_MAX_STEPS)
 
     if not 1 <= reps <= MAX_REPS:
         raise HTTPException(status_code=400, detail=f"repetitions must be between 1 and {MAX_REPS}")
+    if not 1 <= max_steps <= MAX_STEPS:
+        raise HTTPException(status_code=400, detail=f"max_steps must be between 1 and {MAX_STEPS}")
 
     scripted = bool(body.get("scripted", False))
-    step_delay_ms = int(body.get("step_delay_ms") or 0)
+    step_delay_ms = integer("step_delay_ms", 0)
     if not 0 <= step_delay_ms <= MAX_STEP_DELAY_MS:
         raise HTTPException(status_code=400, detail=f"step_delay_ms must be between 0 and {MAX_STEP_DELAY_MS}")
 

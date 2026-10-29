@@ -117,3 +117,25 @@ def test_scan_start_rejects_an_unknown_agent(client, policy_file):
 ])
 def test_leaderboard_compare_rejects_bad_requests(client, query, status):
     assert client.get(f"/api/leaderboard/compare?{query}").status_code == status
+
+
+JSON = {"content-type": "application/json"}
+
+
+@pytest.mark.parametrize("method,url", [
+    ("put", "/api/policy"), ("post", "/api/probes"), ("post", "/api/scan/finalize"), ("post", "/api/scan/cancel"),
+])
+@pytest.mark.parametrize("raw", ["{bad", "", '"abc"', "[]", "null"])
+def test_a_body_that_is_not_a_json_object_is_a_bad_request(client, policy_file, method, url, raw):
+    """API-04: invalid JSON or a non-object body raised out of the handler (500)."""
+    assert getattr(client, method)(url, content=raw, headers=JSON).status_code == 400
+
+
+@pytest.mark.parametrize("url,body", [
+    ("/api/probes", {"category": ["x"], "promptText": "y"}),
+    ("/api/probes", {"category": "x", "promptText": 5}),
+    ("/api/scan/finalize", {"sessionId": 5}),
+    ("/api/scan/cancel", {"sessionId": ["a"]}),
+])
+def test_fields_of_the_wrong_type_are_a_bad_request(client, url, body):
+    assert client.post(url, json=body).status_code == 400
