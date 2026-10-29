@@ -40,6 +40,27 @@ class TestRepetitionConfig:
         assert repetition_config(_config(seed=0), 1).model.seed == 1
 
 
+class TestRunRepetitionsRefusesIdenticalCopies:
+    """LAB-08: run_repetitions reused one config (one seed) for every repetition."""
+
+    @pytest.mark.asyncio
+    async def test_a_seeded_model_with_several_repetitions_is_refused(self):
+        from core.lab_mode.runner import run_repetitions
+        case = load_case("RGM-001")
+        with pytest.raises(ValueError, match="repetition_config"):
+            await run_repetitions(case, fixture_factory(case), _config(seed=7), ScriptedClient(case["clean_script"]),
+                                  reps=3, experiment_id="e")
+
+    @pytest.mark.asyncio
+    async def test_one_repetition_or_no_seed_is_fine(self):
+        from core.lab_mode.runner import run_repetitions
+        case = load_case("RGM-001")
+        for config, reps in ((_config(seed=7), 1), (_config(), 3)):
+            pairs = await run_repetitions(case, fixture_factory(case), config, ScriptedClient(case["clean_script"]),
+                                          reps=reps, experiment_id="e")
+            assert len(pairs) == reps
+
+
 class TestWarnings:
     base = {"repetitions": 5, "scripted": False, "model": {"temperature": 0.0, "seed": None}}
 
