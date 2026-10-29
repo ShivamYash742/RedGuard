@@ -46,6 +46,10 @@ from typing import Any, Dict, List, Optional
 # Git utilities
 # ─────────────────────────────────────────────────────────────────────────────
 
+#: core/shared/ is two levels below the repo root. git runs there, not in the process's cwd: started from
+#: another repo (or outside any) the stamp would otherwise carry that repo's commit, or none.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 def _get_git_commit() -> Optional[str]:
     """Return the current HEAD git commit hash, or None if not in a repo."""
     try:
@@ -54,6 +58,7 @@ def _get_git_commit() -> Optional[str]:
             capture_output=True,
             text=True,
             timeout=5,
+            cwd=_REPO_ROOT,
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -70,6 +75,7 @@ def _get_git_status_clean() -> Optional[bool]:
             capture_output=True,
             text=True,
             timeout=5,
+            cwd=_REPO_ROOT,
         )
         if result.returncode == 0:
             return result.stdout.strip() == ""
