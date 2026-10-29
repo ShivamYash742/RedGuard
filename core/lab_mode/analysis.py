@@ -51,7 +51,7 @@ from .metrics import (
 )
 
 
-def _valid(outcomes: Sequence[RunOutcome]) -> List[RunOutcome]:
+def valid_outcomes(outcomes: Sequence[RunOutcome]) -> List[RunOutcome]:
     """Runs whose paired clean baseline actually completed the task.
 
     §21.8: a failed clean run makes its whole pair uninterpretable, and
@@ -146,7 +146,7 @@ def headline_split(valid: Sequence[RunOutcome]) -> str:
 
 def arm_summary(outcomes: Sequence[RunOutcome]) -> Dict[str, Any]:
     """Every §10 aggregate for one arm, plus the validity accounting."""
-    valid = _valid(outcomes)
+    valid = valid_outcomes(outcomes)
     scoped, _, _ = split_scope(valid)
 
     per_case: Dict[str, Any] = {}
@@ -191,7 +191,7 @@ _METRICS = {"icr": icr, "asr": asr, "partial_rate": partial_rate}
 
 def _per_case(outcomes: Sequence[RunOutcome], metric) -> Dict[str, Optional[float]]:
     by_case: Dict[str, List[RunOutcome]] = {}
-    for o in _valid(outcomes):
+    for o in valid_outcomes(outcomes):
         by_case.setdefault(o.case["id"], []).append(o)
     return {case_id: metric(runs) for case_id, runs in by_case.items()}
 
@@ -392,7 +392,7 @@ def compare_standard(outcomes_by_arm: Dict[str, Sequence[RunOutcome]]) -> Dict[s
 def compromise_by_agent(outcomes: Sequence[RunOutcome]) -> Dict[str, Dict[str, int]]:
     """Per-agent impact counts — where in the chain agents actually broke."""
     table: Dict[str, Dict[str, int]] = {}
-    for o in _valid(outcomes):
+    for o in valid_outcomes(outcomes):
         for agent, impact in o.verdict.agent_impact.items():
             row = table.setdefault(agent, {level.value: 0 for level in AgentImpactLevel})
             row[impact.level.value] += 1

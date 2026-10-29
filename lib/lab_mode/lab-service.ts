@@ -212,7 +212,10 @@ export interface RateWithCI {
 export interface ExperimentMetrics {
   experiment_id: string
   arm: string
+  /** Valid attack runs: those whose paired clean run completed the task. */
   n_attack_runs: number
+  /** Completed attack runs, valid or not. */
+  n_attack_runs_total?: number
   /** Pairs left out of every rate: a run hit a harness error or never finished. */
   n_failed_pairs: number
   vintage?: 'current' | 'pre_audit' | 'other'

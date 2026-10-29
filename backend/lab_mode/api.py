@@ -46,6 +46,7 @@ if _PARENT_DIR not in sys.path:
 
 from core.lab_mode.analysis import (
     ARMS, arm_summary, comparability_problems, compare_standard, headline, headline_split, scope_report, split_headlines,
+    valid_outcomes,
 )
 from core.lab_mode.cases import (
     CASES_DIR,
@@ -769,7 +770,10 @@ async def experiment_metrics(experiment_id: str):
     if experiment is None:
         raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
 
-    outcomes, runs = await _outcomes(db, experiment_id)
+    all_outcomes, runs = await _outcomes(db, experiment_id)
+    # RUN_INVALID runs (the paired clean run failed its task) measured nothing: counting them made the
+    # report's valid_pairs gate (valid / completed) about 1 whatever the model did.
+    outcomes = valid_outcomes(all_outcomes)
     n = len(outcomes)
 
     per_case: Dict[str, Any] = {}
@@ -794,6 +798,7 @@ async def experiment_metrics(experiment_id: str):
         "arm": experiment.armKey,
         "vintage": lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")),
         "n_attack_runs": n,
+        "n_attack_runs_total": len(all_outcomes),
         # Pairs left out because a run hit a harness error or never finished.
         # Visible, never silently absorbed (§21.8).
         "n_failed_pairs": len(lab_store.failed_pair_ids(runs)),

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List
@@ -351,6 +352,28 @@ class TestMetricsEndpoint:
         assert body["pooled_legacy"]["asr"]["n"] == 8                   # the 1.2.0 headline can still be reproduced
         assert {c: v["in_scope"] for c, v in body["per_case"].items()} == {
             "RGM-001": True, "RGM-005": False, "RGM-008": False, "RGM-009": False}
+
+    def test_invalid_runs_are_not_counted_as_valid_attack_runs(self, client):
+        """LAB-03: `n_attack_runs` counted RUN_INVALID runs, so the report's valid_pairs gate was always ~1."""
+        import sqlite3
+
+        result = _run_to_completion(client, repetitions=3)
+        experiment_id = result["experiment"]["experiment_id"]
+        db_file = os.environ["DATABASE_URL"].removeprefix("file:")
+        with sqlite3.connect(db_file) as conn:
+            rows = conn.execute(
+                "SELECT id, verdict_json FROM lab_runs WHERE experiment_id = ? AND mode = 'ATTACK' ORDER BY id", (experiment_id,),
+            ).fetchall()
+            for run_id, verdict_json in rows[:2]:
+                verdict = json.loads(verdict_json)
+                verdict["system_outcome"] = "RUN_INVALID"
+                conn.execute("UPDATE lab_runs SET verdict_json = ? WHERE id = ?", (json.dumps(verdict), run_id))
+        body = client.get(f"/api/lab/experiments/{experiment_id}/metrics").json()
+        assert (body["n_attack_runs"], body["n_attack_runs_total"]) == (1, 3)
+        assert body["per_case"]["RGM-001"]["n"] == 1
+        gates = client.get(f"/api/lab/experiments/{experiment_id}/report").json()["suitability"]["gates"]
+        valid_pairs = next(g for g in gates if g["name"] == "valid_pairs")
+        assert valid_pairs["value"] == pytest.approx(1 / 3) and valid_pairs["passed"] is False
 
     def test_aggregate_shape(self, client):
         result = _run_to_completion(client, repetitions=3)
