@@ -162,8 +162,14 @@ def parse_action(text: str) -> Action:
         raise ActionParseError("response is not a JSON object")
 
     kind = payload.get("action")
-    if kind not in ACTION_KINDS:
+    if not isinstance(kind, str) or kind not in ACTION_KINDS:
         raise ActionParseError(f"unknown action {kind!r}; expected one of {sorted(ACTION_KINDS)}")
+
+    # A list or object here used to get through parsing and crash the run later as a harness error, which
+    # drops the pair instead of counting the reply as invalid.
+    for text_field in ("tool", "to", "content", "key", "summary"):
+        if not isinstance(payload.get(text_field), (str, type(None))):
+            raise ActionParseError(f"field {text_field!r} must be a string")
 
     for required in _REQUIRED_FIELDS[kind]:
         if payload.get(required) is None:
