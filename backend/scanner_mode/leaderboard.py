@@ -1,7 +1,9 @@
 """
 Mode A leaderboard, computed from stored runs only.
 
-One row per (agent, prompt mode, benchmark version). Counts are pooled over a
+One row per (agent, prompt mode, model, filter policy, benchmark version): the model is the one
+the session recorded (`OLLAMA_MODEL` changes it while the agent id stays), and runs under an edited
+`policy.yaml` filter differently, so neither is pooled with the others. Counts are pooled over a
 row's completed runs of that one version: versions differ in scoring, prompts
 and tools (null = legacy BLOCKED/ALLOWED), so pooling them would mix
 incomparable numbers. Only the current version and the PRE_AUDIT versions get
@@ -28,6 +30,21 @@ from core.scanner_mode.bds import bds_compute
 from core.shared.power import comparison_verdict, paired_difference
 from core.shared.statistics import clustered_rate
 from core.shared.version import BENCHMARK_VERSION, MIN_RUNS_FOR_STATISTICS, PRE_AUDIT_BENCHMARK_VERSIONS
+
+
+def _model_name(session: Any) -> Optional[str]:
+    """The model the session's agent called (from its recorded config); None for sessions that recorded none."""
+    try:
+        config = json.loads(getattr(session, "modelConfig", None) or "{}")
+    except (TypeError, ValueError):
+        return None
+    return config.get("model") if isinstance(config, dict) else None
+
+
+def row_id(agent: str, mode: Optional[str], model: Optional[str] = None, policy: Optional[str] = None) -> str:
+    """How a leaderboard row is named in `noDifferenceFrom` and `/api/leaderboard/compare`:
+    `agent:mode`, then `@model` and `#policy` (first 8 hex of the filter policy's SHA-256) where recorded."""
+    return f"{agent}:{mode}" + (f"@{model}" if model else "") + (f"#{policy[:8]}" if policy else "")
 
 
 def _rate(events: List[Any], hit, mixed: Optional[int] = None) -> Optional[Dict[str, float]]:
@@ -173,7 +190,8 @@ def _summary(events: List[Any], runs: int, fixture_tools: Dict[str, frozenset]) 
 
 
 def _groups(sessions: List[Any], probe_ids: Optional[frozenset]) -> Dict[tuple, List[Any]]:
-    """(agent, prompt mode, benchmark version) -> its completed runs that cover the whole corpus of that version.
+    """(agent, prompt mode, benchmark version, model, policy hash) -> its completed runs that cover the whole
+    corpus of that version.
 
     The current version has to cover every built-in probe; earlier versions were run before the held-out
     split existed and cover the dev probes."""
@@ -187,22 +205,22 @@ def _groups(sessions: List[Any], probe_ids: Optional[frozenset]) -> Dict[tuple, 
     for s in sessions:
         need = wanted.get(None) or wanted["current" if s.benchmarkVersion == BENCHMARK_VERSION else "earlier"]
         if s.benchmarkVersion in shown and s.status == "COMPLETED" and Counter(e.probeId for e in s.events if e.probeId) == need:
-            groups[(s.agentId, s.promptMode, s.benchmarkVersion)].append(s)
+            groups[(s.agentId, s.promptMode, s.benchmarkVersion, _model_name(s), getattr(s, "policySha256", None))].append(s)
     return groups
 
 
-def compare_groups(sessions: List[Any], a: Tuple[str, str], b: Tuple[str, str], split: str, version: str = BENCHMARK_VERSION,
+def compare_groups(sessions: List[Any], a: str, b: str, split: str, version: str = BENCHMARK_VERSION,
                    probe_ids: Optional[frozenset] = None) -> Dict[str, Any]:
-    """Paired comparison of two (agent, prompt mode) groups of one benchmark version on one split."""
-    groups = _groups(sessions, probe_ids)
+    """Paired comparison of two rows (named as `row_id` does) of one benchmark version on one split."""
+    by_id = {row_id(k[0], k[1], k[3], k[4]): runs for k, runs in _groups(sessions, probe_ids).items() if k[2] == version}
     split_of, _ = _corpus_index()
     events = {}
-    for name, key in (("a", a), ("b", b)):
-        runs = groups.get((*key, version))
+    for name, wanted in (("a", a), ("b", b)):
+        runs = by_id.get(wanted)
         if not runs:
-            raise KeyError(f"no complete runs for {key[0]}:{key[1]} in benchmark {version}")
+            raise KeyError(f"no complete runs for {wanted} in benchmark {version}")
         events[name] = [e for s in runs for e in s.events if e.probeId and not e.isControl and split_of.get(e.probeId, "dev") == split]
-    return {"split": split, "version": version, **compare_events(events["a"], events["b"], ":".join(a), ":".join(b))}
+    return {"split": split, "version": version, **compare_events(events["a"], events["b"], a, b)}
 
 
 def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None) -> List[Dict[str, Any]]:
@@ -210,7 +228,7 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
     run has to cover (default: the built-in corpus of the run's version)."""
     split_of, fixture_tools = _corpus_index()
     rows, rates = [], {}
-    for (agent_id, prompt_mode, version), group in _groups(sessions, probe_ids).items():
+    for (agent_id, prompt_mode, version, model, policy), group in _groups(sessions, probe_ids).items():
         all_events = [e for s in group for e in s.events]
         events = [e for e in all_events if e.probeId]
         custom = [e for e in all_events if not e.probeId]
@@ -219,8 +237,11 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
         latest = max(group, key=lambda s: s.startedAt)
         summary = _summary(by_split[headline], len(group), fixture_tools)
         rows.append({
+            "rowId": row_id(agent_id, prompt_mode, model, policy),
             "agentId": agent_id,
             "agentName": latest.agentName or agent_id,
+            "model": model,
+            "policySha256": policy,
             "promptMode": prompt_mode,
             "benchmarkVersion": version,
             "preAudit": version != BENCHMARK_VERSION,
@@ -233,7 +254,7 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
                         for sp, evs in by_split.items() if evs},
             "custom": {"total": len(custom), "compromised": sum(1 for e in custom if e.status == "COMPROMISED")},
         })
-        rates[(agent_id, prompt_mode, version)] = [e for e in by_split[headline] if not e.isControl]
+        rates[rows[-1]["rowId"], version] = [e for e in by_split[headline] if not e.isControl]
 
     # Current version first; within a version, lowest model-alone attack success
     # first and rows without attacks last. Ranks restart for each version.
@@ -245,9 +266,9 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
         row["rank"] = ranked[row["benchmarkVersion"]]
     # A rank is only a claim when the rows differ: list the rows each one cannot be told apart from.
     for row in rows:
-        mine = (row["agentId"], row["promptMode"], row["benchmarkVersion"])
+        mine = (row["rowId"], row["benchmarkVersion"])
         row["noDifferenceFrom"] = [
-            f"{o['agentId']}:{o['promptMode']}" for o in rows
+            o["rowId"] for o in rows
             if o is not row and o["benchmarkVersion"] == row["benchmarkVersion"] and o["headlineSplit"] == row["headlineSplit"]
-            and compare_events(rates[mine], rates[(o["agentId"], o["promptMode"], o["benchmarkVersion"])], "a", "b")["claim"] != "difference"]
+            and compare_events(rates[mine], rates[o["rowId"], o["benchmarkVersion"]], "a", "b")["claim"] != "difference"]
     return rows

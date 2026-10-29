@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from datetime import datetime, timedelta
 from types import SimpleNamespace as NS
@@ -20,9 +22,10 @@ def _event(probe, status, model=None, control=False, category="DIRECT_INJECTION"
               scoredBy=scored_by)
 
 
-def _session(agent, mode, events, version=BENCHMARK_VERSION, status="COMPLETED", day=0):
+def _session(agent, mode, events, version=BENCHMARK_VERSION, status="COMPLETED", day=0, model=None, policy=None):
     return NS(agentId=agent, agentName=agent.upper(), promptMode=mode, benchmarkVersion=version,
-              status=status, startedAt=T0 + timedelta(days=day), events=events)
+              status=status, startedAt=T0 + timedelta(days=day), events=events,
+              modelConfig=json.dumps({"provider": "ollama", "model": model}) if model else None, policySha256=policy)
 
 
 def _run(compromised_p1: bool, day: int):
@@ -61,6 +64,23 @@ def test_rows_pool_completed_tiered_runs_only():
 
     # b never got compromised, so it ranks first
     assert [r["agentId"] for r in rows] == ["b", "a"] and [r["rank"] for r in rows] == [1, 2]
+
+
+def test_runs_of_different_models_or_policies_are_different_rows():
+    """SCN-01: OLLAMA_MODEL changes the model while the agent id stays; a granite run and a llama run were one row."""
+    sessions = [
+        _session("a", "baseline", _run(True, 0), model="granite3.3:2b", policy="aa11aa11" * 8),
+        _session("a", "baseline", _run(False, 1), model="llama3.1:8b", policy="aa11aa11" * 8),
+        _session("a", "baseline", _run(False, 2), model="llama3.1:8b", policy="bb22bb22" * 8),   # same model, edited filter
+        _session("a", "baseline", _run(False, 3), model="llama3.1:8b", policy="bb22bb22" * 8),
+        _session("b", "baseline", _run(False, 4)),                                              # recorded neither
+    ]
+    rows = {r["rowId"]: r for r in leaderboard_rows(sessions)}
+    assert set(rows) == {"a:baseline@granite3.3:2b#aa11aa11", "a:baseline@llama3.1:8b#aa11aa11",
+                         "a:baseline@llama3.1:8b#bb22bb22", "b:baseline"}
+    assert [rows[i]["runs"] for i in sorted(rows)] == [1, 1, 2, 1]
+    granite = rows["a:baseline@granite3.3:2b#aa11aa11"]
+    assert (granite["model"], granite["agentId"]) == ("granite3.3:2b", "a") and granite["asrModel"]["rate"] == 2 / 3
 
 
 def test_bds_needs_enough_runs():
@@ -131,10 +151,10 @@ def test_compare_groups_gives_a_paired_verdict():
     from scanner_mode.leaderboard import compare_groups
     ids, a = _probe_runs("a", lambda i: i % 10 == 0)
     _, c = _probe_runs("c", lambda i: i % 2 == 0)
-    out = compare_groups(a + c, ("c", "baseline"), ("a", "baseline"), split="dev", probe_ids=frozenset(ids))
+    out = compare_groups(a + c, "c:baseline", "a:baseline", split="dev", probe_ids=frozenset(ids))
     assert out["claim"] == "difference" and out["lower"]["higher"] == "c:baseline" and out["lower"]["n"] == 30
     with pytest.raises(KeyError):
-        compare_groups(a, ("a", "baseline"), ("zzz", "baseline"), split="dev", probe_ids=frozenset(ids))
+        compare_groups(a, "a:baseline", "zzz:baseline", split="dev", probe_ids=frozenset(ids))
 
 
 def test_a_mixed_reply_range_blocks_a_claim_that_only_holds_at_one_end():

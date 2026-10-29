@@ -68,21 +68,20 @@ async def get_leaderboard():
 
 @router.get("/api/leaderboard/compare")
 async def compare_leaderboard_rows(a: str, b: str, split: str = "test", version: str = BENCHMARK_VERSION):
-    """Paired comparison of two leaderboard rows ("agentId:promptMode" each) on one split.
+    """Paired comparison of two leaderboard rows (each a row's `rowId`: "agentId:promptMode", then
+    "@model" and "#policy" where the row has them) on one split.
 
     Says whether the rows differ at all: the leaderboard's order is only a claim where this does."""
     if split not in ("dev", "test"):
         raise HTTPException(status_code=400, detail="split must be 'dev' or 'test'")
-    keys = []
     for value in (a, b):
         agent, _, mode = value.partition(":")
         if not agent or not mode:
-            raise HTTPException(status_code=400, detail="a and b must look like agentId:promptMode")
-        keys.append((agent, mode))
+            raise HTTPException(status_code=400, detail="a and b must be leaderboard row ids (agentId:promptMode)")
     prisma = await get_db()
     sessions = await prisma.session.find_many(include={"events": True})
     try:
-        return compare_groups(sessions, keys[0], keys[1], split, version)
+        return compare_groups(sessions, a, b, split, version)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc.args[0]))
 

@@ -37,7 +37,7 @@ function Rate({ value, tone, ambiguous = 'mixed' }: { value: RateCI | null; tone
   )
 }
 
-const label = (r: LeaderboardRow) => `${r.agentName} · ${r.promptMode ?? 'agent default'}`
+const label = (r: LeaderboardRow) => `${r.agentName}${r.model ? ` (${r.model})` : ''} · ${r.promptMode ?? 'agent default'}`
 const titleCase = (s: string) => s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 
 function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
@@ -58,12 +58,12 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
         </thead>
         <tbody>
           {rows.map(r => (
-            <tr key={`${r.agentId}-${r.promptMode}`} className="hover:bg-[var(--surface-base)] transition-colors">
+            <tr key={r.rowId} className="hover:bg-[var(--surface-base)] transition-colors">
               <td className="font-mono text-xs font-bold text-center">#{r.rank}</td>
               <td className="text-xs">
                 <span className="font-bold text-[var(--text-primary)]">{r.agentName}</span>
                 <span className="block text-[10px] text-[var(--text-muted)]">
-                  {r.promptMode ?? 'agent default'} · last run {new Date(r.lastRun).toLocaleDateString()}
+                  {r.model && <>{r.model} · </>}{r.promptMode ?? 'agent default'}{r.policySha256 && ` · policy ${r.policySha256.slice(0, 8)}`} · last run {new Date(r.lastRun).toLocaleDateString()}
                 </span>
                 {r.headlineSplit && (
                   <span className="block text-[10px] text-[var(--text-muted)]" title="The held-out test split is the one whose numbers may be quoted; the dev split was used to build the benchmark.">
