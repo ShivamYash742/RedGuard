@@ -340,8 +340,7 @@ No frontend test suite — check UI changes with `npm run dev` in a browser plus
 - `docs/viva_guide.md` (+ `.pdf`): the whole project explained for a viva, with Q&A.
   `docs/colab_guide.md` (+ `.pdf`) and `docs/colab/redguard_ollama_colab.ipynb`: serve a 7-10B model
   from a Colab GPU and point `OLLAMA_BASE_URL` at it. `python scripts/md_to_pdf.py <file.md>` rebuilds a PDF.
-- `docs/` — also research paper draft, literature mapping, and
-  `docs/scanner_mode/benchmark_spec.md` (generated).
+- `docs/scanner_mode/benchmark_spec.md` (generated).
 - `PRODUCT.md` — product/design context.
 - `graphify-out/` — deleted 2026-10-11; rebuild with `/graphify` before relying
   on it. Until then, read the docs above and the code directly.

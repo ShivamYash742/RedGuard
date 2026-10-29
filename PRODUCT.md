@@ -35,7 +35,7 @@ The probe corpus is auditable data, not code. Fifty JSON entries in `core/scanne
 - Version numbers are centralised in `core/shared/version.py` (`BENCHMARK_VERSION`, `DATASET_VERSION`, `PROBE_SCHEMA_VERSION`). The frontend currently duplicates them as string literals; that is a defect, not a design.
 - No frontend test suite exists. Verification is typecheck, lint, and browser inspection.
 - `backend/prisma/dev.db` is intentionally committed as demo seed data.
-- **Undecided:** whether the project pursues the academic paper track recorded in `docs/research_paper.md`. The interface is arranged for the engineer's decision either way.
+- **Undecided:** whether the project pursues the academic paper track (its sources are in the git-ignored `papr/`). The interface is arranged for the engineer's decision either way.
 
 ## Brand Commitments
 

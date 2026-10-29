@@ -34,8 +34,7 @@ rule enforce it).
 - `core/` — pure Python, imported by `backend/` (not the reverse):
   `core/shared` (versions, statistics), `core/scanner_mode` (probe datasets,
   BDS), `core/lab_mode` (the multi-agent harness).
-- `docs/` — `architecture.md` (the map), research paper, literature mapping,
-  `scanner_mode/benchmark_spec.md`.
+- `docs/` — `architecture.md` (the map), `scanner_mode/benchmark_spec.md`.
 - `backend/scanner_mode/cli/` — legacy standalone CLI tools (`redteam_agent.py`,
   `dashboard.py`, `audit_report.py`, `add_custom_probes.py`), run from
   `backend/` as `python -m scanner_mode.cli.<name>`. These do **not** talk to

@@ -440,7 +440,6 @@ RedGuard/
 │
 ├── docs/
 │   ├── architecture.md                # the map of the project
-│   ├── research_paper.md, literature_mapping.md
 │   └── scanner_mode/                  # benchmark_spec.md and spec_generator.py
 │
 ├── docker/, docker-compose*.yml       # images and compose files

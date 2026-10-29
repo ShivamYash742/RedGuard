@@ -22,7 +22,7 @@ both. Two checks keep it true: `core/tests/shared/test_mode_boundaries.py`
 | **API** `backend/` | `app.py` (app, CORS, `/api/health`), `request_guard.py` (Origin and JSON checks on every route), `database.py`, `prisma/` | `api.py` (all `/api/…` scan routes), scanner, inspector + `policy.yaml`, agents (one scaffold, shared tools and prompts, mock action tools, fixture-backed read tools, sandbox), leaderboard, reports, `filter_eval.py`, `cli/` | `api.py` (`/api/lab/…`), `store.py`, `sweep.py` |
 | **Library** `core/` | `version.py`, `statistics.py`, `reproducibility.py` | `datasets/` (the probe corpus), `benign_sets/` (XSTest safe prompts), `bds.py` | harness: environment, topology, tools, model client, runner, trace, evaluator, metrics, report, cases |
 | **Tests** | `core/tests/shared/`, `backend/tests/conftest.py` | `core/tests/scanner_mode/`, `backend/tests/scanner_mode/` | `core/tests/lab_mode/`, `backend/tests/lab_mode/` |
-| **Docs** | this file, `research_paper.md`, `literature_mapping.md` | `scanner_mode/benchmark_spec.md` (+ its generator) | — |
+| **Docs** | this file | `scanner_mode/benchmark_spec.md` (+ its generator) | — |
 
 Folders in parentheses under `app/` are Next.js route groups: they organise
 files without appearing in the URL, so `/corpus` and `/lab` are unchanged.

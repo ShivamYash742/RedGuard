@@ -84,8 +84,7 @@ audit says 13; I could not reproduce that figure) across its 56 entries. Checked
 | 2406.13352 | title inexact ("...to Evaluate Prompt Injection Attacks and Defenses for LLM Agents") | corrected |
 
 The venues of the other references (ACM AISec, NeurIPS, TACL, NAACL, EMNLP) are not on the arXiv pages and were **not**
-re-verified: `TODO(verify)`. `docs/research_paper.md` and `docs/literature_mapping.md` are corrected; the report and paper
-sources in `papr/` still need the same changes.
+re-verified: `TODO(verify)`. The report and paper sources in `papr/` still need the same changes.
 
 > **Suggested wording.** "Every probe cites at least one source. The corpus uses 11 distinct arXiv papers (identifiers
 > verified against arxiv.org); several probes share a source, so the citations motivate the attack families and do not
