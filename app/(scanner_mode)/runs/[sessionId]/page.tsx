@@ -124,6 +124,17 @@ export default function RunReportPage({ params }: { params: Promise<{ sessionId:
         </div>
       ) : (
         <div className="space-y-6">
+          {overall?.error && (
+            <div role="alert" className="rounded-[var(--radius)] border border-[var(--danger)] bg-[var(--surface-raised)] p-4 text-xs">
+              <div className="font-bold text-[var(--danger)] uppercase tracking-wider">Evaluation aborted</div>
+              <p className="mt-1 text-[var(--text-secondary)]">
+                The run stopped after {overall.total_probes} of {benchmarkDataService.getAllProbes().filter(p => !p.benign_control).length} attack
+                probes, so the scores below describe only those, not the corpus.
+              </p>
+              <pre className="mt-2 whitespace-pre-wrap font-mono text-[var(--text-muted)]">{overall.error}</pre>
+            </div>
+          )}
+
           {/* Target Metadata Card */}
           <div className="research-card space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">

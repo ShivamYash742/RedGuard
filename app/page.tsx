@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta, Stats } from '@/lib/scanner_mode/data-service'
 import { CardSkeleton, TableSkeleton } from '@/components/shared/Skeletons'
 import EmptyState from '@/components/shared/EmptyState'
+import StatusBadge from '@/components/shared/StatusBadge'
 import { ShieldAlert, Play, Boxes, Award, ArrowUpRight } from 'lucide-react'
 
 export default function Dashboard() {
@@ -11,16 +12,19 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
   const [families, setFamilies] = useState<AttackFamilyMeta[]>([])
   const [probeCount, setProbeCount] = useState<number>(benchmarkDataService.getAllProbes().length)
+  const [modelsEvaluated, setModelsEvaluated] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadDashboardData() {
       try {
-        const [statsData, sessionsData, probeCountData] = await Promise.all([
+        const [statsData, sessionsData, probeCountData, leaderboard] = await Promise.all([
           benchmarkDataService.fetchStats(),
           benchmarkDataService.fetchSessions(),
           fetch('/api/probes/count').then(r => r.json()).catch(() => ({})),
+          benchmarkDataService.fetchLeaderboard(),
         ])
+        setModelsEvaluated(new Set(leaderboard.map(r => r.agentId)).size)
         setStats(statsData)
         setSessions(sessionsData)
         setFamilies(benchmarkDataService.getAttackFamilies())
@@ -44,7 +48,7 @@ export default function Dashboard() {
     )
   }
 
-  const hasScore = stats?.overallBlockRate !== undefined && stats?.totalSessions > 0
+  const hasScore = stats?.overallBlockRate !== undefined && (stats?.scoredSessions ?? 0) > 0
   const latestScore = hasScore ? (stats.overallBlockRate * 100).toFixed(1) : null
 
   return (
@@ -94,7 +98,7 @@ export default function Dashboard() {
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Core Probes</span>
           <div className="text-2xl font-black text-[var(--primary)] mt-1.5 font-mono">{probeCount}</div>
-          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Built-in dataset</span>
+          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Built-in, {benchmarkDataService.getAllProbes().filter(p => p.benign_control).length} of them benign controls</span>
         </div>
 
         <div className="research-card">
@@ -111,21 +115,23 @@ export default function Dashboard() {
 
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Models Evaluated</span>
-          <div className="text-2xl font-black text-[var(--text-primary)] mt-1.5 font-mono">5</div>
-          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">NIM & Local LLMs</span>
+          <div className="text-2xl font-black text-[var(--text-primary)] mt-1.5 font-mono">{modelsEvaluated ?? '—'}</div>
+          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">With a measured leaderboard row</span>
         </div>
 
         <div className="research-card">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Top Security Score</span>
+          <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Resistance Score</span>
           {hasScore ? (
             <>
               <div className="text-2xl font-black text-[var(--success)] mt-1.5 font-mono">{latestScore}%</div>
-              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">From real runs</span>
+              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">
+                {stats?.scoredSessions} completed run{stats?.scoredSessions === 1 ? '' : 's'}, benchmark {stats?.benchmarkVersion} only
+              </span>
             </>
           ) : (
             <>
               <div className="text-2xl font-black text-[var(--text-muted)] mt-1.5 font-mono">—</div>
-              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">No runs yet</span>
+              <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">No completed run of benchmark {stats?.benchmarkVersion ?? 'this version'}</span>
             </>
           )}
         </div>
@@ -214,18 +220,18 @@ export default function Dashboard() {
                       <td className="font-mono text-xs text-[var(--success)] font-semibold text-center">{s.blocked}</td>
                       <td className="font-mono text-xs text-[var(--danger)] font-semibold text-center">{s.allowed}</td>
                       <td className="font-mono text-xs font-bold text-center">{rate}%</td>
+                      <td><StatusBadge status={s.status} /></td>
                       <td>
-                        <span className="badge-semantic badge-success">
-                          {s.status}
-                        </span>
-                      </td>
-                      <td>
-                        <Link
-                          href={`/runs/${s.sessionId}`}
-                          className="text-xs text-[var(--primary)] font-semibold hover:underline"
-                        >
-                          View Report
-                        </Link>
+                        {s.status === 'COMPLETED' ? (
+                          <Link
+                            href={`/runs/${s.sessionId}`}
+                            className="text-xs text-[var(--primary)] font-semibold hover:underline"
+                          >
+                            View Report
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-[var(--text-muted)]">no report</span>
+                        )}
                       </td>
                     </tr>
                   )

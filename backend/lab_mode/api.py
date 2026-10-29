@@ -46,6 +46,7 @@ if _PARENT_DIR not in sys.path:
 
 from core.lab_mode.analysis import (
     ARMS, arm_summary, comparability_problems, compare_standard, headline, headline_split, scope_report, split_headlines,
+    valid_outcomes,
 )
 from core.lab_mode.cases import (
     CASES_DIR,
@@ -91,12 +92,14 @@ from core.lab_mode.trace import EventCategory, EventType, TraceEvent
 
 from lab_mode import store as lab_store
 from database import get_db
-from request_guard import guard_request
+from request_guard import guard_request, json_object
 
 router = APIRouter(prefix="/api/lab", tags=["lab"], dependencies=[Depends(guard_request)])
 
 DEFAULT_REPS = 5
 MAX_REPS = 25
+#: Upper bound on an agent's step budget (the UI's field stops at 50).
+MAX_STEPS = 50
 #: Upper bound on the scripted demo's pause per step.
 MAX_STEP_DELAY_MS = 5000
 
@@ -203,19 +206,33 @@ async def list_arms():
 
 @router.post("/experiments")
 async def create_experiment(request: Request):
-    body = await request.json()
+    body = await json_object(request)
 
+    def integer(name: str, default: Any) -> int:
+        try:
+            return int(default if body.get(name) in (None, "") else body[name])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{name} must be an integer")
+
+    for name in ("arm", "provider", "topology_id", "model"):  # looked up by hash; a list or object would raise
+        if not isinstance(body.get(name, ""), str):
+            raise HTTPException(status_code=400, detail=f"{name} must be a string")
     arm = body.get("arm", "attack")
     selected = body.get("cases") or case_ids()
-    reps = int(body.get("repetitions", DEFAULT_REPS))
+    if not isinstance(selected, list) or not all(isinstance(c, str) for c in selected):
+        raise HTTPException(status_code=400, detail="cases must be a list of case ids")
+    selected = list(dict.fromkeys(selected))  # a case listed twice would run twice under one pair id
+    reps = integer("repetitions", DEFAULT_REPS)
     topology_id = body.get("topology_id", "linear_abc")
-    max_steps = int(body.get("max_steps", DEFAULT_MAX_STEPS))
+    max_steps = integer("max_steps", DEFAULT_MAX_STEPS)
 
     if not 1 <= reps <= MAX_REPS:
         raise HTTPException(status_code=400, detail=f"repetitions must be between 1 and {MAX_REPS}")
+    if not 1 <= max_steps <= MAX_STEPS:
+        raise HTTPException(status_code=400, detail=f"max_steps must be between 1 and {MAX_STEPS}")
 
     scripted = bool(body.get("scripted", False))
-    step_delay_ms = int(body.get("step_delay_ms") or 0)
+    step_delay_ms = integer("step_delay_ms", 0)
     if not 0 <= step_delay_ms <= MAX_STEP_DELAY_MS:
         raise HTTPException(status_code=400, detail=f"step_delay_ms must be between 0 and {MAX_STEP_DELAY_MS}")
 
@@ -289,6 +306,7 @@ def _experiment_row(experiment: Any, runs: Optional[List[Any]] = None) -> Dict[s
         "created_at": experiment.createdAt.isoformat(),
         # Runs per run, so `/lab` can badge a live experiment from any tab.
         "live": _JOBS[experiment.id].progress if experiment.id in _JOBS else None,
+        "last_error": _LAST_ERROR.get(experiment.id),
     }
     if runs is not None:
         payload["runs"] = [_run_summary(r) for r in runs]
@@ -636,9 +654,9 @@ class _Job:
             raise
         except Exception as exc:
             # Unreported, a crash is indistinguishable from a finished sweep.
-            self._publish({"event": "experiment_error", "data": {
-                "experiment_id": self.experiment_id, "error": f"{type(exc).__name__}: {exc}",
-            }})
+            message = f"{type(exc).__name__}: {exc}"
+            _LAST_ERROR[self.experiment_id] = message  # a job that fails fast is gone before a viewer attaches
+            self._publish({"event": "experiment_error", "data": {"experiment_id": self.experiment_id, "error": message}})
 
     async def subscribe(self) -> AsyncIterator[Dict[str, Any]]:
         queue: asyncio.Queue = asyncio.Queue()
@@ -656,6 +674,10 @@ class _Job:
 #: the backend ever runs several workers.
 _JOBS: Dict[str, _Job] = {}
 
+#: Why the last job of an experiment died, until it is started again. In memory like _JOBS: the page reads it
+#: from GET /experiments/{id} when the stream answers 409 because the job had already finished.
+_LAST_ERROR: Dict[str, str] = {}
+
 
 async def _experiment_or_404(experiment_id: str) -> Any:
     experiment = await lab_store.get_experiment(await get_db(), experiment_id)
@@ -669,6 +691,7 @@ def _start(experiment: Any) -> _Job:
     running job instead of executing the experiment twice into one record."""
     job = _JOBS.get(experiment.id)
     if job is None:
+        _LAST_ERROR.pop(experiment.id, None)
         job = _JOBS[experiment.id] = _Job(experiment)
     return job
 
@@ -769,7 +792,10 @@ async def experiment_metrics(experiment_id: str):
     if experiment is None:
         raise HTTPException(status_code=404, detail=f"No experiment '{experiment_id}'")
 
-    outcomes, runs = await _outcomes(db, experiment_id)
+    all_outcomes, runs = await _outcomes(db, experiment_id)
+    # RUN_INVALID runs (the paired clean run failed its task) measured nothing: counting them made the
+    # report's valid_pairs gate (valid / completed) about 1 whatever the model did.
+    outcomes = valid_outcomes(all_outcomes)
     n = len(outcomes)
 
     per_case: Dict[str, Any] = {}
@@ -794,6 +820,7 @@ async def experiment_metrics(experiment_id: str):
         "arm": experiment.armKey,
         "vintage": lab_vintage((json.loads(experiment.versionsJson) or {}).get("versions")),
         "n_attack_runs": n,
+        "n_attack_runs_total": len(all_outcomes),
         # Pairs left out because a run hit a harness error or never finished.
         # Visible, never silently absorbed (§21.8).
         "n_failed_pairs": len(lab_store.failed_pair_ids(runs)),

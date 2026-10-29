@@ -183,6 +183,8 @@ export interface Experiment {
   status_counts?: Record<string, number>
   /** Runs done so far while the server is executing it; null when idle. */
   live: { completed: number; total: number } | null
+  /** Why the last job died (kept in memory until the experiment is started again); null otherwise. */
+  last_error?: string | null
 }
 
 export interface RunDetail extends RunSummary {
@@ -212,7 +214,10 @@ export interface RateWithCI {
 export interface ExperimentMetrics {
   experiment_id: string
   arm: string
+  /** Valid attack runs: those whose paired clean run completed the task. */
   n_attack_runs: number
+  /** Completed attack runs, valid or not. */
+  n_attack_runs_total?: number
   /** Pairs left out of every rate: a run hit a harness error or never finished. */
   n_failed_pairs: number
   vintage?: 'current' | 'pre_audit' | 'other'
@@ -244,6 +249,8 @@ export interface ExperimentMetrics {
       n_unrecorded: number
       n_opportunity: number
       n_exposed: number
+      /** Runs that had the opportunity and were exposed: the numerator of the entry-exposure gate. */
+      n_exposed_with_opportunity: number
       asr_given_exposure: RateWithCI
       icr_given_exposure: RateWithCI
     }

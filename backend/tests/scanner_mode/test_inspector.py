@@ -103,6 +103,15 @@ def test_a_minimal_policy_is_valid():
     assert parse_policy(_policy())["ingress_rules"][0]["name"] == "r"
 
 
+def test_a_threshold_rule_on_a_text_field_never_matches_instead_of_crashing(tmp_path):
+    """SCN-04: parse_policy checks the threshold value is a number, not that the field is numeric; the first probe then
+    raised ValueError (could not convert 'unknown' to float) and killed the scan stream."""
+    path = tmp_path / "policy.yaml"
+    path.write_text(_policy(RULE.replace("risk_score", "intent_category")))
+    result = Inspector(str(path)).process("What is the capital of France?")
+    assert result["policy_result"]["verdict"] == "ALLOW" and result["policy_result"]["matched_rule"] is None
+
+
 @pytest.mark.parametrize("text", [
     "default_action: ALLOW\n",                                          # no ingress_rules
     "ingress_rules: {}\n",                                              # not a list

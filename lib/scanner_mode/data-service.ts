@@ -114,11 +114,17 @@ export interface RateCI {
   mixed?: number
 }
 
-// One measured row per (agent, prompt mode), from GET /api/leaderboard
+// One measured row per (agent, prompt mode, model, filter policy), from GET /api/leaderboard
 export interface LeaderboardRow {
   rank: number
+  /** Names the row in `noDifferenceFrom` and GET /api/leaderboard/compare: agentId:promptMode[@model][#policy]. */
+  rowId: string
   agentId: string
   agentName: string
+  /** The model the session recorded; null for runs that recorded none. */
+  model?: string | null
+  /** SHA-256 of the filter policy the runs used. */
+  policySha256?: string | null
   promptMode: string | null
   benchmarkVersion: string
   preAudit: boolean
@@ -175,8 +181,11 @@ export interface Stats {
   totalEvaluationsFired: number
   totalBlocked: number
   totalAllowed: number
+  /** Pooled over COMPLETED sessions of `benchmarkVersion` only (the totals above and the rate). */
   overallBlockRate: number
   coverageGap: number
+  scoredSessions?: number
+  benchmarkVersion?: string
 }
 
 export interface AgentInfo {
@@ -221,6 +230,8 @@ export interface ReportOverall {
   mixed_rows_model_alone?: number
   no_answer?: number
   controls_no_answer?: number
+  /** Why the run stopped early (an agent or API error); absent for a run that finished. */
+  error?: string
 }
 
 export interface RunReport {

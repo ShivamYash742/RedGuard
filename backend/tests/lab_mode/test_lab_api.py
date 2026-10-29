@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List
@@ -148,6 +149,30 @@ class TestCatalogEndpoints:
 # ─────────────────────────────────────────────────────────────────────────────
 # Experiment creation
 # ─────────────────────────────────────────────────────────────────────────────
+
+JSON = {"content-type": "application/json"}
+
+
+class TestMalformedBodiesAreBadRequests:
+    """API-04 / API-05: a body that is not what the route expects is the caller's mistake (400), not a crash (500)."""
+
+    @pytest.mark.parametrize("raw", ["{bad", "", '"abc"', "[]", "5", "null"])
+    def test_the_body_must_be_a_json_object(self, client, raw):
+        assert client.post("/api/lab/experiments", content=raw, headers=JSON).status_code == 400
+
+    @pytest.mark.parametrize("body", [
+        {"repetitions": "x"}, {"max_steps": "x"}, {"step_delay_ms": "x"}, {"repetitions": [1]}, {"max_steps": {}},
+        {"arm": ["attack"]}, {"provider": ["ollama"]}, {"topology_id": ["linear_abc"]}, {"model": ["m"]},
+        {"cases": [["RGM-001"]]}, {"cases": "RGM-001"}, {"cases": {"RGM-001": 1}},
+        {"max_steps": 0}, {"max_steps": -3}, {"max_steps": 10 ** 9},
+    ])
+    def test_fields_of_the_wrong_type_or_range(self, client, body):
+        assert client.post("/api/lab/experiments", json=body).status_code == 400
+
+    def test_duplicate_cases_run_once(self, client):
+        experiment = _create_experiment(client, cases=["RGM-001", "RGM-001", "RGM-002"])
+        assert experiment["cases"] == ["RGM-001", "RGM-002"] and experiment["total_runs"] == 2 * 1 * 2
+
 
 class TestExperimentCreation:
     def test_create_returns_id_and_run_count(self, client):
@@ -351,6 +376,28 @@ class TestMetricsEndpoint:
         assert body["pooled_legacy"]["asr"]["n"] == 8                   # the 1.2.0 headline can still be reproduced
         assert {c: v["in_scope"] for c, v in body["per_case"].items()} == {
             "RGM-001": True, "RGM-005": False, "RGM-008": False, "RGM-009": False}
+
+    def test_invalid_runs_are_not_counted_as_valid_attack_runs(self, client):
+        """LAB-03: `n_attack_runs` counted RUN_INVALID runs, so the report's valid_pairs gate was always ~1."""
+        import sqlite3
+
+        result = _run_to_completion(client, repetitions=3)
+        experiment_id = result["experiment"]["experiment_id"]
+        db_file = os.environ["DATABASE_URL"].removeprefix("file:")
+        with sqlite3.connect(db_file) as conn:
+            rows = conn.execute(
+                "SELECT id, verdict_json FROM lab_runs WHERE experiment_id = ? AND mode = 'ATTACK' ORDER BY id", (experiment_id,),
+            ).fetchall()
+            for run_id, verdict_json in rows[:2]:
+                verdict = json.loads(verdict_json)
+                verdict["system_outcome"] = "RUN_INVALID"
+                conn.execute("UPDATE lab_runs SET verdict_json = ? WHERE id = ?", (json.dumps(verdict), run_id))
+        body = client.get(f"/api/lab/experiments/{experiment_id}/metrics").json()
+        assert (body["n_attack_runs"], body["n_attack_runs_total"]) == (1, 3)
+        assert body["per_case"]["RGM-001"]["n"] == 1
+        gates = client.get(f"/api/lab/experiments/{experiment_id}/report").json()["suitability"]["gates"]
+        valid_pairs = next(g for g in gates if g["name"] == "valid_pairs")
+        assert valid_pairs["value"] == pytest.approx(1 / 3) and valid_pairs["passed"] is False
 
     def test_aggregate_shape(self, client):
         result = _run_to_completion(client, repetitions=3)
@@ -654,6 +701,11 @@ class TestLiveTracking:
         assert [e.step for e in [first, *rest[:-1]]] == [e.step for e in result.collector.events]
 
 
+async def _no_events():
+    return
+    yield
+
+
 def _wait_until_idle(client: TestClient, experiment_id: str, timeout: float = 15) -> Dict[str, Any]:
     import time
     deadline = time.monotonic() + timeout
@@ -699,6 +751,23 @@ class TestRichLiveEvents:
 
 class TestRunsDoNotDependOnTheTab:
     """Plan phase 4: the server owns the run; viewers come and go."""
+
+    def test_the_error_of_a_job_that_died_before_anyone_watched_is_still_readable(self, client, monkeypatch):
+        """UI-11: the finished job leaves _JOBS, /stream answers 409, and the page had no way to learn why."""
+        async def failing(experiment):
+            raise RuntimeError("model unreachable")
+            yield  # an async generator, like the real _execute
+
+        monkeypatch.setattr(lab_api, "_execute", failing)
+        experiment_id = _create_experiment(client)["experiment_id"]
+        assert client.post(f"/api/lab/experiments/{experiment_id}/start").json()["running"]
+        body = _wait_until_idle(client, experiment_id)
+        assert client.get(f"/api/lab/experiments/{experiment_id}/stream").status_code == 409
+        assert body["last_error"] == "RuntimeError: model unreachable"
+        # starting it again clears the old error
+        monkeypatch.setattr(lab_api, "_execute", lambda experiment: _no_events())
+        client.post(f"/api/lab/experiments/{experiment_id}/start")
+        assert _wait_until_idle(client, experiment_id)["last_error"] is None
 
     def test_two_subscribers_receive_the_same_events(self, client):
         experiment_id = _create_experiment(client)["experiment_id"]

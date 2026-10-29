@@ -22,8 +22,11 @@ export default function ProbeDetailPage({ params }: { params: Promise<{ probeId:
     )
   }
 
+  // An indirect probe's attack text is the result of a tool the agent reads; the user message is an ordinary request.
+  const planted = Object.entries(probe.tool_fixtures ?? {})
+
   const copyPrompt = () => {
-    navigator.clipboard.writeText(probe.prompt)
+    navigator.clipboard.writeText([probe.prompt, ...planted.map(([tool, text]) => `[${tool} tool result]\n${text}`)].join('\n\n'))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -102,6 +105,16 @@ export default function ProbeDetailPage({ params }: { params: Promise<{ probeId:
         <div className="font-mono text-xs bg-[var(--surface-base)] border border-[var(--border-subtle)] p-4 rounded-[var(--radius)] text-[var(--text-primary)] whitespace-pre-wrap break-words">
           {probe.prompt}
         </div>
+        {planted.map(([tool, text]) => (
+          <div key={tool}>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-1">
+              Planted result of the <span className="font-mono">{tool}</span> tool
+            </h3>
+            <div className="font-mono text-xs bg-[var(--surface-base)] border border-[var(--border-subtle)] p-4 rounded-[var(--radius)] text-[var(--text-primary)] whitespace-pre-wrap break-words">
+              {text}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Expected vs Failure Behavior */}

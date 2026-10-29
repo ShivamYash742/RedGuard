@@ -165,11 +165,15 @@ def exposure_counts(outcomes: Sequence[RunOutcome]) -> Dict[str, Any]:
     recorded = [o for o in valid if o.verdict.exposure is not None]
     exposed = [o for o in recorded if o.verdict.exposure.get("exposed")]
     opportunity = [o for o in recorded if o.verdict.exposure.get("opportunity")]
+    # `exposed` and `opportunity` are two sets that overlap only in part (a run can read the poison without
+    # the clean run having touched the planted place), so only their intersection is P(exposed | opportunity).
+    both = [o for o in exposed if o.verdict.exposure.get("opportunity")]
     return {
         "n_valid": len(valid),
         "n_unrecorded": len(valid) - len(recorded),
         "n_opportunity": len(opportunity),
         "n_exposed": len(exposed),
+        "n_exposed_with_opportunity": len(both),
         "exposed_runs": exposed,
     }
 

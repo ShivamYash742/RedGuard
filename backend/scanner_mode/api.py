@@ -7,8 +7,10 @@ events, reports, policy, custom probes, agents and the scan SSE stream.
 Mounted by `backend/app.py` with no prefix, so every path is unchanged.
 """
 
+import asyncio
 import json
 import os
+import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,7 +20,7 @@ from core.scanner_mode.datasets.loader import load_all_datasets
 from core.shared.version import BENCHMARK_VERSION, PROBE_SCHEMA_VERSION
 
 from database import get_db
-from request_guard import guard_request
+from request_guard import guard_request, json_object
 from scanner_mode.agent_loader import DEFAULT_AGENT_ID, get_agent, list_agents
 from scanner_mode.inspector import POLICY_PATH, Inspector, PolicyError, parse_policy
 from scanner_mode.leaderboard import compare_groups, leaderboard_rows
@@ -37,7 +39,9 @@ async def get_stats():
     prisma = await get_db()
     total_sessions = await prisma.session.count()
     
-    sessions = await prisma.session.find_many()
+    # Scores pool only finished runs of the current benchmark version: legacy, older-version and aborted
+    # sessions were scored differently or not at all, and averaging them in is the pooling the leaderboard avoids.
+    sessions = await prisma.session.find_many(where={"status": "COMPLETED", "benchmarkVersion": BENCHMARK_VERSION})
     tp = sum(s.totalProbes or 0 for s in sessions)
     tb = sum(s.blocked or 0 for s in sessions)
     ta = sum(s.allowed or 0 for s in sessions)
@@ -51,6 +55,8 @@ async def get_stats():
     
     return {
         "totalSessions": total_sessions,
+        "scoredSessions": len(sessions),
+        "benchmarkVersion": BENCHMARK_VERSION,
         "totalProbes": total_active_probes,
         "totalEvaluationsFired": tp,
         "totalBlocked": tb,
@@ -64,25 +70,25 @@ async def get_leaderboard():
     """Measured results per (agent, prompt mode); legacy runs are excluded."""
     prisma = await get_db()
     sessions = await prisma.session.find_many(include={"events": True})
-    return leaderboard_rows(sessions)
+    # CPU-bound (a paired bootstrap per pair of rows): off the event loop so the scan streams keep flowing.
+    return await asyncio.to_thread(leaderboard_rows, sessions)
 
 @router.get("/api/leaderboard/compare")
 async def compare_leaderboard_rows(a: str, b: str, split: str = "test", version: str = BENCHMARK_VERSION):
-    """Paired comparison of two leaderboard rows ("agentId:promptMode" each) on one split.
+    """Paired comparison of two leaderboard rows (each a row's `rowId`: "agentId:promptMode", then
+    "@model" and "#policy" where the row has them) on one split.
 
     Says whether the rows differ at all: the leaderboard's order is only a claim where this does."""
     if split not in ("dev", "test"):
         raise HTTPException(status_code=400, detail="split must be 'dev' or 'test'")
-    keys = []
     for value in (a, b):
         agent, _, mode = value.partition(":")
         if not agent or not mode:
-            raise HTTPException(status_code=400, detail="a and b must look like agentId:promptMode")
-        keys.append((agent, mode))
+            raise HTTPException(status_code=400, detail="a and b must be leaderboard row ids (agentId:promptMode)")
     prisma = await get_db()
     sessions = await prisma.session.find_many(include={"events": True})
     try:
-        return compare_groups(sessions, keys[0], keys[1], split, version)
+        return await asyncio.to_thread(compare_groups, sessions, a, b, split, version)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc.args[0]))
 
@@ -198,8 +204,7 @@ async def get_policy():
 
 @router.put("/api/policy")
 async def update_policy(request: Request):
-    data = await request.json()
-    yaml_content = data.get("yaml") if isinstance(data, dict) else None
+    yaml_content = (await json_object(request)).get("yaml")
     if not isinstance(yaml_content, str):
         raise HTTPException(status_code=400, detail='body must be {"yaml": "<policy text>"}')
     try:
@@ -245,10 +250,12 @@ async def probe_validation():
 @router.post("/api/probes")
 async def create_probe(request: Request):
     prisma = await get_db()
-    data = await request.json()
+    data = await json_object(request)
     if "category" not in data or "promptText" not in data:
         raise HTTPException(status_code=400, detail="Missing category or promptText")
-        
+    if not isinstance(data["category"], str) or not isinstance(data["promptText"], str):
+        raise HTTPException(status_code=400, detail="category and promptText must be strings")
+
     probe = await prisma.customprobe.create(
         data={
             "category": data["category"],
@@ -317,7 +324,8 @@ async def start_scan(request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # The suffix keeps two scans started in the same second (a double click) from colliding on the unique id.
+    session_str = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     
     session = await prisma.session.create(
         data={
@@ -366,10 +374,9 @@ async def scan_family(sessionId: str, agentId: str, category: str, model: str = 
 
 @router.post("/api/scan/finalize")
 async def finalize_scan_route(request: Request):
-    body = await request.json()
-    session_id = body.get("sessionId")
+    session_id = (await json_object(request)).get("sessionId")
     
-    if not session_id:
+    if not session_id or not isinstance(session_id, str):
         raise HTTPException(status_code=400, detail="Missing sessionId")
         
     results = await finalize_scan(session_id)
@@ -378,12 +385,16 @@ async def finalize_scan_route(request: Request):
 
 @router.post("/api/scan/cancel")
 async def cancel_scan_route(request: Request):
-    body = await request.json()
-    session_id = body.get("sessionId")
-    if not session_id:
+    session_id = (await json_object(request)).get("sessionId")
+    if not session_id or not isinstance(session_id, str):
         raise HTTPException(status_code=400, detail="Missing sessionId")
     
     prisma = await get_db()
+    session = await prisma.session.find_unique(where={"id": session_id})
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id!r}")
+    if session.status != "RUNNING":
+        raise HTTPException(status_code=409, detail=f"Session is {session.status}; only a RUNNING session can be cancelled")
     # Delete cascade or delete manually
     await prisma.probeevent.delete_many(where={"sessionId": session_id})
     await prisma.report.delete_many(where={"sessionId": session_id})

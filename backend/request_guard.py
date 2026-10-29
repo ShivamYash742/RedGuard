@@ -35,3 +35,15 @@ def guard_request(request: Request) -> None:
     if request.method in ("POST", "PUT", "PATCH") and has_body:
         if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
             raise HTTPException(status_code=415, detail="Content-Type must be application/json")
+
+
+async def json_object(request: Request) -> dict:
+    """The request body as a JSON object. Invalid JSON, an empty body or a non-object (a string, a list)
+    is the caller's mistake: 400, not an exception out of the handler."""
+    try:
+        body = await request.json()
+    except ValueError:  # JSONDecodeError and UnicodeDecodeError
+        raise HTTPException(status_code=400, detail="body must be valid JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    return body

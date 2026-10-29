@@ -100,6 +100,23 @@ class TestParseAction:
             parse_action('{"action": "tool_call", "tool": "file_read", "args": "oops"}')
 
 
+class TestParseActionWrongTypes:
+    """LAB-06: a wrong JSON type is a malformed reply (ActionParseError, counted as invalid), not a TypeError or a later crash."""
+
+    @pytest.mark.parametrize("raw", [
+        '{"action": ["finish"]}',
+        '{"action": {"name": "finish"}}',
+        '{"action": "tool_call", "tool": ["db_query"], "args": {}}',
+        '{"action": "state_read", "key": ["k"]}',
+        '{"action": "send_message", "to": "B", "content": {"text": "hi"}}',
+        '{"action": "send_message", "to": ["B"], "content": "hi"}',
+        '{"action": "finish", "summary": ["done"]}',
+    ])
+    def test_wrong_json_types_raise_action_parse_error(self, raw):
+        with pytest.raises(ActionParseError):
+            parse_action(raw)
+
+
 class TestRequestActionRetry:
     @pytest.mark.asyncio
     async def test_valid_first_try_makes_one_call(self):

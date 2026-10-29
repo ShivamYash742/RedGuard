@@ -37,7 +37,7 @@ function Rate({ value, tone, ambiguous = 'mixed' }: { value: RateCI | null; tone
   )
 }
 
-const label = (r: LeaderboardRow) => `${r.agentName} · ${r.promptMode ?? 'agent default'}`
+const label = (r: LeaderboardRow) => `${r.agentName}${r.model ? ` (${r.model})` : ''} · ${r.promptMode ?? 'agent default'}`
 const titleCase = (s: string) => s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 
 function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
@@ -58,12 +58,12 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
         </thead>
         <tbody>
           {rows.map(r => (
-            <tr key={`${r.agentId}-${r.promptMode}`} className="hover:bg-[var(--surface-base)] transition-colors">
+            <tr key={r.rowId} className="hover:bg-[var(--surface-base)] transition-colors">
               <td className="font-mono text-xs font-bold text-center">#{r.rank}</td>
               <td className="text-xs">
                 <span className="font-bold text-[var(--text-primary)]">{r.agentName}</span>
                 <span className="block text-[10px] text-[var(--text-muted)]">
-                  {r.promptMode ?? 'agent default'} · last run {new Date(r.lastRun).toLocaleDateString()}
+                  {r.model && <>{r.model} · </>}{r.promptMode ?? 'agent default'}{r.policySha256 && ` · policy ${r.policySha256.slice(0, 8)}`} · last run {new Date(r.lastRun).toLocaleDateString()}
                 </span>
                 {r.headlineSplit && (
                   <span className="block text-[10px] text-[var(--text-muted)]" title="The held-out test split is the one whose numbers may be quoted; the dev split was used to build the benchmark.">
@@ -126,7 +126,8 @@ export default function ModelsPage() {
     const entry: Record<string, string | number> = { family: titleCase(fam) }
     radarRows.forEach(r => {
       const f = r.families[fam]
-      if (f && f.total > 0) entry[label(r)] = Math.round(100 * (1 - f.modelCompromised / f.total))
+      // model alone: over the probes the model answered, not the ones the filter denied or it never answered
+      if (f && f.modelAnswered > 0) entry[label(r)] = Math.round(100 * (1 - f.modelCompromised / f.modelAnswered))
     })
     return entry
   })
@@ -164,9 +165,15 @@ export default function ModelsPage() {
         />
       ) : (
         <>
-          <LeaderboardTable rows={current} />
+          {current.length === 0 && (
+            <div className="research-card text-xs text-[var(--text-secondary)]">
+              No runs measured under the current benchmark yet. Start an evaluation from Runs; the rows below were measured
+              under an earlier version and are not comparable.
+            </div>
+          )}
+          {current.length > 0 && <LeaderboardTable rows={current} />}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {current.length > 0 && <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="research-card space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
@@ -218,12 +225,12 @@ export default function ModelsPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-          </div>
+          </div>}
 
           {preAudit.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
-                Measured before the audit fixes (benchmark {preAudit[0].benchmarkVersion})
+                Measured before the audit fixes (benchmark {Array.from(new Set(preAudit.map(r => r.benchmarkVersion))).join(', ')})
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
                 Earlier scoring, prompts and agent tools. These are not comparable with the rows above and are never pooled with them.

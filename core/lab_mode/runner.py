@@ -795,6 +795,12 @@ async def run_repetitions(
     """
     if reps < 1:
         raise ValueError(f"reps must be >= 1, got {reps}")
+    if reps > 1 and config.model.seed is not None:
+        # One client carries one seed, so these would be `reps` copies of one run and SOC (needs N >= 3
+        # different runs) would mean nothing. The API and the sweep build a client per repetition.
+        raise ValueError(
+            "a seeded model gives identical repetitions through one client: build one client per repetition from "
+            "repetition_config(config, n) and call run_pair, as the sweep does")
     return [
         await run_pair(case, cee_factory, config, client, pair_id=f"{experiment_id}-{case.get('id', 'case')}-r{n}")
         for n in range(1, reps + 1)

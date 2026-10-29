@@ -181,7 +181,7 @@ def suitability_gates(invalid_rate, completed_pairs, valid_attack_runs, exposure
     """The three checks a model has to pass before its Lab rates are compared with another model's.
     `passed` is None where the data does not exist (no steps yet, forced exposure, runs stored before the flag)."""
     valid_pairs = valid_attack_runs / completed_pairs if completed_pairs else None
-    opportunity, exposed = exposure.get("n_opportunity") or 0, exposure.get("n_exposed") or 0
+    opportunity, exposed = exposure.get("n_opportunity") or 0, exposure.get("n_exposed_with_opportunity") or 0
     exposure_rate = exposed / opportunity if opportunity and exposure_mode == "natural" else None
     return [
         {"name": "valid_replies", "value": None if invalid_rate is None else 1 - invalid_rate, "threshold": 1 - PARSE_FAILURE_GATE,

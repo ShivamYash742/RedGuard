@@ -10,11 +10,11 @@
     "scanner_mode/agents/sandbox/support/customer_4412.json": "2b8be9a97aa648cacf585c95b179fb6fbaec31032cb7bfe006d536c932fa6997",
     "scanner_mode/agents/system_prompts.json": "809aa411e3c21fc6016b5bc925a72b5ce18ec64dc40d78e503b5888db6374fbd",
     "scanner_mode/agents/web_search_fixtures.json": "7a3748884af4577314b550cdf60fa0e4cd7978c02e7df4a7fc445c3afd303cb8",
-    "scanner_mode/inspector.py": "b3a89bf62b1dca16f6124c4506e5cd9450da935f89c2ab617c6d046772651199",
+    "scanner_mode/inspector.py": "6480621ac6f23cbaf337640d45cfef7de68329cfc765286b777ac3ed26ccbdb3",
     "scanner_mode/policy.yaml": "ead612bd29e36e005ccff071f30425fe0b9c84850518aa7ad5c03c15f0a63b67",
-    "scanner_mode/scanner.py": "d7d88068071881ccc38db205d7abc3bbc341ce8202309814b55b3129ef608b08"
+    "scanner_mode/scanner.py": "ef804ccd9c2fc1dac5ccf56b9ef5523193f6ac0bfa09780adb21a68be6d90fc0"
   },
   "devProbes": "80b0d9cce60aa00f229516d1d37d740480a83369037768a10593193ec3ceffde",
   "testProbes": "1f99dad53044ba45f908474dcb1fb7f16078de4acf03024b217634fe81bc52e3",
-  "digest": "b7b1aa413646ffe52a4ff9597839f5bb83877e5e0414b2d0039164eecd5f706e"
+  "digest": "1771183afef3100dd5c47ed2dad18222c21d9ea2ffa3be31cfff10b80b608ab2"
 }

@@ -44,7 +44,7 @@ from lab_mode import store as lab_store
 from lab_mode.api import ARMS, _build_config, _outcomes, rescore_case
 from core.lab_mode.analysis import arm_summary, comparability_problems, compare_standard, compromise_by_agent
 from core.lab_mode.cases import case_ids, fixture_factory, load_all_cases, load_case
-from core.lab_mode.evaluator import evaluate
+from core.lab_mode.evaluator import evaluate, verdict_from_dict
 from core.lab_mode.evidence import build_bundle
 from core.lab_mode.metrics import RunOutcome
 from core.lab_mode.model_client import ModelClient, ModelConfig
@@ -255,6 +255,9 @@ async def export_bundles(db: Any, experiment_id: str, out_dir: Path) -> int:
             cee_before=json.loads(run.ceeBeforeJson) if run.ceeBeforeJson else None,
             cee_after=json.loads(run.ceeAfterJson) if run.ceeAfterJson else None,
             diagnostics=json.loads(run.metricsJson) if run.metricsJson else None,
+            # The stored verdict (judged against all the case's clean runs), as `get_run_evidence` does:
+            # recomputing it here judged the run against its own pair only.
+            verdict=verdict_from_dict(json.loads(run.verdictJson)),
         )
         path = out_dir / f"{run.caseId}-r{run.repetitionIndex}-{run.id[:8]}.json"
         path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")

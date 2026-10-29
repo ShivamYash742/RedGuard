@@ -26,7 +26,7 @@ from __future__ import annotations
 
 #: Overall benchmark version. Bump MAJOR for any breaking change to probe IDs,
 #: metric definitions, or evaluation methodology.
-BENCHMARK_VERSION: str = "6.0.0"
+BENCHMARK_VERSION: str = "6.1.0"
 
 #: Earlier benchmark versions whose stored results are still shown, apart from
 #: the current ones and labelled "measured before the audit fixes". Their scoring,
@@ -77,13 +77,13 @@ CEE_VERSION: str = "2.0.0"
 TOPOLOGY_VERSION: str = "1.1.0"
 
 #: Version of the verdict definitions and predicate DSL.
-EVALUATOR_VERSION: str = "2.0.0"
+EVALUATOR_VERSION: str = "2.1.0"
 
 #: Version of the Mode B metric formulas.
-METRIC_VERSION: str = "2.0.0"
+METRIC_VERSION: str = "2.1.0"
 
 #: Human-readable release name.
-RELEASE_NAME: str = "RedGuard v6.0.0"
+RELEASE_NAME: str = "RedGuard v6.1.0"
 
 #: Citation key for the benchmark paper (placeholder until published).
 CITATION_KEY: str = "redguard2024"

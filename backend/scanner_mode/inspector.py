@@ -198,7 +198,11 @@ class Inspector:
                         matches = False
                         break
                 elif match_type == "threshold":
-                    if float(actual_val) < float(value):
+                    try:
+                        below = float(actual_val) < float(value)
+                    except (TypeError, ValueError):
+                        below = True  # a threshold on a text field (the validator cannot know field types) never matches
+                    if below:
                         matches = False
                         break
             

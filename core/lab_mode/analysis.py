@@ -51,7 +51,7 @@ from .metrics import (
 )
 
 
-def _valid(outcomes: Sequence[RunOutcome]) -> List[RunOutcome]:
+def valid_outcomes(outcomes: Sequence[RunOutcome]) -> List[RunOutcome]:
     """Runs whose paired clean baseline actually completed the task.
 
     §21.8: a failed clean run makes its whole pair uninterpretable, and
@@ -141,12 +141,15 @@ def split_headlines(valid: Sequence[RunOutcome]) -> Dict[str, Any]:
 
 
 def headline_split(valid: Sequence[RunOutcome]) -> str:
-    return "test" if any(o.case.get("split", "dev") == "test" for o in valid) else "dev"
+    """Which split `headline(valid)` was computed on: "dev", "test", or "mixed" when it pools both
+    (the figures to quote for a mix are the per-split ones, `split_headlines`)."""
+    splits = {o.case.get("split", "dev") for o in valid}
+    return "mixed" if len(splits) > 1 else (splits.pop() if splits else "dev")
 
 
 def arm_summary(outcomes: Sequence[RunOutcome]) -> Dict[str, Any]:
     """Every §10 aggregate for one arm, plus the validity accounting."""
-    valid = _valid(outcomes)
+    valid = valid_outcomes(outcomes)
     scoped, _, _ = split_scope(valid)
 
     per_case: Dict[str, Any] = {}
@@ -191,7 +194,7 @@ _METRICS = {"icr": icr, "asr": asr, "partial_rate": partial_rate}
 
 def _per_case(outcomes: Sequence[RunOutcome], metric) -> Dict[str, Optional[float]]:
     by_case: Dict[str, List[RunOutcome]] = {}
-    for o in _valid(outcomes):
+    for o in valid_outcomes(outcomes):
         by_case.setdefault(o.case["id"], []).append(o)
     return {case_id: metric(runs) for case_id, runs in by_case.items()}
 
@@ -392,7 +395,7 @@ def compare_standard(outcomes_by_arm: Dict[str, Sequence[RunOutcome]]) -> Dict[s
 def compromise_by_agent(outcomes: Sequence[RunOutcome]) -> Dict[str, Dict[str, int]]:
     """Per-agent impact counts — where in the chain agents actually broke."""
     table: Dict[str, Dict[str, int]] = {}
-    for o in _valid(outcomes):
+    for o in valid_outcomes(outcomes):
         for agent, impact in o.verdict.agent_impact.items():
             row = table.setdefault(agent, {level.value: 0 for level in AgentImpactLevel})
             row[impact.level.value] += 1
@@ -435,6 +438,7 @@ def comparability_problems(
     checks = {f"model.{f}": (lambda cfg, f=f: (cfg.get("model") or {}).get(f)) for f in _COMPARABLE_MODEL_FIELDS}
     checks["max_steps"] = lambda cfg: cfg.get("max_steps")
     checks["scripted"] = lambda cfg: bool(cfg.get("scripted", False))
+    checks["exposure"] = lambda cfg: cfg.get("exposure", "natural")  # forced exposure raises ASR / ICR by construction
     for label, getter in checks.items():
         seen = values(getter)
         if len({json.dumps(v, sort_keys=True, default=str) for v in seen.values()}) > 1:

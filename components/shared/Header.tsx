@@ -1,5 +1,5 @@
 "use client"
-import React, { useSyncExternalStore } from 'react'
+import React, { useEffect, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Search, Moon, Sun, Play, Layers, Menu } from 'lucide-react'
@@ -19,6 +19,18 @@ const readTheme = () => document.documentElement.classList.contains('dark')
 
 export default function Header({ onOpenSearch, onOpenSidebar }: HeaderProps) {
   const isDark = useSyncExternalStore(subscribeTheme, readTheme, () => true)
+
+  // The search button advertises ⌘K; Ctrl+K is the same shortcut on Linux and Windows.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        onOpenSearch()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onOpenSearch])
 
   const toggleTheme = () => {
     const next = !isDark
@@ -50,7 +62,7 @@ export default function Header({ onOpenSearch, onOpenSidebar }: HeaderProps) {
 
         <div className="hidden sm:flex items-center gap-2 border-l border-[var(--border-subtle)] pl-4 text-xs font-mono">
           <span className="inline-flex items-center gap-1 rounded-[var(--radius)] bg-[var(--surface-base)] px-2 py-0.5 text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-            <Layers className="h-3 w-3 text-[var(--primary)]" /> Benchmark v6.0.0
+            <Layers className="h-3 w-3 text-[var(--primary)]" /> Benchmark v6.1.0
           </span>
         </div>
       </div>
@@ -67,7 +79,7 @@ export default function Header({ onOpenSearch, onOpenSidebar }: HeaderProps) {
             <span className="hidden md:inline">Search probes, attack families, scenarios, models...</span>
           </div>
           <kbd className="hidden sm:inline-block font-mono text-[10px] bg-[var(--surface-raised)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded text-[var(--text-muted)]">
-            ⌘K
+            ⌘K / Ctrl K
           </kbd>
         </button>
       </div>
