@@ -126,7 +126,8 @@ export default function ModelsPage() {
     const entry: Record<string, string | number> = { family: titleCase(fam) }
     radarRows.forEach(r => {
       const f = r.families[fam]
-      if (f && f.total > 0) entry[label(r)] = Math.round(100 * (1 - f.modelCompromised / f.total))
+      // model alone: over the probes the model answered, not the ones the filter denied or it never answered
+      if (f && f.modelAnswered > 0) entry[label(r)] = Math.round(100 * (1 - f.modelCompromised / f.modelAnswered))
     })
     return entry
   })
@@ -164,9 +165,15 @@ export default function ModelsPage() {
         />
       ) : (
         <>
-          <LeaderboardTable rows={current} />
+          {current.length === 0 && (
+            <div className="research-card text-xs text-[var(--text-secondary)]">
+              No runs measured under the current benchmark yet. Start an evaluation from Runs; the rows below were measured
+              under an earlier version and are not comparable.
+            </div>
+          )}
+          {current.length > 0 && <LeaderboardTable rows={current} />}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {current.length > 0 && <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="research-card space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
@@ -218,12 +225,12 @@ export default function ModelsPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-          </div>
+          </div>}
 
           {preAudit.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
-                Measured before the audit fixes (benchmark {preAudit[0].benchmarkVersion})
+                Measured before the audit fixes (benchmark {Array.from(new Set(preAudit.map(r => r.benchmarkVersion))).join(', ')})
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
                 Earlier scoring, prompts and agent tools. These are not comparable with the rows above and are never pooled with them.
