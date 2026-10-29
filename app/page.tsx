@@ -94,7 +94,7 @@ export default function Dashboard() {
         <div className="research-card">
           <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">Core Probes</span>
           <div className="text-2xl font-black text-[var(--primary)] mt-1.5 font-mono">{probeCount}</div>
-          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Built-in dataset</span>
+          <span className="text-[11px] text-[var(--text-secondary)] mt-1 block">Built-in, {benchmarkDataService.getAllProbes().filter(p => p.benign_control).length} of them benign controls</span>
         </div>
 
         <div className="research-card">

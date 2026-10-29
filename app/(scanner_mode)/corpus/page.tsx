@@ -12,6 +12,9 @@ function CorpusContent() {
   const families = benchmarkDataService.getAttackFamilies()
   const scenarios = benchmarkDataService.getScenarios()
 
+  const controls = allProbes.filter(p => p.benign_control).length
+  const attacks = allProbes.length - controls
+
   const [searchQuery, setSearchQuery] = useState('')
   const [familyFilter, setFamilyFilter] = useState(searchParams.get('family') || 'all')
   const [scenarioFilter, setScenarioFilter] = useState(searchParams.get('scenario') || 'all')
@@ -19,9 +22,22 @@ function CorpusContent() {
   const [selectedProbe, setSelectedProbe] = useState<Probe | null>(null)
   const [validation, setValidation] = useState<{ valid: boolean; total: number | null; schemaVersion: string; error: string | null } | null>(null)
 
+  // A link from search (/corpus?scenario=banking) can reach this already-mounted page with new params.
+  const paramKey = `${searchParams.get('family') || 'all'}|${searchParams.get('scenario') || 'all'}`
+  const [seenParams, setSeenParams] = useState(paramKey)
+  if (seenParams !== paramKey) {
+    setSeenParams(paramKey)
+    const [family, scenario] = paramKey.split('|')
+    setFamilyFilter(family)
+    setScenarioFilter(scenario)
+  }
+
   useEffect(() => {
     fetch('/api/probes/validation').then(r => r.json()).then(setValidation).catch(() => setValidation(null))
   }, [])
+
+  // The dropdown holds a scenario id ("banking"); probes carry the dataset's own string ("banking_assistant").
+  const scenarioProbeIds = new Set(benchmarkDataService.getProbesByScenario(scenarioFilter.toLowerCase()).map(p => p.id))
 
   const filteredProbes = allProbes.filter(p => {
     const q = searchQuery.toLowerCase()
@@ -30,7 +46,7 @@ function CorpusContent() {
       p.title.toLowerCase().includes(q) ||
       p.prompt.toLowerCase().includes(q)
     const matchesFamily = familyFilter === 'all' || p.attack_family.toLowerCase() === familyFilter.toLowerCase()
-    const matchesScenario = scenarioFilter === 'all' || p.scenario.toLowerCase() === scenarioFilter.toLowerCase()
+    const matchesScenario = scenarioFilter === 'all' || scenarioProbeIds.has(p.id)
     const matchesDifficulty = difficultyFilter === 'all' || p.difficulty.toLowerCase() === difficultyFilter.toLowerCase()
     return matchesSearch && matchesFamily && matchesScenario && matchesDifficulty
   })
@@ -46,7 +62,7 @@ function CorpusContent() {
         </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Corpus</h1>
         <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-          {allProbes.length} adversarial probes across {families.length} attack families and {scenarios.length} application scenarios — one auditable dataset, filterable by any facet below.
+          {attacks} attack probes and {controls} benign controls across {families.length} attack families and {scenarios.length} application scenarios — one auditable dataset, filterable by any facet below.
         </p>
       </div>
 
