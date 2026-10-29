@@ -247,6 +247,8 @@ export interface ExperimentMetrics {
       n_unrecorded: number
       n_opportunity: number
       n_exposed: number
+      /** Runs that had the opportunity and were exposed: the numerator of the entry-exposure gate. */
+      n_exposed_with_opportunity: number
       asr_given_exposure: RateWithCI
       icr_given_exposure: RateWithCI
     }

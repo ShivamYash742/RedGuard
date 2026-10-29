@@ -5,7 +5,7 @@
     "evaluator.py": "372f9252e67653fda5cd6215bf771bc4df29dad60fc1a8b21fa69f0cd6f1d4d9",
     "evidence.py": "5ab6ddf75d06b3308e7b8d04ddae6f80b4ecb1fbaf98cd673f12c82a9cd5ff5b",
     "fixtures/research_workflow_v1.json": "1ebf8d10918f1a69056f79d524175a1dde2a9e3809bee9cafcae7565f72c688b",
-    "metrics.py": "db4f77dcc8c938078bc0237d2b435616b14206618b9ce0518b99bd45b9e93132",
+    "metrics.py": "d4a9af4c0d75bd132c2026782c3711b53602d8422cc3db539b51d591b239dc9a",
     "model_client.py": "09993fdc1126f6a4c28cd5e8a2b0b4daee6ed2bc71c5b221b55cc1ce45c16b0b",
     "runner.py": "09c188284248db011543e21ff7ff554906b8f84be4c350e90b730ed1fad3283d",
     "tools.py": "0f4173f73095597e420ab3f3783ab5812b459f8224df781679c564d1f5d2db79",
@@ -14,5 +14,5 @@
   },
   "devCases": "9e21c338b12f154467ca528e188733d1d067c29a7ff5736c75706f6cbc9406b0",
   "testCases": "3114067f61672b89610f9ced5490c5e23258ccc9d6843dfb4669f5eef0389ad4",
-  "digest": "9ba5e3a6f37ac0c350984b4468e025779695a4dad454a6ba67bc5d4389ca60e7"
+  "digest": "dbf67254e48b0705f4c16947960379a2aa5d181cb5ddded516b6a0d6eddb87e3"
 }
