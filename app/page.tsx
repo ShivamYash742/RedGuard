@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { benchmarkDataService, BenchmarkRun, AttackFamilyMeta, Stats } from '@/lib/scanner_mode/data-service'
 import { CardSkeleton, TableSkeleton } from '@/components/shared/Skeletons'
 import EmptyState from '@/components/shared/EmptyState'
+import StatusBadge from '@/components/shared/StatusBadge'
 import { ShieldAlert, Play, Boxes, Award, ArrowUpRight } from 'lucide-react'
 
 export default function Dashboard() {
@@ -219,18 +220,18 @@ export default function Dashboard() {
                       <td className="font-mono text-xs text-[var(--success)] font-semibold text-center">{s.blocked}</td>
                       <td className="font-mono text-xs text-[var(--danger)] font-semibold text-center">{s.allowed}</td>
                       <td className="font-mono text-xs font-bold text-center">{rate}%</td>
+                      <td><StatusBadge status={s.status} /></td>
                       <td>
-                        <span className="badge-semantic badge-success">
-                          {s.status}
-                        </span>
-                      </td>
-                      <td>
-                        <Link
-                          href={`/runs/${s.sessionId}`}
-                          className="text-xs text-[var(--primary)] font-semibold hover:underline"
-                        >
-                          View Report
-                        </Link>
+                        {s.status === 'COMPLETED' ? (
+                          <Link
+                            href={`/runs/${s.sessionId}`}
+                            className="text-xs text-[var(--primary)] font-semibold hover:underline"
+                          >
+                            View Report
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-[var(--text-muted)]">no report</span>
+                        )}
                       </td>
                     </tr>
                   )

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Play, RefreshCw, FileText, Shield, Bot, Wrench, ArrowRight, History } from 'lucide-react'
 import { benchmarkDataService, normalizeFamily, KNOWN_AGENTS, KnownAgent, BenchmarkRun, OUTCOME_TIERS, TierCounts, emptyTierCounts, ControlCounts, emptyControlCounts } from '@/lib/scanner_mode/data-service'
 import TierBar from '@/components/scanner_mode/TierBar'
+import StatusBadge from '@/components/shared/StatusBadge'
 import EmptyState from '@/components/shared/EmptyState'
 import { TableSkeleton } from '@/components/shared/Skeletons'
 
@@ -27,6 +28,7 @@ export default function RunsPage() {
   const [selectedAgent, setSelectedAgent] = useState<string>('nemotron_3_ultra')
   const [activeCategory, setActiveCategory] = useState<'nvidia' | 'ollama' | 'custom'>('nvidia')
   const [agents, setAgents] = useState<KnownAgent[]>(KNOWN_AGENTS)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   const [sessions, setSessions] = useState<BenchmarkRun[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
@@ -73,6 +75,7 @@ export default function RunsPage() {
     setFamilies([])
     setProgress(p => ({ ...p, current: 0 }))
     setSessionId(null)
+    setScanError(null)
 
     try {
       const res = await fetch('/api/scan/start', {
@@ -81,6 +84,12 @@ export default function RunsPage() {
         body: JSON.stringify({ agentId: selectedAgent, promptMode }),
       })
       const data = await res.json()
+      if (!res.ok || !data.sessionId) {
+        // 400 (the agent will not load), 503 (a bad policy or corpus): the server says why in `detail`
+        setScanError(typeof data.detail === 'string' ? data.detail : `The run could not be started (HTTP ${res.status}).`)
+        setRunning(false)
+        return
+      }
       setSessionId(data.sessionId)
 
       let fams: FamilyProgress[] = []
@@ -137,12 +146,14 @@ export default function RunsPage() {
               const msgEvent = e as MessageEvent
               const payload = JSON.parse(msgEvent.data)
               console.error("Agent API error:", payload.message)
+              setScanError(String(payload.message))
             } catch { }
             evtSource.close()
             resolve('error')
           })
 
           evtSource.onerror = () => {
+            setScanError(prev => prev ?? 'The connection to the scan was lost.')
             evtSource.close()
             resolve('error')
           }
@@ -165,6 +176,7 @@ export default function RunsPage() {
       setRunning(false)
     } catch (err) {
       console.error(err)
+      setScanError(err instanceof Error ? err.message : 'The run failed.')
       setRunning(false)
     }
   }
@@ -219,6 +231,13 @@ export default function RunsPage() {
           </button>
         </div>
       </div>
+
+      {scanError && (
+        <div role="alert" className="rounded-[var(--radius)] border border-[var(--danger)] bg-[var(--surface-raised)] p-4 text-xs">
+          <div className="font-bold text-[var(--danger)] uppercase tracking-wider">The run stopped</div>
+          <pre className="mt-1 whitespace-pre-wrap font-mono text-[var(--text-secondary)]">{scanError}</pre>
+        </div>
+      )}
 
       {/* Target Agent & Configuration Panel */}
       <div className="research-card space-y-5">
@@ -441,11 +460,15 @@ export default function RunsPage() {
                         )}
                       </td>
                       <td className="font-mono text-xs text-center font-extrabold text-[var(--primary)]">{score}%</td>
-                      <td><span className="badge-semantic badge-success">{s.status}</span></td>
+                      <td><StatusBadge status={s.status} /></td>
                       <td>
-                        <Link href={`/runs/${s.sessionId}`} className="inline-flex items-center gap-1 text-xs text-[var(--primary)] font-semibold hover:underline">
-                          Open Report <ArrowRight className="h-3 w-3" />
-                        </Link>
+                        {s.status === 'COMPLETED' ? (
+                          <Link href={`/runs/${s.sessionId}`} className="inline-flex items-center gap-1 text-xs text-[var(--primary)] font-semibold hover:underline">
+                            Open Report <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-[var(--text-muted)]">no report</span>
+                        )}
                       </td>
                     </tr>
                   )
