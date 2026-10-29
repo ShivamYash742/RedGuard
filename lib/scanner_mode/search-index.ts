@@ -13,7 +13,12 @@ export function searchBenchmark(query: string): SearchResultItem[] {
   const q = query.trim().toLowerCase()
   if (!q) return []
 
-  const results: SearchResultItem[] = []
+  // One list per type, capped separately: a family or scenario name matches 16+ probes, and one shared cap
+  // of 15 filled with probes before a family, scenario or model was ever added.
+  const probeHits: SearchResultItem[] = []
+  const familyHits: SearchResultItem[] = []
+  const scenarioHits: SearchResultItem[] = []
+  const modelHits: SearchResultItem[] = []
 
   // 1. Search Probes
   const probes: Probe[] = benchmarkDataService.getAllProbes()
@@ -26,7 +31,7 @@ export function searchBenchmark(query: string): SearchResultItem[] {
       probe.scenario.toLowerCase().includes(q) ||
       (probe.tags && probe.tags.some(t => t.toLowerCase().includes(q)))
     ) {
-      results.push({
+      probeHits.push({
         id: probe.id,
         type: 'probe',
         title: `${probe.id}: ${probe.title}`,
@@ -45,7 +50,7 @@ export function searchBenchmark(query: string): SearchResultItem[] {
       fam.name.toLowerCase().includes(q) ||
       fam.description.toLowerCase().includes(q)
     ) {
-      results.push({
+      familyHits.push({
         id: fam.id,
         type: 'family',
         title: fam.name,
@@ -64,7 +69,7 @@ export function searchBenchmark(query: string): SearchResultItem[] {
       scen.name.toLowerCase().includes(q) ||
       scen.description.toLowerCase().includes(q)
     ) {
-      results.push({
+      scenarioHits.push({
         id: scen.id,
         type: 'scenario',
         title: scen.name,
@@ -78,7 +83,7 @@ export function searchBenchmark(query: string): SearchResultItem[] {
   // 4. Search Models & Leaderboards
   KNOWN_AGENTS.forEach(m => {
     if (m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)) {
-      results.push({
+      modelHits.push({
         id: m.id,
         type: 'model',
         title: m.name,
@@ -89,5 +94,10 @@ export function searchBenchmark(query: string): SearchResultItem[] {
     }
   })
 
-  return results.slice(0, 15) // Limit to top 15 results
+  return [
+    ...probeHits.slice(0, 6),
+    ...familyHits.slice(0, 3),
+    ...scenarioHits.slice(0, 3),
+    ...modelHits.slice(0, 3),
+  ]
 }
