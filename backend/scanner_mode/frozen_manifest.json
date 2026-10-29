@@ -12,9 +12,9 @@
     "scanner_mode/agents/web_search_fixtures.json": "7a3748884af4577314b550cdf60fa0e4cd7978c02e7df4a7fc445c3afd303cb8",
     "scanner_mode/inspector.py": "6480621ac6f23cbaf337640d45cfef7de68329cfc765286b777ac3ed26ccbdb3",
     "scanner_mode/policy.yaml": "ead612bd29e36e005ccff071f30425fe0b9c84850518aa7ad5c03c15f0a63b67",
-    "scanner_mode/scanner.py": "8ad6a519268ced47220fac6ace1bd47e9eb9f25f2a9d8473e7813c909a0353f0"
+    "scanner_mode/scanner.py": "ef804ccd9c2fc1dac5ccf56b9ef5523193f6ac0bfa09780adb21a68be6d90fc0"
   },
   "devProbes": "80b0d9cce60aa00f229516d1d37d740480a83369037768a10593193ec3ceffde",
   "testProbes": "1f99dad53044ba45f908474dcb1fb7f16078de4acf03024b217634fe81bc52e3",
-  "digest": "8aa6876d9bf72ffdf12151cfdedfd6d65cd5824718e3f796a37b7bd536bd865b"
+  "digest": "1771183afef3100dd5c47ed2dad18222c21d9ea2ffa3be31cfff10b80b608ab2"
 }
