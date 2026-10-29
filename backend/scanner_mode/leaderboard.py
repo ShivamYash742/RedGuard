@@ -264,11 +264,16 @@ def leaderboard_rows(sessions: List[Any], probe_ids: Optional[frozenset] = None)
     for row in rows:
         ranked[row["benchmarkVersion"]] += 1
         row["rank"] = ranked[row["benchmarkVersion"]]
-    # A rank is only a claim when the rows differ: list the rows each one cannot be told apart from.
+    # A rank is only a claim when the rows differ: list the rows each one cannot be told apart from. The claim
+    # is symmetric (the bootstrap and the sign-flip test see the same draws with the signs negated), so each
+    # unordered pair is tested once; every test is a paired bootstrap, which is the slow part.
     for row in rows:
-        mine = (row["rowId"], row["benchmarkVersion"])
-        row["noDifferenceFrom"] = [
-            o["rowId"] for o in rows
-            if o is not row and o["benchmarkVersion"] == row["benchmarkVersion"] and o["headlineSplit"] == row["headlineSplit"]
-            and compare_events(rates[mine], rates[o["rowId"], o["benchmarkVersion"]], "a", "b")["claim"] != "difference"]
+        row["noDifferenceFrom"] = []
+    for i, a in enumerate(rows):
+        for b in rows[i + 1:]:
+            if (a["benchmarkVersion"] == b["benchmarkVersion"] and a["headlineSplit"] == b["headlineSplit"]
+                    and compare_events(rates[a["rowId"], a["benchmarkVersion"]], rates[b["rowId"], b["benchmarkVersion"]],
+                                       "a", "b")["claim"] != "difference"):
+                a["noDifferenceFrom"].append(b["rowId"])
+                b["noDifferenceFrom"].append(a["rowId"])
     return rows

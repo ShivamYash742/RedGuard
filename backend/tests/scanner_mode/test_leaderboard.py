@@ -147,6 +147,22 @@ def test_rows_that_cannot_be_told_apart_say_so():
     assert rows["c"]["noDifferenceFrom"] == []                   # clearly worse than both
 
 
+def test_each_pair_of_rows_is_tested_once(monkeypatch):
+    """SCN-06: the paired bootstrap ran for every ordered pair, twice per pair, and blocked the event loop for ~30 s."""
+    from scanner_mode import leaderboard
+    ids, a = _probe_runs("a", lambda i: i % 10 == 0)
+    _, b = _probe_runs("b", lambda i: i % 10 == 1)
+    _, c = _probe_runs("c", lambda i: i % 2 == 0)
+    _, d = _probe_runs("d", lambda i: i % 10 == 2)
+    calls = []
+    real = leaderboard.compare_events
+    monkeypatch.setattr(leaderboard, "compare_events", lambda *args: calls.append(args) or real(*args))
+    rows = {r["agentId"]: r for r in _rows(a + b + c + d, probe_ids=frozenset(ids))}
+    assert len(calls) == 6                                         # 4 rows -> 6 unordered pairs, not 12
+    assert set(rows["a"]["noDifferenceFrom"]) == {"b:baseline", "d:baseline"}
+    assert set(rows["b"]["noDifferenceFrom"]) == {"a:baseline", "d:baseline"} and rows["c"]["noDifferenceFrom"] == []
+
+
 def test_compare_groups_gives_a_paired_verdict():
     from scanner_mode.leaderboard import compare_groups
     ids, a = _probe_runs("a", lambda i: i % 10 == 0)

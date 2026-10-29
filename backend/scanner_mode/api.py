@@ -7,6 +7,7 @@ events, reports, policy, custom probes, agents and the scan SSE stream.
 Mounted by `backend/app.py` with no prefix, so every path is unchanged.
 """
 
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -64,7 +65,8 @@ async def get_leaderboard():
     """Measured results per (agent, prompt mode); legacy runs are excluded."""
     prisma = await get_db()
     sessions = await prisma.session.find_many(include={"events": True})
-    return leaderboard_rows(sessions)
+    # CPU-bound (a paired bootstrap per pair of rows): off the event loop so the scan streams keep flowing.
+    return await asyncio.to_thread(leaderboard_rows, sessions)
 
 @router.get("/api/leaderboard/compare")
 async def compare_leaderboard_rows(a: str, b: str, split: str = "test", version: str = BENCHMARK_VERSION):
@@ -81,7 +83,7 @@ async def compare_leaderboard_rows(a: str, b: str, split: str = "test", version:
     prisma = await get_db()
     sessions = await prisma.session.find_many(include={"events": True})
     try:
-        return compare_groups(sessions, a, b, split, version)
+        return await asyncio.to_thread(compare_groups, sessions, a, b, split, version)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc.args[0]))
 
