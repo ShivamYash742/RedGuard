@@ -196,6 +196,26 @@ class TestSweepResumeUsesTheStoredExperiment:
         assert seen == {"max_steps": 7, "model": "stored-model", "client": "ScriptedClient"}
 
 
+class TestSweepExport:
+    @pytest.mark.asyncio
+    async def test_exported_bundles_carry_the_stored_verdict(self, db, tmp_path):
+        """API-02: export_bundles re-evaluated each attack run against its own pair's clean run (baseline_runs=1),
+        so a bundle could disagree with the verdict the database and the report hold (judged against all of them)."""
+        from lab_mode import sweep
+        from core.lab_mode.model_client import ModelConfig
+
+        experiment_id = await sweep.run_arm(db, arm="attack", cases=["RGM-001"], reps=3, quiet=True, scripted=True,
+                                            model_config=ModelConfig(model="m"), max_steps=7)
+        runs = [r for r in lab_store.completed_attack_runs(await lab_store.list_runs(db, experiment_id))]
+        assert await sweep.export_bundles(db, experiment_id, tmp_path / "bundles") == len(runs) == 3
+        stored = {r.id[:8]: json.loads(r.verdictJson) for r in runs}
+        bundles = [json.loads(f.read_text(encoding="utf-8")) for f in (tmp_path / "bundles").glob("*.json")]
+        assert len(bundles) == 3
+        for bundle in bundles:
+            assert bundle["verdict"]["baseline_runs"] == 3
+            assert bundle["verdict"] == stored[bundle["run_id"][:8]]
+
+
 class TestSweepExposure:
     @pytest.mark.asyncio
     async def test_a_new_experiment_stores_the_exposure_and_a_resume_restores_it(self, db, monkeypatch):
