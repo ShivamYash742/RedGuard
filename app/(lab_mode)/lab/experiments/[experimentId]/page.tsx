@@ -291,7 +291,8 @@ export default function LabExperimentPage({ params }: { params: Promise<{ experi
       if (source.readyState !== EventSource.CLOSED || completedRef.current) return
       setRunning(false)
       flush()
-      refresh().catch(() => undefined)
+      // A job that failed fast is already gone when the stream attaches (409), so its error was never streamed.
+      refresh().then((exp) => { if (exp.last_error) setError(exp.last_error) }).catch(() => undefined)
     })
     sourceRef.current = source
   }, [experimentId, onStreamEvent, flush, refresh])
@@ -915,7 +916,7 @@ function Rates({ metrics }: { metrics: ExperimentMetrics }) {
               </tr>
             )}
             <tr>
-              <td>Contained <span className="text-xs text-[var(--text-secondary)]">of runs with downstream agents</span></td>
+              <td>Contained <span className="text-xs text-[var(--text-secondary)]">of runs with a compromised entry</span></td>
               <td className="text-right font-mono tabular-nums">{formatRate(a.containment_rate)}</td>
               <td className="text-sm text-[var(--text-secondary)]">Where, and by what, is below.</td>
               <td className="text-sm text-[var(--text-secondary)]">{a.mean_coverage === null ? 'no propagating runs' : `mean coverage ${formatRate(a.mean_coverage)}`}</td>

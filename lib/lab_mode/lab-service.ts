@@ -183,6 +183,8 @@ export interface Experiment {
   status_counts?: Record<string, number>
   /** Runs done so far while the server is executing it; null when idle. */
   live: { completed: number; total: number } | null
+  /** Why the last job died (kept in memory until the experiment is started again); null otherwise. */
+  last_error?: string | null
 }
 
 export interface RunDetail extends RunSummary {

@@ -701,6 +701,11 @@ class TestLiveTracking:
         assert [e.step for e in [first, *rest[:-1]]] == [e.step for e in result.collector.events]
 
 
+async def _no_events():
+    return
+    yield
+
+
 def _wait_until_idle(client: TestClient, experiment_id: str, timeout: float = 15) -> Dict[str, Any]:
     import time
     deadline = time.monotonic() + timeout
@@ -746,6 +751,23 @@ class TestRichLiveEvents:
 
 class TestRunsDoNotDependOnTheTab:
     """Plan phase 4: the server owns the run; viewers come and go."""
+
+    def test_the_error_of_a_job_that_died_before_anyone_watched_is_still_readable(self, client, monkeypatch):
+        """UI-11: the finished job leaves _JOBS, /stream answers 409, and the page had no way to learn why."""
+        async def failing(experiment):
+            raise RuntimeError("model unreachable")
+            yield  # an async generator, like the real _execute
+
+        monkeypatch.setattr(lab_api, "_execute", failing)
+        experiment_id = _create_experiment(client)["experiment_id"]
+        assert client.post(f"/api/lab/experiments/{experiment_id}/start").json()["running"]
+        body = _wait_until_idle(client, experiment_id)
+        assert client.get(f"/api/lab/experiments/{experiment_id}/stream").status_code == 409
+        assert body["last_error"] == "RuntimeError: model unreachable"
+        # starting it again clears the old error
+        monkeypatch.setattr(lab_api, "_execute", lambda experiment: _no_events())
+        client.post(f"/api/lab/experiments/{experiment_id}/start")
+        assert _wait_until_idle(client, experiment_id)["last_error"] is None
 
     def test_two_subscribers_receive_the_same_events(self, client):
         experiment_id = _create_experiment(client)["experiment_id"]

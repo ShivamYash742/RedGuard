@@ -306,6 +306,7 @@ def _experiment_row(experiment: Any, runs: Optional[List[Any]] = None) -> Dict[s
         "created_at": experiment.createdAt.isoformat(),
         # Runs per run, so `/lab` can badge a live experiment from any tab.
         "live": _JOBS[experiment.id].progress if experiment.id in _JOBS else None,
+        "last_error": _LAST_ERROR.get(experiment.id),
     }
     if runs is not None:
         payload["runs"] = [_run_summary(r) for r in runs]
@@ -653,9 +654,9 @@ class _Job:
             raise
         except Exception as exc:
             # Unreported, a crash is indistinguishable from a finished sweep.
-            self._publish({"event": "experiment_error", "data": {
-                "experiment_id": self.experiment_id, "error": f"{type(exc).__name__}: {exc}",
-            }})
+            message = f"{type(exc).__name__}: {exc}"
+            _LAST_ERROR[self.experiment_id] = message  # a job that fails fast is gone before a viewer attaches
+            self._publish({"event": "experiment_error", "data": {"experiment_id": self.experiment_id, "error": message}})
 
     async def subscribe(self) -> AsyncIterator[Dict[str, Any]]:
         queue: asyncio.Queue = asyncio.Queue()
@@ -673,6 +674,10 @@ class _Job:
 #: the backend ever runs several workers.
 _JOBS: Dict[str, _Job] = {}
 
+#: Why the last job of an experiment died, until it is started again. In memory like _JOBS: the page reads it
+#: from GET /experiments/{id} when the stream answers 409 because the job had already finished.
+_LAST_ERROR: Dict[str, str] = {}
+
 
 async def _experiment_or_404(experiment_id: str) -> Any:
     experiment = await lab_store.get_experiment(await get_db(), experiment_id)
@@ -686,6 +691,7 @@ def _start(experiment: Any) -> _Job:
     running job instead of executing the experiment twice into one record."""
     job = _JOBS.get(experiment.id)
     if job is None:
+        _LAST_ERROR.pop(experiment.id, None)
         job = _JOBS[experiment.id] = _Job(experiment)
     return job
 
