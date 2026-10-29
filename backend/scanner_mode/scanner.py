@@ -326,7 +326,13 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
             prompt_hash = sha256_hex(prompt)
 
             # 1. Inspect locally
-            insp_result = inspector.process(prompt)
+            try:
+                insp_result = inspector.process(prompt)
+            except Exception as exc:  # a rule the validator let through but the filter cannot evaluate
+                message = f"filter failed on probe {idx}: {exc}"
+                await prisma.session.update(where={"id": session_id}, data={"status": f"FAILED: {message}"[:200]})
+                yield {"event": "error", "data": {"message": message}}
+                return
             regex_verdict = insp_result["policy_result"]["verdict"]
             regex_risk = insp_result["metadata"]["risk_score"]
             matched_rule = insp_result["policy_result"]["matched_rule"]

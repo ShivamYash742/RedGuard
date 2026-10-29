@@ -212,6 +212,40 @@ async def test_family_scan_refuses_when_the_policy_cannot_load(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_family_scan_fails_the_session_when_the_filter_raises(tmp_path, monkeypatch, migrated_db_template):
+    """SCN-04: an exception from the filter killed the SSE stream and left the session RUNNING for good."""
+    db = tmp_path / "filter-raises.db"
+    shutil.copyfile(migrated_db_template, db)
+    client = Prisma(datasource={"url": f"file:{db}"})
+    calls = []
+
+    class BrokenInspector:
+        def process(self, prompt):
+            raise ValueError("could not convert string to float: 'unknown'")
+
+    async def spy_invoke(agent_id, prompt, model_name=None, prompt_mode=None):
+        calls.append(prompt)
+        return "ok"
+
+    monkeypatch.setattr(scanner, "Inspector", BrokenInspector)
+    monkeypatch.setattr(database, "prisma", client)
+    monkeypatch.setattr(scanner, "_probe_groups", _fake_groups)
+    monkeypatch.setattr(scanner, "_invoke_agent", spy_invoke)
+
+    await client.connect()
+    try:
+        session = await client.session.create(data={"sessionId": "filter-raises", "agentId": "fake"})
+        events = [e async for e in scanner.run_family_scan(session.id, "fake", "TEST")]
+        stored = await client.session.find_unique(where={"id": session.id})
+    finally:
+        await client.disconnect()
+
+    assert calls == []
+    assert [e["event"] for e in events] == ["error"] and "filter" in events[0]["data"]["message"]
+    assert stored.status.startswith("FAILED") and "could not convert" in stored.status
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status", [None, "COMPLETED", "FAILED: timeout", "CANCELLED"])
 async def test_family_scan_needs_a_running_session(tmp_path, monkeypatch, migrated_db_template, status):
     db = tmp_path / "running.db"
