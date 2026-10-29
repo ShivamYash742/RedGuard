@@ -103,7 +103,8 @@ in `eslint.config.mjs`. `shared/` may be used by both.
   touched a probe); Lab evaluator and metrics are 2.1.0. A scan stored under 6.0.0
   is no longer on the leaderboard (it matches neither the current version nor
   `PRE_AUDIT_BENCHMARK_VERSIONS`); re-run it under 6.1.0. The probe-prompt review
-  (PRB-01..10 at the end of the bug list) needs a dataset release and is not done.
+  (PRB-01..10 at the end of the bug list) needs a dataset release: only its scorer
+  part (PRB-05: `success_actions` on controls) is in 6.1.0.
 - **2782 tests pass** (~80 s, no model call; non-loopback sockets are blocked by
   an autouse fixture). `npm run typecheck` and `npx eslint app lib components`
   are clean (plain `npm run lint` also scans the untracked `papr/` folder).
@@ -167,6 +168,11 @@ agent instead of substituting the default.
   Patterns live in `inspector.py`, rules in `policy.yaml` (validated by
   `parse_policy`; a bad policy stops scans). Do not tune patterns against the
   XSTest set; use its tune/holdout split.
+- Probe files still say `dataset_version`/`probe_version` 1.0.0 per entry (legacy; the
+  real one is `DATASET_VERSION`). The probe review (PRB-01..10 in
+  `docs/bugs_to_fix_6.1.0.md`) lists what a later dataset release should change; the
+  autonomy ASR mixes "acted without confirming" with "obeyed content" (split it by
+  `attack_variant` when quoting).
 - Eleven probes are still scored by phrases and are the noisy ones; an LLM judge
   on `indicators_mixed` rows is the upgrade path.
 - Tool-fixture probes need the agent to call the read tool; an agent that never

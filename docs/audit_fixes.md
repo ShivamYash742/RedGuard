@@ -179,11 +179,23 @@ and `comparability_problems` refuses to pool a 2.0.0 experiment with a 2.1.0 one
 | UI-09 | Cmd/Ctrl+K opens search. | `ae1a492` |
 | UI-10, UI-11 | Containment label wording; `last_error` from `GET /experiments/{id}` (in memory, cleared on restart of the job) shown when the stream closes. Test: `test_lab_api.py::TestRunsDoNotDependOnTheTab::test_the_error_of_a_job_that_died_before_anyone_watched_is_still_readable`. | `930e743` |
 
+### Probe-prompt review (PRB-01..PRB-10)
+
+The review of the 315 probes is at the end of [`bugs_to_fix_6.1.0.md`](./bugs_to_fix_6.1.0.md). 6.1.0 keeps
+`DATASET_VERSION` at 6.0.0, so nothing that edits a probe, a sandbox file or a generated file was done.
+
+| ID | What was done | Commit |
+|---|---|---|
+| PRB-05 (code part) | `score()` takes `success_actions` for a benign control: HELPED when the call is recorded, else OVER_REFUSED / UNCLEAR. No control has them yet, so no number moves. Test: `test_scorer_golden.py::test_a_control_whose_task_is_an_action_is_scored_from_the_recorded_call`. The data part (add `success_actions` to RG-CTL-183..187, 135, 136; markers that cannot come from the prompt; 9 controls with a marker of 4 characters or fewer) is for the next dataset. | `dea0c09` |
+| PRB-01 | Option (a), documentation: the per-entry and per-file `dataset_version` ("1.0.0") and `probe_version` fields are legacy. `DATASET_VERSION` in `core/shared/version.py` (6.0.0) is the one the README, the corpus page and the spec report. Making the data agree (option b) rewrites probe JSON and the generator, which 6.1.0 does not touch. | this commit |
+| PRB-04, PRB-09 | Reading notes for results, no code: the 20 test `autonomous_actions` probes mix "acted on a delegated task without confirming" (`delegation`, `judgement`) with "obeyed an instruction in content it was only asked to read" (`approval_claim`, `time_pressure`), so quote the autonomy ASR with that split (`attack_variant`). Under the baseline prompt an extraction probe is "complied with a plain request" (the deployment ID is not marked confidential), not "broke a policy". | this commit |
+| PRB-02, 03, 06, 07, 08, 10 | **Not done: dataset changes** (the 11 phrase-scored dev probes, the narrower test split and the obfuscation and scenario gaps, duplicate titles and one awkward prompt, `mailbox-relay.net` and `sk_live_abc123`, canaries labelled "canary", generic `blocked_indicators`). They go in a later dataset release with `DATASET_VERSION` bumped, generated items changed in `scripts/gen_test_probes.py`, and both manifests rewritten. The "Probes worth adding" list stays in the bug list. | none |
+
 ### Left for you
 
 - A scan stored under 6.0.0 is hidden from the leaderboard. Re-run it under 6.1.0, or add `"6.0.0"` to
   `PRE_AUDIT_BENCHMARK_VERSIONS`; the second also needs `_groups` to accept a 6.0.0 run that covers the test probes
   (earlier versions are checked against the dev probes only), which is why it was not done.
-- `PROBE_SCHEMA_VERSION` stayed at 6.0.0. The probe-prompt review (PRB-01..PRB-10 at the end of the bug list) needs a
-  dataset release and is not part of 6.1.0.
+- `PROBE_SCHEMA_VERSION` stayed at 6.0.0. The dataset-changing probe findings (above) need a dataset release and a
+  decision to bump `DATASET_VERSION`; that is yours.
 - The re-analysis scripts under `scripts/reanalysis/` still label the current Lab view "2.0.0".
