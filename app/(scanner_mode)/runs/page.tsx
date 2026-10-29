@@ -243,7 +243,7 @@ export default function RunsPage() {
       <div className="research-card space-y-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Target Model & Agent Selection</h2>
-          <span className="font-mono text-[11px] text-[var(--text-muted)]">Benchmark Version: v6.0.0</span>
+          <span className="font-mono text-[11px] text-[var(--text-muted)]">Benchmark Version: v6.1.0</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

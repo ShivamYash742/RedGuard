@@ -15,7 +15,7 @@ OLD = {**CURRENT, **PRE_AUDIT_LAB_VERSIONS, "case_schema_version": "1.1.0", "cee
 
 
 def test_the_audit_moved_the_definitions():
-    assert (EVALUATOR_VERSION, METRIC_VERSION) == ("2.0.0", "2.0.0")
+    assert (EVALUATOR_VERSION, METRIC_VERSION) == ("2.1.0", "2.1.0")
     assert PRE_AUDIT_LAB_VERSIONS == {"evaluator_version": "1.2.0", "metric_version": "1.2.0"}
 
 
