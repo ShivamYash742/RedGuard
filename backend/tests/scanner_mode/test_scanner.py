@@ -246,6 +246,41 @@ async def test_family_scan_fails_the_session_when_the_filter_raises(tmp_path, mo
 
 
 @pytest.mark.asyncio
+async def test_family_scan_refuses_a_policy_that_changed_since_the_session_started(tmp_path, monkeypatch, migrated_db_template):
+    """SCN-05: PUT /api/policy between two families changed the filter for the later ones while the session
+    still recorded the first hash."""
+    from scanner_mode import inspector
+
+    db = tmp_path / "policy-changed.db"
+    shutil.copyfile(migrated_db_template, db)
+    client = Prisma(datasource={"url": f"file:{db}"})
+    calls = []
+
+    async def spy_invoke(agent_id, prompt, model_name=None, prompt_mode=None):
+        calls.append(prompt)
+        return "ok"
+
+    edited = tmp_path / "policy.yaml"
+    edited.write_text(inspector.POLICY_PATH.read_text() + "\n# edited between families\n")
+    monkeypatch.setattr(inspector, "POLICY_PATH", edited)
+    monkeypatch.setattr(database, "prisma", client)
+    monkeypatch.setattr(scanner, "_probe_groups", _fake_groups)
+    monkeypatch.setattr(scanner, "_invoke_agent", spy_invoke)
+
+    await client.connect()
+    try:
+        session = await client.session.create(data={"sessionId": "policy-changed", "agentId": "fake", "policySha256": "0" * 64})
+        events = [e async for e in scanner.run_family_scan(session.id, "fake", "TEST")]
+        stored = await client.session.find_unique(where={"id": session.id})
+    finally:
+        await client.disconnect()
+
+    assert calls == []
+    assert [e["event"] for e in events] == ["error"] and "policy changed" in events[0]["data"]["message"]
+    assert stored.status.startswith("FAILED: policy changed")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status", [None, "COMPLETED", "FAILED: timeout", "CANCELLED"])
 async def test_family_scan_needs_a_running_session(tmp_path, monkeypatch, migrated_db_template, status):
     db = tmp_path / "running.db"

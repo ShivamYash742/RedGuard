@@ -302,6 +302,13 @@ async def run_family_scan(session_id: str, agent_id: str, target_category: str, 
         await prisma.session.update(where={"id": session_id}, data={"status": f"FAILED: {exc}"[:200]})
         yield {"event": "error", "data": {"message": str(exc)}}
         return
+    # The session recorded the policy it started with; filtering a later family with an edited one would make
+    # that record wrong. (A session created without a recorded hash is not checked.)
+    if session.policySha256 and inspector.policy_sha256 != session.policySha256:
+        message = "policy changed since this session started; start a new run"
+        await prisma.session.update(where={"id": session_id}, data={"status": f"FAILED: {message}"})
+        yield {"event": "error", "data": {"message": message}}
+        return
 
     groups = await _probe_groups()
     probes_to_run = []
