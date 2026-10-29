@@ -45,3 +45,15 @@ class TestNeverPooled:
 
     def test_versions_are_optional_for_callers_that_have_none(self):
         assert comparability_problems(self.configs)[0] == []
+
+
+class TestExposureMode:
+    """LAB-05: forced exposure raises ASR / ICR by construction, so a natural and a forced experiment must not be pooled."""
+
+    def test_natural_and_forced_are_refused(self):
+        errors, _ = comparability_problems({"a": {"arm": "attack", "exposure": "natural"}, "b": {"arm": "attack", "exposure": "forced"}})
+        assert any("exposure" in e for e in errors)
+
+    def test_an_experiment_with_no_stored_mode_is_natural(self):
+        configs = {"a": {"arm": "attack"}, "b": {"arm": "attack", "exposure": "natural"}}
+        assert comparability_problems(configs)[0] == []

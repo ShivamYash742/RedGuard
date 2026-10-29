@@ -435,6 +435,7 @@ def comparability_problems(
     checks = {f"model.{f}": (lambda cfg, f=f: (cfg.get("model") or {}).get(f)) for f in _COMPARABLE_MODEL_FIELDS}
     checks["max_steps"] = lambda cfg: cfg.get("max_steps")
     checks["scripted"] = lambda cfg: bool(cfg.get("scripted", False))
+    checks["exposure"] = lambda cfg: cfg.get("exposure", "natural")  # forced exposure raises ASR / ICR by construction
     for label, getter in checks.items():
         seen = values(getter)
         if len({json.dumps(v, sort_keys=True, default=str) for v in seen.values()}) > 1:
