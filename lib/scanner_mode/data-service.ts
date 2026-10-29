@@ -227,6 +227,8 @@ export interface ReportOverall {
   mixed_rows_model_alone?: number
   no_answer?: number
   controls_no_answer?: number
+  /** Why the run stopped early (an agent or API error); absent for a run that finished. */
+  error?: string
 }
 
 export interface RunReport {
